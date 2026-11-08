@@ -5933,6 +5933,21 @@
       });
     }
 
+    // Öğrenciye doğrudan paylaşılan link (?mod=ogrenci, ?kiosk=1 veya #sinav) ile açıldıysa doğrudan Öğrenci Kiosk ekranını aç
+    const urlParam = new URLSearchParams(window.location.search || '');
+    const dogrudanOgrenciModu =
+      urlParam.get('mod') === 'ogrenci' ||
+      urlParam.get('kiosk') === '1' ||
+      window.location.hash === '#sinav' ||
+      window.location.hash === '#kiosk';
+    if (dogrudanOgrenciModu) {
+      document.body.classList.add('kiosk-aktif');
+      document.getElementById('ana-icerik-alani').style.display = 'none';
+      document.getElementById('kiosk-sinav-alani').style.display = 'block';
+      const btnCikis = document.getElementById('btn-kiosk-cikis');
+      if (btnCikis) btnCikis.style.display = 'none';
+    }
+
     // Başlangıçta örnek 1 sınav kağıdı taramasını hazır göster (Röntgen ekranı boş kalmasın)
     document.getElementById('btn-sim-tek-tara').click();
   }
