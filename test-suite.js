@@ -202,14 +202,16 @@ async function calistirTumTestler() {
     assert.ok(!bosTestCsv.includes(';Puan;'), 'Test CSV şablonunda Puan sütunu bulunmamalıdır');
     assert.ok(bosTestCsv.includes('Dogru_Sik_Secenegi'), 'Test CSV şablonunda Dogru_Sik_Secenegi sütunu bulunmalıdır');
     const testSorular = Cekirdek.cozSoruBankasiCSV(bosTestCsv, 'ders-ag-guvenlik');
-    assert.strictEqual(testSorular.length, 3);
+    assert.strictEqual(testSorular.length, 4);
     assert.strictEqual(testSorular[0].tur, 'test');
+    assert.strictEqual(testSorular[0].ocKodu, 'ÖÇ-1');
     assert.strictEqual(testSorular[0].dogruHarf, 'B');
     assert.strictEqual(testSorular[0].dogruSikDegeri, '22');
     assert.strictEqual(testSorular[0].zorluk, 'Kolay');
     assert.strictEqual(testSorular[1].dogruHarf, 'D');
     assert.strictEqual(testSorular[1].dogruSikDegeri, 'Argon2id');
     assert.strictEqual(testSorular[2].zorluk, 'Zor');
+    assert.strictEqual(testSorular[3].ocKodu, 'ÖÇ-4');
 
     // Şık Karıştırmada Doğru Şıkkın Değeriyle Taşınması (A -> D / B -> E vb. ve 4 Şıklı Sınavda E Şıkkının Korunması)
     const ornekSoruA = {
@@ -247,16 +249,20 @@ async function calistirTumTestler() {
     const bosDyCsv = Cekirdek.uretBosDySablonuCSV();
     assert.ok(!bosDyCsv.includes(';Puan;'), 'D/Y CSV şablonunda Puan sütunu bulunmamalıdır');
     const dySorular = Cekirdek.cozSoruBankasiCSV(bosDyCsv, 'ders-ag-guvenlik');
-    assert.strictEqual(dySorular.length, 3);
+    assert.strictEqual(dySorular.length, 4);
     assert.strictEqual(dySorular[0].tur, 'dy');
+    assert.strictEqual(dySorular[0].ocKodu, 'ÖÇ-1');
     assert.strictEqual(dySorular[1].dogruDY, 'Y');
+    assert.strictEqual(dySorular[3].ocKodu, 'ÖÇ-4');
 
     const bosKlasikCsv = Cekirdek.uretBosKlasikSablonuCSV();
     assert.ok(!bosKlasikCsv.includes('Tam_Puan'), 'Klasik CSV şablonunda sabit puan sütunu bulunmamalıdır');
     const klasikSorular = Cekirdek.cozSoruBankasiCSV(bosKlasikCsv, 'ders-ag-guvenlik');
     assert.strictEqual(klasikSorular.length, 2);
     assert.strictEqual(klasikSorular[0].tur, 'klasik');
+    assert.strictEqual(klasikSorular[0].ocKodu, 'ÖÇ-3');
     assert.strictEqual(klasikSorular[1].zorluk, 'Zor');
+    assert.strictEqual(klasikSorular[1].ocKodu, 'ÖÇ-4');
 
     const bosCsv = Cekirdek.uretBosSoruSablonuCSV();
     const csvSorular = Cekirdek.cozSoruBankasiCSV(bosCsv, 'ders-ag-guvenlik');
@@ -867,6 +873,95 @@ async function calistirTumTestler() {
       server.close();
     }
   });
+
+  // 14. Bologna Öğrenim Çıktısı (ÖÇ) CSV Sütunu (Ogrenim_Ciktisi_OC) ve "Her ÖÇ İçin En Az 1 Soru" Garantisi Testi
+  await testEt('14. Bologna ÖÇ CSV sütunu (Ogrenim_Ciktisi_OC) ve Her ÖÇ İçin En Az 1 Soru garantisi', () => {
+    const testCsv = Cekirdek.uretBosTestSablonuCSV();
+    const dyCsv = Cekirdek.uretBosDySablonuCSV();
+    const klasikCsv = Cekirdek.uretBosKlasikSablonuCSV();
+    const karmaCsv = Cekirdek.uretBosSoruSablonuCSV();
+
+    assert.ok(testCsv.includes('Ogrenim_Ciktisi_OC'), 'Test CSV şablonunda Ogrenim_Ciktisi_OC sütunu bulunmalıdır');
+    assert.ok(dyCsv.includes('Ogrenim_Ciktisi_OC'), 'D/Y CSV şablonunda Ogrenim_Ciktisi_OC sütunu bulunmalıdır');
+    assert.ok(klasikCsv.includes('Ogrenim_Ciktisi_OC'), 'Klasik CSV şablonunda Ogrenim_Ciktisi_OC sütunu bulunmalıdır');
+    assert.ok(karmaCsv.includes('Ogrenim_Ciktisi_OC'), 'Karma CSV şablonunda Ogrenim_Ciktisi_OC sütunu bulunmalıdır');
+
+    const cozulmusKarma = Cekirdek.cozSoruBankasiCSV(karmaCsv, 'ders-bologna');
+    assert.strictEqual(cozulmusKarma.length, 5);
+    assert.strictEqual(cozulmusKarma[0].ocKodu, 'ÖÇ-1');
+    assert.strictEqual(cozulmusKarma[1].ocKodu, 'ÖÇ-2');
+    assert.strictEqual(cozulmusKarma[2].ocKodu, 'ÖÇ-3');
+    assert.strictEqual(cozulmusKarma[3].ocKodu, 'ÖÇ-4');
+    assert.strictEqual(cozulmusKarma[4].ocKodu, 'ÖÇ-5');
+
+    // CSV Dışa Aktarım (uretSoruBankasiCSV) ve Geri İthalat (Round-trip) Testi
+    const disaAktarilanCsv = Cekirdek.uretSoruBankasiCSV(cozulmusKarma);
+    assert.ok(disaAktarilanCsv.includes('Zorluk_Derecesi;Ogrenim_Ciktisi_OC;Konu_Kazanim'));
+    const geriYuklenen = Cekirdek.cozSoruBankasiCSV(disaAktarilanCsv, 'ders-bologna');
+    assert.strictEqual(geriYuklenen.length, 5);
+    assert.deepStrictEqual(
+      geriYuklenen.map((s) => s.ocKodu),
+      ['ÖÇ-1', 'ÖÇ-2', 'ÖÇ-3', 'ÖÇ-4', 'ÖÇ-5']
+    );
+
+    // Dengesiz Soru Havuzunda (ÖÇ-1'den 12 soru, ÖÇ-2..ÖÇ-5'ten yalnız 1'er soru)
+    // 5 soruluk sınav seçildiğinde "Her ÖÇ İçin En Az 1 Soru" garantisinin çalışması
+    const dengesizHavuz = [];
+    for (let i = 1; i <= 12; i++) {
+      dengesizHavuz.push({
+        id: `havuz-oc1-${i}`,
+        dersId: 'ders-bologna',
+        tur: 'test',
+        hafta: (i % 4) + 1,
+        ocKodu: 'ÖÇ-1',
+        kazanim: 'ÖÇ-1: Temel Kavramlar',
+        zorluk: 'Orta',
+        metin: `ÖÇ-1 Sorusu ${i}`,
+        siklar: ['A', 'B', 'C', 'D', 'E'],
+        dogruHarf: 'A'
+      });
+    }
+    ['ÖÇ-2', 'ÖÇ-3', 'ÖÇ-4', 'ÖÇ-5'].forEach((oc, idx) => {
+      dengesizHavuz.push({
+        id: `havuz-nadir-${idx + 2}`,
+        dersId: 'ders-bologna',
+        tur: 'test',
+        hafta: 1, // Hepsi 1. haftada yığılmış olsa bile Set-Cover ÖÇ garantisi yakalamalıdır!
+        ocKodu: oc,
+        kazanim: `${oc}: Kritik Bologna Çıktısı`,
+        zorluk: 'Zor',
+        metin: `${oc} Nadir Sorusu`,
+        siklar: ['A', 'B', 'C', 'D', 'E'],
+        dogruHarf: 'B'
+      });
+    });
+
+    const secim = Cekirdek.secHaftalikVeKotaliSinavSorulari(dengesizHavuz, {
+      dySayisi: 0,
+      testSayisi: 5,
+      klasikSayisi: 0,
+      seciliHaftalar: [1, 2, 3, 4],
+      herOcEnAzBirSoru: true
+    });
+
+    assert.strictEqual(secim.test.length, 5);
+    const secilenOcKumesi = new Set(secim.test.map((s) => Cekirdek.normalizeOcKodu(s.ocKodu || s.kazanim)));
+    ['ÖÇ-1', 'ÖÇ-2', 'ÖÇ-3', 'ÖÇ-4', 'ÖÇ-5'].forEach((beklenenOc) => {
+      assert.ok(secilenOcKumesi.has(beklenenOc), `Sınavda ${beklenenOc} için en az 1 soru bulunmalıdır`);
+    });
+    assert.strictEqual(secim.ocKapsamaRaporu.eksikOcKodlari.length, 0);
+    assert.strictEqual(secim.ocKapsamaRaporu.tamKapsandiMi, true);
+
+    const belirtke = Cekirdek.uretSinavBelirtkeTablosu(
+      secim.test,
+      { dySoruPuan: 0, testSoruPuan: 20, klasikSoruPuan: 0 },
+      dengesizHavuz
+    );
+    assert.strictEqual(belirtke.herOcEnAzBirTamamMi, true);
+    assert.strictEqual(belirtke.eksikOcKodlari.length, 0);
+    assert.strictEqual(belirtke.ocSatirlar.length, 5);
+  });
+
   console.log(`\n=== TÜM TESTLER BAŞARIYLA TAMAMLANDI (${gecen}/${gecen} GEÇTİ · 0 HATA) ===`);
 }
 

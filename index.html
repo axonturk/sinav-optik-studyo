@@ -281,8 +281,13 @@
             <!-- 1-14 Hafta Onay Kutuları ve Manuel Kota Giriş Izgarası -->
             <div id="kutu-hafta-secim-izgara" style="display:grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap:4px; margin-bottom:0.55rem;"></div>
 
-            <!-- Geçmiş Sınavda Sorulanları Hariç Tutma ve Kağıt Üzeri Soru Değiştirme Durumu -->
+            <!-- Bologna Her ÖÇ İçin En Az 1 Soru Garantisi, Geçmiş Sınavda Sorulanları Hariç Tutma ve Kağıt Üzeri Soru Değiştirme Durumu -->
             <div style="padding:0.45rem 0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; margin-bottom:0.55rem;">
+              <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.78rem; font-weight:700; cursor:pointer; margin-bottom:0.35rem; color:var(--birincil);">
+                <input type="checkbox" id="ayar-her-oc-en-az-bir" checked style="width:auto;" />
+                <span>🎯 Bologna Kuralı: <strong>Her Öğrenim Çıktısından (ÖÇ) En Az 1 Soru</strong> Seç</span>
+              </label>
+              <div id="kutu-oc-kapsama-durumu" style="font-size:0.73rem; margin-bottom:0.4rem; padding:4px 7px; border-radius:5px; background:var(--bg-kart); border:1px solid var(--kenar);"></div>
               <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.78rem; font-weight:700; cursor:pointer; margin-bottom:0.4rem;">
                 <input type="checkbox" id="ayar-haric-tut-sorulanlar" style="width:auto;" />
                 <span>🚫 Geçmiş sınavda <strong>"Soruldu"</strong> işaretlenen soruları hariç tut</span>
@@ -296,14 +301,14 @@
                 </button>
               </div>
               <div id="etiket-soru-degisim-durum" style="font-size:0.74rem; color:var(--birincil); font-weight:700; margin-top:0.35rem;">
-                💡 İpucu: Sağdaki A4 kağıt önizlemesinde herhangi bir sorunun üzerindeki <strong>"🔄 Değiştir"</strong> düğmesine basarak o soruyu kaldırıp yerine aynı hafta/zorluktan yeni soru atayabilirsiniz.
+                💡 İpucu: Sağdaki A4 kağıt önizlemesinde herhangi bir sorunun üzerindeki <strong>"🔄 Değiştir"</strong> düğmesine basarak o soruyu kaldırıp yerine aynı ÖÇ/hafta/zorluktan yeni soru atayabilirsiniz.
               </div>
             </div>
 
-            <!-- Canlı Sınav Belirtke Tablosu (Hafta × Tür × Zorluk × Puan) -->
+            <!-- Canlı Sınav Belirtke Tablosu (Hafta × Bologna ÖÇ × Tür × Zorluk × Puan) -->
             <details open style="background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; padding:0.45rem 0.55rem;">
               <summary style="font-size:0.78rem; font-weight:800; cursor:pointer; color:var(--birincil);">
-                📊 Canlı Sınav Belirtke Tablosu (Hafta × Soru Türü × Zorluk × Puan)
+                📊 Canlı Sınav Belirtke Tablosu (Hafta × Bologna ÖÇ × Soru Türü × Zorluk × Puan)
               </summary>
               <div id="kutu-canli-belirtke-tablosu" style="margin-top:0.4rem; font-size:0.74rem; overflow-x:auto;"></div>
             </details>
@@ -739,16 +744,31 @@
               <textarea id="yeni-soru-metin" rows="3" placeholder="Sorunuzu buraya yazınız..."></textarea>
             </div>
 
-            <!-- Opsiyonel Kod/Formül Kutusu, Öğrenme Çıktısı (ÖÇ) ve Şekil/Diyagram Görseli -->
-            <div class="form-satir">
+            <!-- Bologna Öğrenim Çıktısı (ÖÇ), Konu Açıklaması ve Opsiyonel Kod/Formül Kutusu -->
+            <div class="form-satir" style="grid-template-columns: 0.85fr 1.15fr;">
               <div>
-                <label class="etiket" for="yeni-soru-kazanim">Konu / Öğrenme Çıktısı (ÖÇ)</label>
-                <input type="text" id="yeni-soru-kazanim" placeholder="Örn: ÖÇ-1: Ağ Katmanları" />
+                <label class="etiket" for="yeni-soru-oc-kodu">🎯 Bologna Öğrenim Çıktısı (ÖÇ)</label>
+                <select id="yeni-soru-oc-kodu">
+                  <option value="ÖÇ-1" selected>🎯 ÖÇ-1</option>
+                  <option value="ÖÇ-2">🎯 ÖÇ-2</option>
+                  <option value="ÖÇ-3">🎯 ÖÇ-3</option>
+                  <option value="ÖÇ-4">🎯 ÖÇ-4</option>
+                  <option value="ÖÇ-5">🎯 ÖÇ-5</option>
+                  <option value="ÖÇ-6">🎯 ÖÇ-6</option>
+                  <option value="ÖÇ-7">🎯 ÖÇ-7</option>
+                  <option value="ÖÇ-8">🎯 ÖÇ-8</option>
+                  <option value="ÖÇ-9">🎯 ÖÇ-9</option>
+                  <option value="ÖÇ-10">🎯 ÖÇ-10</option>
+                </select>
               </div>
               <div>
-                <label class="etiket" for="yeni-soru-kod">Kod / Formül / Öncül Satırı (İsteğe Bağlı)</label>
-                <input type="text" id="yeni-soru-kod" placeholder="Örn: SELECT * FROM users WHERE id = 1;" />
+                <label class="etiket" for="yeni-soru-kazanim">Alt Konu / Kazanım Açıklaması</label>
+                <input type="text" id="yeni-soru-kazanim" placeholder="Örn: Ağ Katmanlarını Analiz Eder" />
               </div>
+            </div>
+            <div class="form-grup">
+              <label class="etiket" for="yeni-soru-kod">Kod / Formül / Öncül Satırı (İsteğe Bağlı)</label>
+              <input type="text" id="yeni-soru-kod" placeholder="Örn: SELECT * FROM users WHERE id = 1;" />
             </div>
             <div class="form-grup">
               <label class="etiket" for="input-soru-gorsel">🖼️ Soruya Şekil / Diyagram / Devre Görseli Ekle (İsteğe Bağlı)</label>
@@ -803,32 +823,37 @@
             </button>
           </div>
 
-          <!-- Boş CSV Şablon İndirme (Test / D-Y / Klasik Ayrı Şablonlar + Zorluk Derecesi — Puan Sütunsuz) & Yükleme -->
+          <!-- Boş CSV Şablon İndirme (Test / D-Y / Klasik Ayrı Şablonlar + Ogrenim_Ciktisi_OC + Zorluk Derecesi — Puan Sütunsuz) & Yükleme -->
           <div class="kart">
             <div class="kart-baslik">
-              <span>📥 Excel / CSV Boş Soru Şablonları (Zorluk Derecesi Dahil)</span>
-              <span class="rozet rozet-yesil">Puan Sütunsuz · Kolay/Orta/Zor</span>
+              <span>📥 Excel / CSV Soru Şablonları (<code>Ogrenim_Ciktisi_OC</code> Sütunlu)</span>
+              <span class="rozet rozet-yesil">Bologna ÖÇ · Hafta · Zorluk</span>
             </div>
             <p style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.55rem;">
-              Her soru türü için kendi sütun yapısına uygun <strong>boş CSV şablonunu</strong> indirip Excel'de doldurun. Soru bankasında sabit puan sütunu yoktur; puanlar <strong>Sınav Tanımlarken (Toplam 100 Puan üzerinden)</strong> otomatik bölünür veya klasikte tek tek verilir:
+              Tüm CSV şablonlarında <strong><code>Ogrenim_Ciktisi_OC</code></strong> (<code>ÖÇ-1</code>, <code>ÖÇ-2</code>, ...), <strong><code>Konu_Kazanim</code></strong>, <strong><code>Zorluk_Derecesi</code></strong> ve <strong><code>Hafta</code></strong> sütunları yer alır. Sınav hazırlanırken her <code>ÖÇ</code> için en az 1 soru otomatik seçilir:
             </p>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.4rem; margin-bottom:0.5rem;">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.4rem; margin-bottom:0.4rem;">
               <button type="button" class="btn btn-kucuk" id="btn-bos-test-csv-indir">
-                🔘 Boş Test CSV İndir
+                🔘 Boş Test CSV (ÖÇ Sütunlu)
               </button>
               <button type="button" class="btn btn-kucuk" id="btn-bos-dy-csv-indir">
-                ✔️ Boş Doğru/Yanlış CSV İndir
+                ✔️ Boş D/Y CSV (ÖÇ Sütunlu)
               </button>
               <button type="button" class="btn btn-kucuk" id="btn-bos-klasik-csv-indir">
-                ✍️ Boş Klasik Soru CSV İndir
+                ✍️ Boş Klasik CSV (ÖÇ Sütunlu)
               </button>
               <button type="button" class="btn btn-kucuk" id="btn-bos-soru-csv-indir">
-                📦 Karma (Tümü) CSV İndir
+                📦 Karma (Tümü) CSV (ÖÇ Sütunlu)
+              </button>
+            </div>
+            <div style="margin-bottom:0.45rem;">
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-soru-bankasi-csv-disa-aktar" style="width:100%;">
+                📤 Aktif Dersin Sorularını CSV Olarak İndir (<code>Ogrenim_Ciktisi_OC</code> Sütunlu)
               </button>
             </div>
             <div style="margin-bottom:0.85rem;">
               <label class="btn btn-basari btn-kucuk" style="cursor:pointer; margin:0; width:100%;">
-                📂 Doldurulmuş CSV / Excel (.xlsx .xls) Dosyasını Yükle (Test / D-Y / Klasik Otomatik Tanır)
+                📂 Doldurulmuş CSV / Excel (.xlsx .xls) Dosyasını Yükle (ÖÇ Sütununu Otomatik Tanır)
                 <input type="file" id="input-soru-csv-yukle" accept=".csv,.txt,.xlsx,.xls" style="display:none;" />
               </label>
               <div id="etiket-soru-yukleme-durum" style="font-size:0.78rem; margin-top:0.3rem;"></div>
@@ -839,9 +864,9 @@
               <button type="button" class="btn btn-kucuk" id="btn-ornek-metin-doldur">✨ Örnek Metin Doldur</button>
             </div>
             <p style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">
-              Word belgenizdeki soruları kopyalayıp aşağıya yapıştırın. Sistem <code>[DY] ... (D)</code>, <code>A) ... B) ... Cevap: C</code> ve <code>[KLASİK] ...</code> yapılarını otomatik tanır:
+              Word belgenizdeki soruları kopyalayıp aşağıya yapıştırın. Sistem <code>[ÖÇ-1]</code>, <code>[DY] ... (D)</code>, <code>A) ... B) ... Cevap: C</code> ve <code>[KLASİK] ...</code> yapılarını otomatik tanır:
             </p>
-            <textarea id="toplu-soru-metin" rows="6" placeholder="1. [DY] TCP bağlantı yönelimli bir protokoldür. (D)&#10;2. HTTP varsayılan olarak hangi portu kullanır?&#10;A) 21  B) 22  C) 80  D) 443  E) 3306&#10;Cevap: C"></textarea>
+            <textarea id="toplu-soru-metin" rows="6" placeholder="1. [DY] [ÖÇ-1] TCP bağlantı yönelimli bir protokoldür. (D)&#10;2. [ÖÇ-2] HTTP varsayılan olarak hangi portu kullanır?&#10;A) 21  B) 22  C) 80  D) 443  E) 3306&#10;Cevap: C"></textarea>
             <button type="button" class="btn btn-basari" id="btn-toplu-soru-aktar" style="width:100%; margin-top:0.5rem;">
               🚀 Metindeki Soruları Ayrıştır ve Bankaya Ekle
             </button>
@@ -856,6 +881,19 @@
               <select id="filtre-soru-kaynak" style="width:auto; font-weight:700;" title="Aktif dersin soruları veya silinen derslerin soru arşivi">
                 <option value="aktif" selected>📚 Aktif Dersin Soruları</option>
                 <option value="arsiv">📦 Soru Arşivi (Silinen Dersler)</option>
+              </select>
+              <select id="filtre-soru-oc" style="width:auto;" title="Bologna Öğrenim Çıktısına (ÖÇ) göre filtrele">
+                <option value="TUMU">🎯 Tüm ÖÇ'ler (ÖÇ-1..10)</option>
+                <option value="ÖÇ-1">🎯 ÖÇ-1</option>
+                <option value="ÖÇ-2">🎯 ÖÇ-2</option>
+                <option value="ÖÇ-3">🎯 ÖÇ-3</option>
+                <option value="ÖÇ-4">🎯 ÖÇ-4</option>
+                <option value="ÖÇ-5">🎯 ÖÇ-5</option>
+                <option value="ÖÇ-6">🎯 ÖÇ-6</option>
+                <option value="ÖÇ-7">🎯 ÖÇ-7</option>
+                <option value="ÖÇ-8">🎯 ÖÇ-8</option>
+                <option value="ÖÇ-9">🎯 ÖÇ-9</option>
+                <option value="ÖÇ-10">🎯 ÖÇ-10</option>
               </select>
               <select id="filtre-soru-hafta" style="width:auto;">
                 <option value="TUMU">Tüm Haftalar (1–14)</option>
@@ -883,12 +921,14 @@
             </div>
           </div>
           <div id="kutu-banka-arsiv-cubuk" style="display:none; padding:0.55rem 0.65rem; margin-bottom:0.55rem; background:var(--uyari-acik); border:1px solid var(--uyari); border-radius:6px; font-size:0.8rem;"></div>
+          <div id="kutu-banka-oc-ozet" style="padding:0.45rem 0.6rem; margin-bottom:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; font-size:0.76rem;"></div>
           <div class="tablo-sarmal">
             <table class="veri-tablo">
               <thead>
                 <tr>
                   <th>#</th>
                   <th>Hafta</th>
+                  <th>Bologna ÖÇ</th>
                   <th>Tür</th>
                   <th>Soru Metni &amp; Şıklar</th>
                   <th>Doğru Cevap</th>

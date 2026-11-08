@@ -281,8 +281,37 @@
     }    kutu.innerHTML = html;
   }
 
-  /* Canlı Sınav Belirtke Tablosunu (Hafta × Kazanım × Soru Türü × Zorluk × Puan) Güncelleme */
-  function guncelleCanliBelirtkeTablosuUI(belirtkeTablosu) {
+  /* Canlı Sınav Belirtke Tablosunu (Hafta × Kazanım/ÖÇ × Soru Türü × Zorluk × Puan) ve Bologna ÖÇ Kapsama Çubuğunu Güncelleme */
+  function guncelleCanliBelirtkeTablosuUI(belirtkeTablosu, ocKapsamaRaporu) {
+    const ocKutu = document.getElementById('kutu-oc-kapsama-durumu');
+    if (ocKutu && belirtkeTablosu) {
+      const ocSatirlar = Array.isArray(belirtkeTablosu.ocSatirlar) ? belirtkeTablosu.ocSatirlar : [];
+      const eksikOc = Array.isArray(belirtkeTablosu.eksikOcKodlari) ? belirtkeTablosu.eksikOcKodlari : [];
+      const toplamHavuzOc = ocSatirlar.length;
+      const kapsananOc = ocSatirlar.filter((x) => x.toplamSoru > 0).length;
+
+      if (toplamHavuzOc === 0) {
+        ocKutu.innerHTML = '<span style="color:var(--metin-soluk);">ℹ️ Aktif derste henüz tanımlı soru/ÖÇ bulunmuyor.</span>';
+      } else {
+        const tamMi = eksikOc.length === 0;
+        const rozetlerHTML = ocSatirlar
+          .map((oc) => {
+            const aktifMi = oc.toplamSoru > 0;
+            const sinif = aktifMi ? 'rozet rozet-yesil' : 'rozet rozet-kirmizi';
+            return `<span class="${sinif}" title="${C.kacisHTML((oc.aciklamalar || []).join(' | ') || oc.ocKodu)}">${C.kacisHTML(oc.ocKodu)}: ${oc.toplamSoru} soru (${oc.toplamPuan}p)</span>`;
+          })
+          .join(' ');
+
+        ocKutu.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.25rem;">
+            <strong>${tamMi ? '🟢 Bologna ÖÇ Kapsamı Tam:' : '⚠️ Eksik Bologna ÖÇ Var:'} ${kapsananOc} / ${toplamHavuzOc} ÖÇ Kapsandı</strong>
+            <span class="rozet ${tamMi ? 'rozet-yesil' : 'rozet-sari'}">${tamMi ? '✓ Her ÖÇ ≥ 1 Soru' : `Eksik: ${eksikOc.join(', ')}`}</span>
+          </div>
+          <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">${rozetlerHTML}</div>
+        `;
+      }
+    }
+
     const kutu = document.getElementById('kutu-canli-belirtke-tablosu');
     if (!kutu || !belirtkeTablosu) return;
 
@@ -292,32 +321,63 @@
       return;
     }
 
+    const ocAktifSatirlar = Array.isArray(belirtkeTablosu.ocSatirlar) && belirtkeTablosu.ocSatirlar.length > 0
+      ? belirtkeTablosu.ocSatirlar
+      : (belirtkeTablosu.aktifOcSatirlar || []);
+
+    const ocSatirHTML = ocAktifSatirlar
+      .map((oc) => `
+        <tr style="${oc.toplamSoru === 0 ? 'background:rgba(220,38,38,0.08);' : ''}">
+          <td><strong>${C.kacisHTML(oc.ocKodu)}</strong></td>
+          <td class="mono">${oc.dy > 0 ? `${oc.dy} D/Y ` : ''}${oc.test > 0 ? `${oc.test} Test ` : ''}${oc.klasik > 0 ? `${oc.klasik} Kl.` : ''} (<strong>${oc.toplamSoru}</strong>)</td>
+          <td class="mono" style="font-size:0.68rem;">H:${(oc.haftalar || []).join(',') || '-'}</td>
+          <td style="font-size:0.68rem;">${C.kacisHTML((oc.aciklamalar || []).join(', ') || oc.ocKodu)}</td>
+          <td class="mono"><strong>${oc.toplamPuan}p</strong> (%${oc.puanYuzde})</td>
+        </tr>
+      `)
+      .join('');
+
     const satirHTML = satirlar
       .map((st) => `
         <tr>
           <td><strong>${st.hafta}. Hafta</strong></td>
           <td class="mono">${st.dy > 0 ? `${st.dy} D/Y ` : ''}${st.test > 0 ? `${st.test} Test ` : ''}${st.klasik > 0 ? `${st.klasik} Kl.` : ''} (<strong>${st.toplamSoru}</strong>)</td>
           <td class="mono" style="font-size:0.68rem;">K:${st.kolay} · O:${st.orta} · Z:${st.zor}</td>
-          <td style="font-size:0.68rem;">${C.kacisHTML((st.kazanimlar || []).join(', '))}</td>
+          <td style="font-size:0.68rem;">${C.kacisHTML((st.ocKodlari || st.kazanimlar || []).join(', '))}</td>
           <td class="mono"><strong>${st.toplamPuan}p</strong> (%${st.puanYuzde})</td>
         </tr>
       `)
       .join('');
 
-    const oz = belirtkeTablosu.genelOzet || { kolay: 0, orta: 0, zor: 0, toplamSoru: 0, toplamPuan: 0, kapsananHaftaSayisi: 0 };
+    const oz = belirtkeTablosu.genelOzet || { kolay: 0, orta: 0, zor: 0, toplamSoru: 0, toplamPuan: 0, kapsananHaftaSayisi: 0, kapsananOcSayisi: 0, toplamHavuzOcSayisi: 0 };
     kutu.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem; font-size:0.74rem;">
-        <strong>📊 Canlı Sınav Belirtke Tablosu (${oz.kapsananHaftaSayisi} Hafta · ${oz.toplamSoru} Soru)</strong>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem; font-size:0.74rem; flex-wrap:wrap; gap:0.25rem;">
+        <strong>🎯 Bologna ÖÇ &amp; Haftalık Belirtke (${oz.kapsananOcSayisi || 0}/${oz.toplamHavuzOcSayisi || 0} ÖÇ · ${oz.kapsananHaftaSayisi} Hafta · ${oz.toplamSoru} Soru)</strong>
         <span class="rozet rozet-mavi">Kolay:${oz.kolay} · Orta:${oz.orta} · Zor:${oz.zor}</span>
       </div>
-      <div class="tablo-sarmal" style="max-height:175px; overflow-y:auto;">
-        <table class="veri-tablosu" style="font-size:0.72rem;">
+      ${ocSatirHTML ? `
+      <div class="tablo-sarmal" style="max-height:140px; overflow-y:auto; margin-bottom:0.4rem;">
+        <table class="veri-tablosu" style="font-size:0.71rem;">
+          <thead>
+            <tr>
+              <th>Bologna ÖÇ</th>
+              <th>Tür &amp; Adet</th>
+              <th>Hafta</th>
+              <th>Kazanım Açıklaması</th>
+              <th>Puan</th>
+            </tr>
+          </thead>
+          <tbody>${ocSatirHTML}</tbody>
+        </table>
+      </div>` : ''}
+      <div class="tablo-sarmal" style="max-height:155px; overflow-y:auto;">
+        <table class="veri-tablosu" style="font-size:0.71rem;">
           <thead>
             <tr>
               <th>Hafta</th>
               <th>Tür &amp; Adet</th>
               <th>Zorluk</th>
-              <th>Kazanım (ÖÇ)</th>
+              <th>Kapsanan ÖÇ</th>
               <th>Puan</th>
             </tr>
           </thead>
@@ -432,10 +492,13 @@
     const ciftSikDogruMetni = (document.getElementById('kural-cift-sik-dogru') && document.getElementById('kural-cift-sik-dogru').value) || '';
 
     const aktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || durum.dersler[0] || varsayilanBosDers();
-    const dersSorulari = durum.sorular.filter((s) => s.dersId === aktifDers.id || s.dersId === 'genel');
+    const dersSorulari = durum.sorular.filter((s) => !s.arsivde && (s.dersId === aktifDers.id || s.dersId === 'genel'));
     const zorlukDagilimi = (document.getElementById('ayar-zorluk-dagilimi') && document.getElementById('ayar-zorluk-dagilimi').value) || 'dengeli';
     const haftaDagilimModu = (document.getElementById('ayar-hafta-dagilim-modu') && document.getElementById('ayar-hafta-dagilim-modu').value) || 'otomatik_dengeli';
     const haricTutSorulanlar = Boolean(document.getElementById('ayar-haric-tut-sorulanlar') && document.getElementById('ayar-haric-tut-sorulanlar').checked);
+    const herOcEnAzBirSoru = document.getElementById('ayar-her-oc-en-az-bir')
+      ? Boolean(document.getElementById('ayar-her-oc-en-az-bir').checked)
+      : true;
 
     const secimImzasi = JSON.stringify({
       dersId: aktifDers.id,
@@ -446,7 +509,8 @@
       seciliHaftalar: durum.seciliHaftalar,
       haftaDagilimModu,
       haftaKotalari: haftaDagilimModu === 'manuel_kota' ? durum.haftaKotalari : null,
-      haricTutSorulanlar
+      haricTutSorulanlar,
+      herOcEnAzBirSoru
     });
     if (durum.sonSecimYapilandirmaImzasi !== secimImzasi) {
       durum.ozelSeciliSoruIdleri = { dy: [], test: [], klasik: [] };
@@ -462,6 +526,7 @@
       haftaDagilimModu,
       haftaKotalari: durum.haftaKotalari,
       haricTutSorulanlar,
+      herOcEnAzBirSoru,
       reddedilenSoruIdleri: durum.reddedilenSoruIdleri,
       sabitlenenSoruIdleri: durum.sabitlenenSoruIdleri,
       ozelSeciliSoruIdleri: durum.ozelSeciliSoruIdleri
@@ -471,16 +536,18 @@
     const seciliTest = haftalikSecim.test.slice();
     const seciliKlasik = haftalikSecim.klasik.slice();
 
-    // Eğer bankadaki soru sayısı istenenden azsa otomatik tamamlayıcı soru üret
+    // Eğer bankadaki soru sayısı istenenden azsa otomatik tamamlayıcı soru üret (ÖÇ-1..ÖÇ-5 dengeli)
     while (seciliDy.length < dySayisi) {
       const no = seciliDy.length + 1;
       const hNo = durum.seciliHaftalar[(no - 1) % Math.max(1, durum.seciliHaftalar.length)] || 1;
+      const ocKoduOto = `ÖÇ-${((no - 1) % 5) + 1}`;
       seciliDy.push({
         id: `oto-dy-${no}`,
         dersId: aktifDers.id,
         tur: 'dy',
         hafta: hNo,
-        kazanim: `ÖÇ-1: ${hNo}. Hafta Kazanımı`,
+        ocKodu: ocKoduOto,
+        kazanim: `${ocKoduOto}: ${hNo}. Hafta Kazanımı`,
         zorluk: 'Orta',
         metin: `${aktifDers.ad} dersi kapsamında ${no}. temel kavram ve doğrulama önermesi doğrudur.`,
         dogruDY: no % 2 === 1 ? 'D' : 'Y'
@@ -489,12 +556,14 @@
     while (seciliTest.length < testSayisi) {
       const no = seciliTest.length + 1;
       const hNo = durum.seciliHaftalar[(no - 1) % Math.max(1, durum.seciliHaftalar.length)] || 1;
+      const ocKoduOto = `ÖÇ-${((no - 1) % 5) + 1}`;
       seciliTest.push({
         id: `oto-test-${no}`,
         dersId: aktifDers.id,
         tur: 'test',
         hafta: hNo,
-        kazanim: `ÖÇ-2: ${hNo}. Hafta Kazanımı`,
+        ocKodu: ocKoduOto,
+        kazanim: `${ocKoduOto}: ${hNo}. Hafta Kazanımı`,
         zorluk: 'Orta',
         metin: `${aktifDers.ad} dersinin ${no}. değerlendirme sorusunda aşağıdaki mimari seçeneklerden hangisi doğrudur?`,
         siklar: ['Birinci seçenek', 'İkinci seçenek', 'Üçüncü seçenek', 'Dördüncü seçenek', 'Beşinci seçenek'].slice(0, sikSayisi),
@@ -504,12 +573,14 @@
     while (seciliKlasik.length < klasikSayisi) {
       const no = seciliKlasik.length + 1;
       const hNo = durum.seciliHaftalar[(no - 1) % Math.max(1, durum.seciliHaftalar.length)] || 1;
+      const ocKoduOto = `ÖÇ-${((no - 1) % 5) + 1}`;
       seciliKlasik.push({
         id: `oto-klasik-${no}`,
         dersId: aktifDers.id,
         tur: 'klasik',
         hafta: hNo,
-        kazanim: `ÖÇ-4: ${hNo}. Hafta Kazanımı`,
+        ocKodu: ocKoduOto,
+        kazanim: `${ocKoduOto}: ${hNo}. Hafta Kazanımı`,
         zorluk: 'Orta',
         metin: `${aktifDers.ad} kapsamında ${no}. açık uçlu vaka sorusunu mimari gerekçeleriyle açıklayınız.`,
         rubrik: 'Kavramsal doğruluk (5p) + Uygulama örneği (5p)'
@@ -524,12 +595,16 @@
     };
 
     const tumSeciliSorular = [...seciliDy, ...seciliTest, ...seciliKlasik];
-    const belirtkeTablosu = C.uretSinavBelirtkeTablosu(tumSeciliSorular, {
-      dySoruPuan,
-      testSoruPuan,
-      klasikSoruPuan,
-      klasikSoruPuanlari
-    });
+    const belirtkeTablosu = C.uretSinavBelirtkeTablosu(
+      tumSeciliSorular,
+      {
+        dySoruPuan,
+        testSoruPuan,
+        klasikSoruPuan,
+        klasikSoruPuanlari
+      },
+      dersSorulari.filter((s) => durum.seciliHaftalar.includes(C.normalizeHaftaNo(s.hafta, 1)))
+    );
     const sinavKodu = `${aktifDers.kod}-${dySayisi}-${testSayisi}-${klasikSayisi}`;
 
     const kitapciklar = {};
@@ -628,6 +703,8 @@
       ciftSikDogruMetni,
       tumSeciliSorular,
       belirtkeTablosu,
+      ocKapsamaRaporu: haftalikSecim.ocKapsamaRaporu,
+      herOcEnAzBirSoru,
       haftaDagilimModu,
       haricTutSorulanlar,
       kitapciklar,
@@ -734,13 +811,14 @@
   /* Tek Bir Sorunun HTML Dizgisini Üretir (Kısa şıkları otomatik yan yana dizer + Kod/Formül ve Görsel/Diyagram destekler + Ekran İçi 🔄 Değiştir / 📌 Sabitle / ▲▼ / ✏️ Araçlarını barındırır) */
   function uretSoruBlokHTML(soru, tur, birimPuan) {
     const haftaNo = C.normalizeHaftaNo(soru.hafta, 1);
+    const ocKodu = C.kacisHTML(C.normalizeOcKodu(soru.ocKodu || soru.kazanim, 'ÖÇ-1'));
     const zorlukStr = C.kacisHTML(soru.zorluk || 'Orta');
     const sabitMi = Array.isArray(durum.sabitlenenSoruIdleri) && durum.sabitlenenSoruIdleri.includes(soru.id);
     const soruIdGuvenli = C.kacisHTML(soru.id);
 
     const ekranAraclariHTML = `
       <span class="soru-ekran-araclari">
-        <span class="soru-ekran-etiket" title="Hafta ve Zorluk">H${haftaNo}·${zorlukStr}</span>
+        <span class="soru-ekran-etiket" title="Hafta · Bologna ÖÇ · Zorluk">H${haftaNo}·${ocKodu}·${zorlukStr}</span>
         <button type="button" class="soru-ekran-btn" data-kagit-soru-degistir="${soruIdGuvenli}" data-kagit-soru-tur="${tur}" title="Bu soruyu sınav kağıdından kaldır ve yerine havuzdan yeni soru ata">🔄 Değiştir</button>
         <button type="button" class="soru-ekran-btn ${sabitMi ? 'aktif-sabit' : ''}" data-kagit-soru-sabitle="${soruIdGuvenli}" title="Bu soruyu kağıtta sabitle / kilidi aç">${sabitMi ? '📌 Sabit' : '📌'}</button>
         <button type="button" class="soru-ekran-btn" data-kagit-soru-yon="-1" data-kagit-soru-id="${soruIdGuvenli}" data-kagit-soru-tur="${tur}" title="Soruyu yukarı taşı">▲</button>
@@ -1222,25 +1300,63 @@
           <td style="border:1px solid #000; padding:2px 4px; font-weight:700;">${st.hafta}. Hafta</td>
           <td style="border:1px solid #000; padding:2px 4px;">${st.dy} D/Y · ${st.test} Test · ${st.klasik} Klasik (Top: ${st.toplamSoru})</td>
           <td style="border:1px solid #000; padding:2px 4px;">Kolay:${st.kolay} · Orta:${st.orta} · Zor:${st.zor}</td>
-          <td style="border:1px solid #000; padding:2px 4px;">${C.kacisHTML((st.kazanimlar || []).join(', '))}</td>
+          <td style="border:1px solid #000; padding:2px 4px;">${C.kacisHTML((st.ocKodlari || st.kazanimlar || []).join(', '))}</td>
           <td style="border:1px solid #000; padding:2px 4px; font-weight:700;">${st.toplamPuan} Puan (%${st.puanYuzde})</td>
         </tr>
       `)
       .join('');
 
+    const ocMatrisSatirlar = (belirtke && Array.isArray(belirtke.ocSatirlar) && belirtke.ocSatirlar.length > 0)
+      ? belirtke.ocSatirlar
+      : (belirtke && Array.isArray(belirtke.aktifOcSatirlar) ? belirtke.aktifOcSatirlar : []);
+
+    const ocMatrisSatirlarHTML = ocMatrisSatirlar
+      .map((oc) => `
+        <tr>
+          <td style="border:1px solid #000; padding:2px 4px; font-weight:700;">${C.kacisHTML(oc.ocKodu)}</td>
+          <td style="border:1px solid #000; padding:2px 4px;">${oc.dy} D/Y · ${oc.test} Test · ${oc.klasik} Klasik (Top: ${oc.toplamSoru})</td>
+          <td style="border:1px solid #000; padding:2px 4px;">${(oc.haftalar || []).map((h) => `${h}.H`).join(', ') || '-'}</td>
+          <td style="border:1px solid #000; padding:2px 4px;">${C.kacisHTML((oc.aciklamalar || []).join(', ') || oc.ocKodu)}</td>
+          <td style="border:1px solid #000; padding:2px 4px; font-weight:700;">${oc.toplamPuan} Puan (%${oc.puanYuzde})</td>
+        </tr>
+      `)
+      .join('');
+
+    const ocMatrisTabloHTML = ocMatrisSatirlarHTML
+      ? `
+        <div style="margin-top:8px; border:1.5px solid #000; padding:6px;">
+          <div style="font-weight:800; font-size:8.3pt; margin-bottom:4px;">
+            🎯 BOLOGNA ÖĞRENİM ÇIKTISI (ÖÇ) KAPSAMA VE PUAN MATRİSİ (HER ÖÇ İÇİN EN AZ 1 SORU KANITI)
+          </div>
+          <table style="width:100%; border-collapse:collapse; font-size:7.1pt;">
+            <thead>
+              <tr style="background:#f1f5f9;">
+                <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Bologna ÖÇ</th>
+                <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Soru Türü &amp; Sayısı</th>
+                <th style="border:1px solid #000; padding:2px 4px; text-align:left;">İlgili Haftalar</th>
+                <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Kazanım Açıklaması</th>
+                <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Puan Payı</th>
+              </tr>
+            </thead>
+            <tbody>${ocMatrisSatirlarHTML}</tbody>
+          </table>
+        </div>
+      `
+      : '';
+
     const belirtkeTabloHTML = belirtkeSatirlarHTML
       ? `
-        <div style="margin-top:10px; border:1.5px solid #000; padding:6px;">
-          <div style="font-weight:800; font-size:8.5pt; margin-bottom:4px;">
-            📊 SINAV BELİRTKE TABLOSU (HAFTA × KAZANIM × SORU TÜRÜ × ZORLUK × PUAN DAĞILIMI)
+        <div style="margin-top:8px; border:1.5px solid #000; padding:6px;">
+          <div style="font-weight:800; font-size:8.3pt; margin-bottom:4px;">
+            📊 HAFTALIK SINAV BELİRTKE TABLOSU (HAFTA × KAZANIM/ÖÇ × SORU TÜRÜ × ZORLUK × PUAN DAĞILIMI)
           </div>
-          <table style="width:100%; border-collapse:collapse; font-size:7.2pt;">
+          <table style="width:100%; border-collapse:collapse; font-size:7.1pt;">
             <thead>
               <tr style="background:#f1f5f9;">
                 <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Hafta</th>
                 <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Soru Türü &amp; Sayısı</th>
                 <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Zorluk Dağılımı</th>
-                <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Kazanım (ÖÇ)</th>
+                <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Kapsanan ÖÇ</th>
                 <th style="border:1px solid #000; padding:2px 4px; text-align:left;">Puan Payı</th>
               </tr>
             </thead>
@@ -1260,6 +1376,7 @@
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
           ${grupKutulari}
         </div>
+        ${ocMatrisTabloHTML}
         ${belirtkeTabloHTML}
       </div>
     `;
@@ -1440,6 +1557,7 @@
     guncelleHaftaSecimIzgarasiUI();
     const yapi = okuAktifSinavYapisi();
     otomatikOlcekVeSayfaPlanla(yapi);
+    guncelleCanliBelirtkeTablosuUI(yapi.belirtkeTablosu, yapi.ocKapsamaRaporu);
 
     document.getElementById('rozet-secili-soru').textContent = `${yapi.toplamSoruSayisi} Soru`;
     const rozetToplam = document.getElementById('rozet-toplam-puan');
@@ -1562,8 +1680,28 @@
     const kaynakFiltre = (document.getElementById('filtre-soru-kaynak') && document.getElementById('filtre-soru-kaynak').value) || 'aktif';
     const turFiltre = document.getElementById('filtre-soru-tur').value || 'TUMU';
     const haftaFiltre = (document.getElementById('filtre-soru-hafta') && document.getElementById('filtre-soru-hafta').value) || 'TUMU';
+    const ocFiltre = (document.getElementById('filtre-soru-oc') && document.getElementById('filtre-soru-oc').value) || 'TUMU';
     const aktifDersSorulari = durum.sorular.filter((s) => !s.arsivde && (s.dersId === aktifDersId || s.dersId === 'genel'));
     document.getElementById('rozet-banka-toplam').textContent = String(aktifDersSorulari.length);
+
+    // Aktif dersteki Bologna Öğrenim Çıktısı (ÖÇ) Dağılım Özeti Çubuğu
+    const kutuBankaOcOzet = document.getElementById('kutu-banka-oc-ozet');
+    if (kutuBankaOcOzet) {
+      if (aktifDersSorulari.length === 0) {
+        kutuBankaOcOzet.innerHTML = '<span>ℹ️ Aktif derste henüz soru bulunmuyor. Excel/CSV şablonundaki <code>Ogrenim_Ciktisi_OC</code> sütunuyla veya sol formdaki <strong>🎯 Bologna ÖÇ</strong> seçicisiyle soru ekleyebilirsiniz.</span>';
+      } else {
+        const ocSayacHaritasi = new Map();
+        aktifDersSorulari.forEach((s) => {
+          const oc = C.normalizeOcKodu(s.ocKodu || s.kazanim, 'ÖÇ-1');
+          ocSayacHaritasi.set(oc, (ocSayacHaritasi.get(oc) || 0) + 1);
+        });
+        const siraliOcGirdileri = Array.from(ocSayacHaritasi.entries()).sort((a, b) => C.ocKoduSiraNo(a[0]) - C.ocKoduSiraNo(b[0]));
+        kutuBankaOcOzet.innerHTML = `
+          <strong>🎯 Bankadaki Bologna ÖÇ Dağılımı (${siraliOcGirdileri.length} ÖÇ · ${aktifDersSorulari.length} Soru):</strong>
+          ${siraliOcGirdileri.map(([oc, adet]) => `<span class="rozet rozet-mavi">${C.kacisHTML(oc)}: ${adet} soru</span>`).join(' ')}
+        `;
+      }
+    }
 
     // Arşivdeki soru havuzları bilgi çubuğu
     const arsivHavuzlari = C.listeleArsivSoruHavuzlari(durum.dersler, durum.sorular, durum.arsivDersler);
@@ -1598,20 +1736,25 @@
     const filtrelenmis = kaynakSorular.filter((s) => {
       const turUygun = turFiltre === 'TUMU' || s.tur === turFiltre;
       const haftaUygun = haftaFiltre === 'TUMU' || C.normalizeHaftaNo(s.hafta, 1) === parseInt(haftaFiltre, 10);
-      return turUygun && haftaUygun;
+      const soruOc = C.normalizeOcKodu(s.ocKodu || s.kazanim, 'ÖÇ-1');
+      const ocUygun = ocFiltre === 'TUMU' || soruOc === ocFiltre;
+      return turUygun && haftaUygun && ocUygun;
     });
 
     const tbody = document.getElementById('tablo-soru-bankasi');
     if (!tbody) return;
 
     if (filtrelenmis.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--metin-soluk);">${kaynakFiltre === 'arsiv' ? 'Arşivde bekleyen soru bulunmuyor.' : 'Bu kriterlere uygun soru bulunmuyor.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--metin-soluk);">${kaynakFiltre === 'arsiv' ? 'Arşivde bekleyen soru bulunmuyor.' : 'Bu kriterlere uygun soru bulunmuyor.'}</td></tr>`;
       return;
     }
+
+    const ocSecenekListesi = ['ÖÇ-1', 'ÖÇ-2', 'ÖÇ-3', 'ÖÇ-4', 'ÖÇ-5', 'ÖÇ-6', 'ÖÇ-7', 'ÖÇ-8', 'ÖÇ-9', 'ÖÇ-10'];
 
     tbody.innerHTML = filtrelenmis
       .map((s, idx) => {
         const haftaNo = C.normalizeHaftaNo(s.hafta, 1);
+        const soruOcKodu = C.normalizeOcKodu(s.ocKodu || s.kazanim, 'ÖÇ-1');
         const turRozet = s.tur === 'dy'
           ? '<span class="rozet rozet-yesil">✔️ D/Y</span>'
           : (s.tur === 'test' ? '<span class="rozet rozet-mavi">🔘 Test</span>' : '<span class="rozet rozet-mor">✍️ Klasik</span>');
@@ -1623,6 +1766,15 @@
         const kazanimEtiket = s.kazanim
           ? `<span style="font-size:0.72rem; color:var(--birincil); font-weight:700;">[${C.kacisHTML(s.kazanim)}]</span> `
           : '';
+
+        const ocHucreSelectHTML = `
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            <span class="rozet rozet-yesil" style="font-size:0.68rem;">🎯 ${C.kacisHTML(soruOcKodu)}</span>
+            <select data-soru-oc-degistir="${C.kacisHTML(s.id)}" style="font-size:0.72rem; padding:2px 4px; width:74px;" title="Sorunun Bologna Öğrenim Çıktısı (ÖÇ) kodunu değiştir">
+              ${ocSecenekListesi.map((kod) => `<option value="${kod}" ${kod === soruOcKodu ? 'selected' : ''}>${kod}</option>`).join('')}
+            </select>
+          </div>
+        `;
 
         const altDetay = s.tur === 'test' && Array.isArray(s.siklar)
           ? `<div style="font-size:0.78rem; color:var(--metin-ikincil); margin-top:2px;">${arsivEtiket}${kazanimEtiket}${s.siklar.map((sik, i) => `<strong>${['A', 'B', 'C', 'D', 'E'][i]})</strong> ${C.kacisHTML(sik)}`).join(' · ')}</div>`
@@ -1649,6 +1801,7 @@
               <span class="rozet rozet-mavi">📅 ${haftaNo}. Hafta</span>
               ${sorulduRozet}
             </td>
+            <td>${ocHucreSelectHTML}</td>
             <td>${turRozet}</td>
             <td>
               <div style="font-weight:600;">${C.kacisHTML(s.metin)}</div>
@@ -3751,6 +3904,16 @@
       });
     }
 
+    const btnSoruBankasiCsvDisaAktar = document.getElementById('btn-soru-bankasi-csv-disa-aktar');
+    if (btnSoruBankasiCsvDisaAktar) {
+      btnSoruBankasiCsvDisaAktar.addEventListener('click', () => {
+        const aktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || { kod: 'DERS' };
+        const aktifSorular = durum.sorular.filter((s) => !s.arsivde && (s.dersId === durum.aktifDersId || s.dersId === 'genel'));
+        const csvIcerik = C.uretSoruBankasiCSV(aktifSorular);
+        indirCsvYardimci(csvIcerik, `${aktifDers.kod || 'Ders'}_Soru_Bankasi_Bologna_OC.csv`);
+      });
+    }
+
     const inputSoruCsv = document.getElementById('input-soru-csv-yukle');
     if (inputSoruCsv) {
       inputSoruCsv.addEventListener('change', async (e) => {
@@ -4448,6 +4611,11 @@
       ayarHaricTutSorulanlar.addEventListener('change', guncelleA4Onizleme);
     }
 
+    const ayarHerOcEnAzBir = document.getElementById('ayar-her-oc-en-az-bir');
+    if (ayarHerOcEnAzBir) {
+      ayarHerOcEnAzBir.addEventListener('change', guncelleA4Onizleme);
+    }
+
     const kutuHaftaIzgara = document.getElementById('kutu-hafta-secim-izgara');
     if (kutuHaftaIzgara) {
       kutuHaftaIzgara.addEventListener('change', (e) => {
@@ -4635,7 +4803,10 @@
         if (!soru) return;
         soru.hafta = C.normalizeHaftaNo(document.getElementById('hizli-duzenle-hafta').value, 1);
         soru.zorluk = document.getElementById('hizli-duzenle-zorluk').value || 'Orta';
-        soru.kazanim = (document.getElementById('hizli-duzenle-kazanim').value || '').trim();
+        const duzenlenenKazanimHam = (document.getElementById('hizli-duzenle-kazanim').value || '').trim();
+        const ocBilgiDuzenle = C.ayiklaOcBilesenleri(duzenlenenKazanimHam, '', soru.ocKodu || 'ÖÇ-1');
+        soru.ocKodu = ocBilgiDuzenle.ocKodu;
+        soru.kazanim = ocBilgiDuzenle.kazanimTam;
         soru.metin = (document.getElementById('hizli-duzenle-metin').value || '').trim() || soru.metin;
         if (soru.tur === 'test') {
           soru.siklar = [
@@ -5267,7 +5438,11 @@
       const metin = (document.getElementById('yeni-soru-metin').value || '').trim();
       if (!metin) return;
 
-      const kazanim = (document.getElementById('yeni-soru-kazanim') && document.getElementById('yeni-soru-kazanim').value.trim()) || `ÖÇ-1: ${hafta}. Hafta Kazanımı`;
+      const ocKoduSecili = (document.getElementById('yeni-soru-oc-kodu') && document.getElementById('yeni-soru-oc-kodu').value) || 'ÖÇ-1';
+      const kazanimAciklama = (document.getElementById('yeni-soru-kazanim') && document.getElementById('yeni-soru-kazanim').value.trim()) || '';
+      const ocBilgi = C.ayiklaOcBilesenleri(ocKoduSecili, kazanimAciklama || `${hafta}. Hafta Kazanımı`, ocKoduSecili);
+      const ocKodu = ocBilgi.ocKodu;
+      const kazanim = ocBilgi.kazanimTam;
       const kodBlok = (document.getElementById('yeni-soru-kod') && document.getElementById('yeni-soru-kod').value.trim()) || '';
 
       const yeni = {
@@ -5275,6 +5450,7 @@
         dersId: durum.aktifDersId,
         tur,
         hafta,
+        ocKodu,
         zorluk,
         metin,
         kazanim,
@@ -5303,12 +5479,12 @@
 
     document.getElementById('btn-ornek-metin-doldur').addEventListener('click', () => {
       document.getElementById('toplu-soru-metin').value =
-        `1. [DY] HTTPS protokolü uygulama katmanı verilerini TLS ile şifreleyerek iletir. (D)\n` +
-        `2. [DY] Bir IPv4 adresi toplam 64 bitten oluşur. (Y)\n` +
-        `3. Aşağıdaki HTTP durum kodlarından hangisi 'Yetkisiz Erişim (Unauthorized)' anlamına gelir?\n` +
+        `1. [DY] [ÖÇ-1] HTTPS protokolü uygulama katmanı verilerini TLS ile şifreleyerek iletir. (D)\n` +
+        `2. [DY] [ÖÇ-2] Bir IPv4 adresi toplam 64 bitten oluşur. (Y)\n` +
+        `3. [ÖÇ-3] Aşağıdaki HTTP durum kodlarından hangisi 'Yetkisiz Erişim (Unauthorized)' anlamına gelir?\n` +
         `A) 200  B) 301  C) 401  D) 404  E) 500\n` +
         `Cevap: C\n` +
-        `4. [KLASİK] İstemci tarafı doğrulama ile sunucu tarafı doğrulama arasındaki güvenlik farkını açıklayınız.`;
+        `4. [KLASİK] [ÖÇ-4] İstemci tarafı doğrulama ile sunucu tarafı doğrulama arasındaki güvenlik farkını açıklayınız.`;
     });
 
     document.getElementById('btn-toplu-soru-aktar').addEventListener('click', () => {
@@ -5332,6 +5508,10 @@
     if (filtreSoruHafta) {
       filtreSoruHafta.addEventListener('change', guncelleSoruBankasiTablosu);
     }
+    const filtreSoruOc = document.getElementById('filtre-soru-oc');
+    if (filtreSoruOc) {
+      filtreSoruOc.addEventListener('change', guncelleSoruBankasiTablosu);
+    }
     const filtreSoruKaynak = document.getElementById('filtre-soru-kaynak');
     if (filtreSoruKaynak) {
       filtreSoruKaynak.addEventListener('change', guncelleSoruBankasiTablosu);
@@ -5345,6 +5525,22 @@
         dahilEtArsivHavuzlarini([arsivId], durum.aktifDersId);
       });
     }
+
+    document.getElementById('tablo-soru-bankasi').addEventListener('change', (e) => {
+      const ocSec = e.target.closest('[data-soru-oc-degistir]');
+      if (!ocSec) return;
+      const soruId = ocSec.getAttribute('data-soru-oc-degistir');
+      const yeniOc = C.normalizeOcKodu(ocSec.value, 'ÖÇ-1');
+      const soru = durum.sorular.find((s) => s.id === soruId);
+      if (soru) {
+        const mevcutBilgi = C.ayiklaOcBilesenleri(soru.kazanim || '', '', yeniOc);
+        soru.ocKodu = yeniOc;
+        soru.kazanim = mevcutBilgi.konuAciklama ? `${yeniOc}: ${mevcutBilgi.konuAciklama}` : yeniOc;
+        verileriKaydet();
+        guncelleSoruBankasiTablosu();
+        guncelleA4Onizleme();
+      }
+    });
 
     document.getElementById('tablo-soru-bankasi').addEventListener('click', (e) => {
       const aktarBtn = e.target.closest('[data-arsiv-tek-aktar]');
