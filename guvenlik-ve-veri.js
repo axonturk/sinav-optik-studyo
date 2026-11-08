@@ -3996,6 +3996,193 @@
     };
   }
 
+  /* ------------------------------------------------------------------------
+     DELİL NİTELİĞİNDE SINAV BAZLI DENETİM & İHLAL LOG ZİNCİRİ (ADLİ TUTANAK EKİ)
+     ------------------------------------------------------------------------ */
+  function uretDelilLogHash(metin) {
+    const giris = String(metin || '');
+    const tohumlar = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35, 0x27d4eb2f, 0x165667b1, 0xd3a2646c, 0xfd7046c5];
+    let cikti = '';
+    for (let k = 0; k < tohumlar.length; k++) {
+      let h = tohumlar[k] >>> 0;
+      for (let i = 0; i < giris.length; i++) {
+        h ^= (giris.charCodeAt(i) + k * 31 + i) & 0xffff;
+        h = Math.imul(h, 0x01000193) >>> 0;
+      }
+      cikti += h.toString(16).padStart(8, '0');
+    }
+    return cikti.toUpperCase();
+  }
+
+  function olusturKioskDelilLogKaydi(veri = {}, oncekiHash = 'GENESIS-00000000') {
+    const simdi = veri.zamanIso ? new Date(veri.zamanIso) : new Date();
+    const zamanIso = Number.isNaN(simdi.getTime()) ? new Date().toISOString() : simdi.toISOString();
+    const iki = (n) => String(n).padStart(2, '0');
+    const uc = (n) => String(n).padStart(3, '0');
+    const d = new Date(zamanIso);
+    const yerelZaman = `${iki(d.getDate())}.${iki(d.getMonth() + 1)}.${d.getFullYear()} ${iki(d.getHours())}:${iki(d.getMinutes())}:${iki(d.getSeconds())}.${uc(d.getMilliseconds())}`;
+
+    const sinavId = String(veri.sinavId || 'SINAV-2026').slice(0, 80);
+    const sinavBaslik = String(veri.sinavBaslik || 'Online Sınav').slice(0, 140);
+    const ogrNo = String(veri.ogrNo || '-').slice(0, 40);
+    const adSoyad = String(veri.adSoyad || '-').slice(0, 120);
+    const olayTuru = String(veri.olayTuru || 'GENEL_OLAY').slice(0, 60);
+    const aktifSoruNo = Number(veri.aktifSoruNo) || 0;
+    const toplamSoru = Number(veri.toplamSoru) || 0;
+    const kalanSureSn = Math.max(0, Number(veri.kalanSureSn) || 0);
+    const ihlalSayisi = Math.max(0, Number(veri.ihlalSayisi) || 0);
+    const cihazBilgisi = String(veri.cihazBilgisi || '').slice(0, 220);
+    const aciklama = String(veri.aciklama || '').slice(0, 300);
+    const onceki = String(oncekiHash || 'GENESIS-00000000');
+
+    const hamImzaMetni = `${onceki}|${zamanIso}|${sinavId}|${ogrNo}|${olayTuru}|${aktifSoruNo}|${kalanSureSn}|${ihlalSayisi}|${aciklama}`;
+    const olayHash = uretDelilLogHash(hamImzaMetni);
+
+    return {
+      id: `LOG-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+      zamanIso,
+      yerelZaman,
+      sinavId,
+      sinavBaslik,
+      ogrNo,
+      adSoyad,
+      olayTuru,
+      aktifSoruNo,
+      toplamSoru,
+      kalanSureSn,
+      ihlalSayisi,
+      cihazBilgisi,
+      aciklama,
+      oncekiHash: onceki,
+      olayHash
+    };
+  }
+
+  function uretResmiDelilLogRaporuTXT(arg1 = {}, arg2 = [], arg3 = [], arg4 = '') {
+    let sinavBilgi = arg1 || {};
+    let oturumlar = Array.isArray(arg2) ? arg2 : [];
+    let loglar = Array.isArray(arg3) ? arg3 : [];
+    let filtreOgrNo = arg4 || '';
+
+    if (Array.isArray(arg1)) {
+      loglar = arg1;
+      const ops = (arg2 && typeof arg2 === 'object' && !Array.isArray(arg2)) ? arg2 : {};
+      sinavBilgi = {
+        sinavId: ops.sinavId || '',
+        baslik: ops.sinavBaslik || ops.baslik || 'Online Sınav',
+        dersAd: ops.dersAd || '',
+        kurumAd: ops.kurumAd || '',
+        hocaAd: ops.hocaAd || ''
+      };
+      oturumlar = Array.isArray(ops.oturumlar) ? ops.oturumlar : [];
+      filtreOgrNo = ops.ogrNo || '';
+    }
+
+    const hedefSinavId = sinavBilgi.sinavId || '';
+    const seciliLoglar = (Array.isArray(loglar) ? loglar : []).filter((l) => {
+      if (hedefSinavId && hedefSinavId !== 'TUMU' && l.sinavId !== hedefSinavId) return false;
+      if (filtreOgrNo && String(l.ogrNo) !== String(filtreOgrNo)) return false;
+      return true;
+    });
+    const seciliOturumlar = (Array.isArray(oturumlar) ? oturumlar : []).filter((o) => {
+      if (hedefSinavId && hedefSinavId !== 'TUMU' && o.sinavId && o.sinavId !== hedefSinavId) return false;
+      if (filtreOgrNo && String(o.ogrNo) !== String(filtreOgrNo)) return false;
+      return true;
+    });
+
+    const sonHash = seciliLoglar.length > 0 ? seciliLoglar[seciliLoglar.length - 1].olayHash : 'KAYIT-YOK';
+    const raporMuhur = uretDelilLogHash(`RAPOR|${hedefSinavId}|${seciliLoglar.length}|${sonHash}`);
+
+    const satirlar = [
+      '==========================================================================================',
+      '        RESMİ ONLİNE SINAV GÜVENLİK, KİOSK VE İHLAL DELİL LOG RAPORU (FRM-046 EKİ)        ',
+      '==========================================================================================',
+      `Sınav Kodu / Başlık : ${hedefSinavId || 'TÜM SINAVLAR'} — ${sinavBilgi.baslik || 'Online Sınav'}`,
+      `Rapor Üretim Zamanı : ${new Date().toISOString()}`,
+      `Filtrelenen Öğrenci : ${filtreOgrNo || 'Tüm Öğrenciler'}`,
+      `Toplam Oturum Sayısı: ${seciliOturumlar.length}`,
+      `Toplam Delil Logu   : ${seciliLoglar.length} Kayıt`,
+      `Son Zincir Özeti    : ${sonHash}`,
+      `Bütünlük Mührü      : DELIL-MUHUR-${raporMuhur}`,
+      '------------------------------------------------------------------------------------------',
+      '1. ÖĞRENCİ OTURUM VE İHLAL ÖZET TABLOSU',
+      '------------------------------------------------------------------------------------------'
+    ];
+
+    if (seciliOturumlar.length === 0) {
+      satirlar.push('  (Bu filtre için tamamlanmış oturum özeti bulunmamaktadır.)');
+    } else {
+      seciliOturumlar.forEach((o, i) => {
+        satirlar.push(
+          `  ${i + 1}. [${o.ogrNo}] ${o.adSoyad} | Sınav: ${o.sinavId || '-'} | Durum: ${o.durum} | İhlal: ${o.ihlalSayisi} | Puan: ${o.puan}`
+        );
+      });
+    }
+
+    satirlar.push(
+      '------------------------------------------------------------------------------------------',
+      '2. ZAMAN DAMGALI KRONOLOJİK DELİL LOG KAYITLARI (MİLİSANİYE HASSASİYETLİ & HASH ZİNCİRLİ)',
+      '------------------------------------------------------------------------------------------'
+    );
+
+    if (seciliLoglar.length === 0) {
+      satirlar.push('  (Henüz kaydedilmiş sınav logu bulunmamaktadır.)');
+    } else {
+      seciliLoglar.forEach((l, idx) => {
+        const dk = String(Math.floor((l.kalanSureSn || 0) / 60)).padStart(2, '0');
+        const sn = String((l.kalanSureSn || 0) % 60).padStart(2, '0');
+        satirlar.push(
+          `[${String(idx + 1).padStart(3, '0')}] ${l.yerelZaman} (${l.zamanIso}) | Sınav: ${l.sinavId} | Öğrenci: ${l.ogrNo} - ${l.adSoyad}`
+        );
+        satirlar.push(
+          `      Olay: ${l.olayTuru} | Soru: ${l.aktifSoruNo}/${l.toplamSoru} | Kalan Süre: ${dk}:${sn} | Toplam İhlal: ${l.ihlalSayisi}`
+        );
+        satirlar.push(`      Detay: ${l.aciklama}`);
+        if (l.cihazBilgisi) {
+          satirlar.push(`      Cihaz/Ekran: ${l.cihazBilgisi}`);
+        }
+        satirlar.push(`      Zincir Hash: ${l.oncekiHash.slice(0, 16)}... -> ${l.olayHash}`);
+        satirlar.push('      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -');
+      });
+    }
+
+    satirlar.push(
+      '==========================================================================================',
+      'Bu belge Sınav Optik Stüdyosu Kiosk Güvenlik Motoru tarafından kriptografik özet zinciriyle',
+      'üretilmiştir; FRM-046 Sınav Durum Tutanağı disiplin eki olarak kullanılabilir.',
+      '=========================================================================================='
+    );
+
+    return satirlar.join('\r\n');
+  }
+
+  function uretDelilLogCSV(loglar = [], hedefSinavId = '') {
+    const baslik = 'Sira;YerelZaman;ISOZaman;SinavKodu;OgrenciNo;AdSoyad;OlayTuru;AktifSoru;KalanSureSn;ToplamIhlal;Aciklama;CihazEkran;OncekiHash;OlayHash';
+    const secili = (Array.isArray(loglar) ? loglar : []).filter(
+      (l) => !hedefSinavId || hedefSinavId === 'TUMU' || l.sinavId === hedefSinavId
+    );
+    const temizleHucre = (v) => String(v === undefined || v === null ? '' : v).replace(/;/g, ',').replace(/[\r\n]+/g, ' ').trim();
+    const satirlar = secili.map((l, idx) =>
+      [
+        idx + 1,
+        temizleHucre(l.yerelZaman),
+        temizleHucre(l.zamanIso),
+        temizleHucre(l.sinavId),
+        temizleHucre(l.ogrNo),
+        temizleHucre(l.adSoyad),
+        temizleHucre(l.olayTuru),
+        `${l.aktifSoruNo || 0}/${l.toplamSoru || 0}`,
+        l.kalanSureSn || 0,
+        l.ihlalSayisi || 0,
+        temizleHucre(l.aciklama),
+        temizleHucre(l.cihazBilgisi),
+        temizleHucre(l.oncekiHash),
+        temizleHucre(l.olayHash)
+      ].join(';')
+    );
+    return '\ufeff' + [baslik, ...satirlar].join('\r\n');
+  }
+
   /* Öğrenciye Özel Online Sınav Üretici:
      1. Bankada yeterli soru varsa her öğrenciye FARKLI sorular seçer
      2. Aynı soru denk gelse bile SORU SIRASINI değiştirir
@@ -4542,6 +4729,10 @@
     dogrulaHocaHesapKayit,
     dogrulaHocaGiris,
     sifirlaHocaSifreEpostaTelefon,
+    uretDelilLogHash,
+    olusturKioskDelilLogKaydi,
+    uretResmiDelilLogRaporuTXT,
+    uretDelilLogCSV,
     uretKisiyeOzelOnlineSinav,
     uretOgrenciyeOzelKagitVaryasyonu,
     uretCokSayfaliA4PdfBytes,

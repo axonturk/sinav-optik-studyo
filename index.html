@@ -1443,9 +1443,11 @@
             <strong style="font-size:0.78rem; display:block; margin-bottom:0.4rem;">🛡️ Kiosk Güvenlik &amp; Karantina Kuralları</strong>
             <div class="form-satir" style="margin-bottom:0.35rem;">
               <div>
-                <label class="etiket" for="online-maks-ihlal">Sekme İhlali Sınırı</label>
+                <label class="etiket" for="online-maks-ihlal">Sekme &amp; Mobil Uygulama İhlali Sınırı</label>
                 <select id="online-maks-ihlal">
-                  <option value="0" selected>⚠️ Sadece Raporla (Otomatik Bitirme)</option>
+                  <option value="0" selected>⚠️ Sadece Raporla &amp; Delil Loguna Yaz</option>
+                  <option value="1">🛑 1 İhlalde Anında Sınavı Bitir (Sıfır Tolerans)</option>
+                  <option value="2">🚨 2 İhlalde Sınavı Otomatik Bitir</option>
                   <option value="3">🚨 3 İhlalde Sınavı Otomatik Bitir</option>
                   <option value="5">🚨 5 İhlalde Sınavı Otomatik Bitir</option>
                 </select>
@@ -1455,7 +1457,7 @@
                 <input type="text" id="online-erisim-kodu" placeholder="Boş = Şifresiz (Örn: LAB2026)" />
               </div>
             </div>
-            <div style="display:flex; gap:1rem; flex-wrap:wrap; font-size:0.78rem;">
+            <div style="display:flex; gap:0.85rem; flex-wrap:wrap; font-size:0.78rem;">
               <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
                 <input type="checkbox" id="online-kisiye-ozel" checked style="width:auto;" />
                 <span>🎲 Her öğrenciye farklı soru &amp; şık sırası</span>
@@ -1463,6 +1465,10 @@
               <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
                 <input type="checkbox" id="online-geri-donus-kilit" checked style="width:auto;" />
                 <span>🔒 Cevaplanan soruya geri dönüş kilidi</span>
+              </label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                <input type="checkbox" id="online-tam-ekran-zorunlu" checked style="width:auto;" />
+                <span>🖥️ Zorunlu Tam Ekran + Kopyala/Sağ Tık/Ekran Bölme Kilidi</span>
               </label>
             </div>
           </div>
@@ -1513,7 +1519,7 @@
               <span>🛡️ Sınav Oturumları &amp; Sekme İhlal Raporu (Zero-Trust Sunucu Kaydı)</span>
               <button type="button" class="btn btn-kucuk" id="btn-online-sonuc-aktar" title="Tamamlanan online sınav oturumlarını 4. Sekmedeki Değerlendirme ve Madde Analizi tablosuna aktar">📊 Değerlendirme Masasına Aktar</button>
             </div>
-            <div class="tablo-sarmal">
+            <div class="tablo-sarmal" style="margin-bottom:0.75rem;">
               <table class="veri-tablo">
                 <thead>
                   <tr>
@@ -1522,7 +1528,7 @@
                     <th>Sınav</th>
                     <th>Durum</th>
                     <th>Sekme İhlali</th>
-                    <th>Puan</th>
+                    <th>Puan / Delil</th>
                   </tr>
                 </thead>
                 <tbody id="tablo-online-oturumlar">
@@ -1531,6 +1537,41 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Sınav Bazlı Delil Niteliğinde Log Kayıtları (FRM-046 Disiplin Tutanağı Eki) -->
+            <div style="padding:0.65rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.45rem; margin-bottom:0.5rem;">
+                <div>
+                  <strong style="font-size:0.82rem; color:var(--birincil);">⚖️ Sınav Bazlı Delil Niteliğinde Denetim &amp; İhlal Logları (Hash Zincirli)</strong>
+                  <div style="font-size:0.72rem; color:var(--metin-ikincil);">
+                    Her soru geçişi, sekme/mobil uygulama değişimi, tam ekran çıkışı ve kopyalama girişimi milisaniye ve kriptografik özet zinciriyle kaydedilir.
+                  </div>
+                </div>
+                <span class="rozet rozet-mor mono" id="rozet-delil-log-sayisi">0 Log Kaydı</span>
+              </div>
+
+              <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center; margin-bottom:0.5rem;">
+                <select id="sec-log-sinav-filtre" style="width:auto; min-width:190px; font-size:0.76rem; padding:0.3rem 0.5rem;">
+                  <option value="TUMU">📋 Tüm Sınavların Logları</option>
+                </select>
+                <button type="button" class="btn btn-birincil btn-kucuk" id="btn-delil-log-txt-indir" title="FRM-046 Sınav Durum Tutanağına eklenebilir resmi imzalı/mühürlü metin raporu indir">
+                  📄 Resmi Delil Raporu İndir (.txt)
+                </button>
+                <button type="button" class="btn btn-basari btn-kucuk" id="btn-delil-log-csv-indir" title="Sınav bazlı tüm logları Excel uyumlu CSV olarak indir">
+                  📊 Log Tablosu İndir (.csv)
+                </button>
+                <button type="button" class="btn btn-kucuk" id="btn-delil-log-json-indir" title="Kriptografik hash zincirli ham JSON delil paketini indir">
+                  📦 Mühürlü JSON (.json)
+                </button>
+                <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-delil-log-temizle" title="Kayıtlı sınav loglarını temizle">
+                  🗑️ Logları Temizle
+                </button>
+              </div>
+
+              <div id="kutu-canli-delil-loglari" class="mono" style="max-height:185px; overflow-y:auto; background:var(--bg-kart); border:1px solid var(--kenar); border-radius:6px; padding:0.45rem 0.6rem; font-size:0.72rem; line-height:1.45;">
+                <div style="color:var(--metin-soluk); text-align:center;">Henüz sınav log kaydı oluşmadı. Öğrenci sınava başladığında tüm adımlar ve ihlaller burada delil zinciriyle listelenir.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1612,13 +1653,33 @@
         </div>
       </div>
 
-      <!-- Tek Tek Soru Çözüm Alanı -->
-      <div id="kiosk-soru-sahne" style="display:none;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.65rem;">
-          <span class="rozet rozet-mavi" id="kiosk-soru-sayac">Soru 1 / 10</span>
+      <!-- Tek Tek Soru Çözüm Alanı (Sert Kiosk & Karantina Korumalı) -->
+      <div id="kiosk-soru-sahne" style="display:none; position:relative; user-select:none; -webkit-user-select:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.55rem;">
+          <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;">
+            <span class="rozet rozet-mavi" id="kiosk-soru-sayac">Soru 1 / 10</span>
+            <span class="rozet rozet-yesil" id="kiosk-zirh-durum-rozet">🛡️ Tam Ekran &amp; Kopya Koruması Aktif</span>
+          </div>
           <span class="rozet rozet-sari" id="kiosk-ihlal-sayac">Sekme İhlali: 0</span>
         </div>
-        <div id="kiosk-soru-icerik" style="padding:1rem; background:var(--bg-ikincil); border-radius:8px; margin-bottom:0.85rem;"></div>
+
+        <!-- İhlal Uyarı Bandı -->
+        <div id="kiosk-ihlal-uyari-kutusu" hidden style="padding:0.55rem 0.75rem; background:var(--tehlike-acik); color:var(--tehlike); border:1px solid var(--tehlike); border-radius:6px; margin-bottom:0.6rem; font-size:0.8rem; font-weight:700;"></div>
+
+        <!-- Tam Ekrandan Çıkış veya Mobil Ekran Bölme (Split-Screen) Karantina Perdesi -->
+        <div id="kiosk-karantina-perdesi" style="display:none; padding:1.25rem; background:#0f172a; color:#f8fafc; border:2px solid #ef4444; border-radius:8px; margin-bottom:0.85rem; text-align:center;">
+          <div style="font-size:1.05rem; font-weight:800; color:#f87171; margin-bottom:0.4rem;">
+            🚨 KARANTİNA KİLİDİ: SINAV EKRANI DIŞINA ÇIKIŞ TESPİT EDİLDİ!
+          </div>
+          <p id="kiosk-karantina-mesaj" style="font-size:0.83rem; color:#e2e8f0; margin-bottom:0.75rem;">
+            Tam ekrandan çıktığınız, başka bir pencereye/uygulamaya geçtiğiniz veya ekran bölme (Split-Screen) açtığınız tespit edilerek delil loguna kaydedildi. Güvenlik gereği soru içeriği gizlenmiştir.
+          </p>
+          <button type="button" class="btn btn-birincil" id="btn-kiosk-tam-ekran-don">
+            🖥️ Tam Ekrana Dön ve Soruyu Tekrar Aç
+          </button>
+        </div>
+
+        <div id="kiosk-soru-icerik" style="padding:1rem; background:var(--bg-ikincil); border-radius:8px; margin-bottom:0.85rem; user-select:none; -webkit-user-select:none;"></div>
         <button type="button" class="btn btn-basari" id="btn-kiosk-cevap-kilitle" style="width:100%;">
           🔒 Cevabı Kilitle ve Sonraki Soruya Geç (Geri Dönülemez)
         </button>

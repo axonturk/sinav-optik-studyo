@@ -329,7 +329,92 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
     'UI: Yönetici (fatihcakmak@gmail.com / 05065168500) şifresini sıfırlayıp yeni şifresiyle başarıyla giriş yaptı'
   );
 
+  // 5. 5 Katmanlı Tam Karantina (Sert Kiosk) ve Sınav Bazlı Delil Niteliğinde Log Kaydı Testi
+  await sayfa.click('#btn-modal-hoca-kapat');
+  await sayfa.click('[data-sekme="sekme-online"]');
+  await new Promise((r) => setTimeout(r, 200));
+
+  // Önce ihlal sınırını 3 yapalım ki Kopyalama + Ekran Bölme + Sekme İhlali adımlarını sırayla test edelim
+  await sayfa.select('#online-maks-ihlal', '3');
+  await sayfa.click('#btn-online-baslat');
+  await new Promise((r) => setTimeout(r, 250));
+
+  await sayfa.click('#btn-online-kiosk-ac');
+  await new Promise((r) => setTimeout(r, 150));
+
+  await sayfa.evaluate(() => {
+    document.getElementById('kiosk-ogr-no').value = '2023104011';
+    document.getElementById('kiosk-ad-soyad').value = 'Ahmet Yılmaz';
+    document.getElementById('kiosk-eposta').value = 'ahmet@uni.edu.tr';
+    document.getElementById('kiosk-telefon').value = '05321112233';
+    document.getElementById('kiosk-sifre').value = 'Ahmet!2026';
+    document.getElementById('kiosk-sifre-tekrar').value = 'Ahmet!2026';
+  });
+  await sayfa.click('#btn-kiosk-oturum-baslat');
+  await new Promise((r) => setTimeout(r, 300));
+
+  // 1. soruyu cevapla ve kilitle -> CEVAP_KILITLENDI logu oluşmalı
+  await sayfa.click('#btn-kiosk-cevap-kilitle');
+  await new Promise((r) => setTimeout(r, 150));
+
+  // Katman 4: Sağ tık / kopyala engeli -> 1. ihlal (IHLAL_KOPYALA_SAG_TIK)
+  await sayfa.evaluate(() => {
+    const alan = document.getElementById('kiosk-sinav-alani');
+    alan.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  });
+  await new Promise((r) => setTimeout(r, 150));
+
+  const ihlalUyariMetin = await sayfa.$eval('#kiosk-ihlal-uyari-kutusu', (el) => el.innerText);
+  kontrol(
+    ihlalUyariMetin.includes('1 / 3') && ihlalUyariMetin.includes('CONTEXTMENU'),
+    'UI Kiosk: Sağ tık engellendi, 1/3 ihlal sayacı ve kriptografik mühür uyarısı gösterildi'
+  );
+
+  // Katman 3: Mobil/Masaüstü Ekran Bölme (Split-Screen) algılama -> 2. ihlal + Karantina Perdesi
+  await sayfa.setViewport({ width: 600, height: 900 });
+  await sayfa.evaluate(() => window.dispatchEvent(new Event('resize')));
+  await new Promise((r) => setTimeout(r, 150));
+
+  const perdeAcikMi = await sayfa.$eval('#kiosk-karantina-perdesi', (el) => el.style.display === 'block');
+  const soruBulanikMi = await sayfa.$eval('#kiosk-soru-icerik', (el) => el.style.filter.includes('blur'));
+  kontrol(
+    perdeAcikMi && soruBulanikMi,
+    'UI Kiosk: Ekran bölme (Split-Screen) algılandığında soru bulanıklaştırıldı ve Kiosk Karantina Perdesi açıldı'
+  );
+
+  // Pencereyi tam boyuta geri getir ve 3. ihlali (Odak kaybı / Sekme değişimi) tetikle -> Sınav otomatik bitmeli!
+  await sayfa.setViewport({ width: 1440, height: 900 });
+  await sayfa.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await new Promise((r) => setTimeout(r, 250));
+
+  const bitisMetni = (await sayfa.$eval('#kiosk-soru-icerik', (el) => el.textContent)).replace(/\s+/g, ' ').trim();
+  kontrol(
+    bitisMetni.includes('Sekme İhlali Sınırı Aşıldı') && bitisMetni.includes('Sekme İhlali: 3'),
+    'UI Kiosk: İhlal sınırı dolduğunda sınav otomatik olarak sonlandırıldı'
+  );
+
+  // Kiosk'tan çık ve Öğretmen Delil Log Panelini kontrol et
+  await sayfa.click('#btn-kiosk-cikis');
+  await new Promise((r) => setTimeout(r, 200));
+
+  const delilPanelBilgi = await sayfa.evaluate(() => {
+    return {
+      rozet: document.getElementById('rozet-delil-log-sayisi').textContent,
+      canliMetin: document.getElementById('kutu-canli-delil-loglari').textContent,
+      oturumTablo: document.getElementById('tablo-online-oturumlar').textContent
+    };
+  });
+  kontrol(
+    delilPanelBilgi.canliMetin.includes('OTURUM_BASLADI') &&
+      delilPanelBilgi.canliMetin.includes('CEVAP_KILITLENDI') &&
+      delilPanelBilgi.canliMetin.includes('IHLAL_KOPYALA_SAG_TIK') &&
+      delilPanelBilgi.canliMetin.includes('IHLAL_EKRAN_BOLME') &&
+      delilPanelBilgi.canliMetin.includes('OTURUM_BITTI') &&
+      delilPanelBilgi.oturumTablo.includes('📜 Delil İndir'),
+    'UI Delil Log Paneli: Sınav bazlı tüm adımlar, ihlaller ve mühür kodları canlı denetim kutusunda ve öğrenci tablosunda listelendi'
+  );
+
   await tarayici.close();
   sunucu.close();
-  console.log(`\n🎉 TÜM HOCA DAVET KODU & YÖNETİCİ ONAY TESTLERİ GEÇTİ (${gecen}/${gecen})`);
+  console.log(`\n🎉 TÜM HOCA DAVET KODU, YÖNETİCİ ONAY, SERT KİOSK VE DELİL LOG TESTLERİ GEÇTİ (${gecen}/${gecen})`);
 })();

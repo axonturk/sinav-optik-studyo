@@ -37,6 +37,7 @@ const sunucuDurumu = {
   aktifHocaTokenlar: new Set(),
   aktifHocaOturumlari: new Map(), // hocaToken -> { kullaniciAdi, adSoyad, rol }
   aktifTokenlar: new Map(), // token -> { ogrNo, adSoyad, bitisMs, cevaplar, bitti }
+  kioskDelilLoglari: [],
   omrSonuclari: []
 };
 
@@ -529,6 +530,48 @@ function istekIsleyici(req, res) {
       })
       .catch((err) => gonderJson(res, 400, { hata: err.message }));
     return;
+  }
+
+  // 2b. Delil Niteliğinde Online Sınav Kiosk Log Kaydetme & Sorgulama
+  if (req.method === 'POST' && yol === '/api/kiosk-log-kaydet') {
+    okuJsonGovde(req)
+      .then((govde) => {
+        const oncekiHash = sunucuDurumu.kioskDelilLoglari.length > 0
+          ? sunucuDurumu.kioskDelilLoglari[sunucuDurumu.kioskDelilLoglari.length - 1].olayHash
+          : 'GENESIS-00000000';
+        const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1');
+        const kayit = Cekirdek.olusturKioskDelilLogKaydi(
+          Object.assign({}, govde, {
+            cihazBilgisi: `${govde.cihazBilgisi || ''} [IP: ${ip}]`.trim()
+          }),
+          oncekiHash
+        );
+        sunucuDurumu.kioskDelilLoglari.push(kayit);
+        return gonderJson(res, 201, { kaydedildi: true, log: kayit });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  if (req.method === 'GET' && yol === '/api/kiosk-log-indir') {
+    const sinavId = urlNesne.searchParams.get('sinavId') || '';
+    const format = (urlNesne.searchParams.get('format') || 'json').toLowerCase();
+    const loglar = sinavId && sinavId !== 'TUMU'
+      ? sunucuDurumu.kioskDelilLoglari.filter((l) => l.sinavId === sinavId)
+      : sunucuDurumu.kioskDelilLoglari;
+    if (format === 'txt') {
+      const txt = Cekirdek.uretResmiDelilLogRaporuTXT(loglar, { sinavId: sinavId || 'TUMU' });
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(txt);
+      return;
+    }
+    if (format === 'csv') {
+      const csv = Cekirdek.uretDelilLogCSV(loglar, sinavId || 'TUMU');
+      res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8' });
+      res.end(csv);
+      return;
+    }
+    return gonderJson(res, 200, { loglar });
   }
 
   // 3. Statik Dosya Sunumu

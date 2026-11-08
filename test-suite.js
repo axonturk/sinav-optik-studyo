@@ -805,6 +805,64 @@ async function calistirTumTestler() {
       const durumVeri = await durumYanit.json();
       assert.strictEqual(durumVeri.sinavId, 'SINAV-2026-FINAL');
       assert.strictEqual(durumVeri.sureDk, 50);
+
+      // 13. Sınav Bazlı Delil Niteliğinde Kiosk Denetim Logları (Zincirleme Hash, TXT/CSV/JSON Rapor ve API)
+      const log1 = Cekirdek.olusturKioskDelilLogKaydi({
+        sinavId: 'SINAV-2026-FINAL',
+        sinavBaslik: '2026-2027 Güz Final Sınavı',
+        ogrNo: '2024101001',
+        adSoyad: 'Deniz Arslan',
+        olayTuru: 'OTURUM_BASLADI',
+        aktifSoruNo: 1,
+        toplamSoru: 20,
+        kalanSureSn: 3000,
+        ihlalSayisi: 0,
+        cihazBilgisi: '1920x1080 | Win32',
+        aciklama: 'Öğrenci Kiosk oturumunu başlattı.'
+      }, 'GENESIS-00000000');
+
+      const log2 = Cekirdek.olusturKioskDelilLogKaydi({
+        sinavId: 'SINAV-2026-FINAL',
+        sinavBaslik: '2026-2027 Güz Final Sınavı',
+        ogrNo: '2024101001',
+        adSoyad: 'Deniz Arslan',
+        olayTuru: 'IHLAL_SEKME_UYGULAMA',
+        aktifSoruNo: 3,
+        toplamSoru: 20,
+        kalanSureSn: 2840,
+        ihlalSayisi: 1,
+        cihazBilgisi: '1920x1080 | Win32',
+        aciklama: 'Öğrenci başka bir sekmeye geçti (visibilitychange: hidden).'
+      }, log1.olayHash);
+
+      assert.strictEqual(log1.oncekiHash, 'GENESIS-00000000');
+      assert.strictEqual(log2.oncekiHash, log1.olayHash, 'Her log kaydı bir önceki kaydın kriptografik özetine (oncekiHash) bağlanmalıdır');
+      assert.notStrictEqual(log1.olayHash, log2.olayHash);
+
+      const resmiTxt = Cekirdek.uretResmiDelilLogRaporuTXT([log1, log2], {
+        sinavId: 'SINAV-2026-FINAL',
+        sinavBaslik: '2026-2027 Güz Final Sınavı',
+        dersAd: 'BİL304 - Ağ Güvenliği',
+        hocaAd: 'Dr. Öğr. Üyesi Fatih Çakmak'
+      });
+      assert.ok(resmiTxt.includes('RESMİ ONLİNE SINAV GÜVENLİK, KİOSK VE İHLAL DELİL LOG RAPORU'));
+      assert.ok(resmiTxt.includes('IHLAL_SEKME_UYGULAMA'));
+      assert.ok(resmiTxt.includes(log2.olayHash));
+
+      const delilCsv = Cekirdek.uretDelilLogCSV([log1, log2], 'SINAV-2026-FINAL');
+      assert.ok(delilCsv.includes('OncekiHash;OlayHash'));
+      assert.ok(delilCsv.includes('2024101001'));
+
+      const logKaydetYanit = await fetch(`http://127.0.0.1:${port}/api/kiosk-log-kaydet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(log2)
+      });
+      assert.strictEqual(logKaydetYanit.status, 201);
+      const logIndirTxt = await fetch(`http://127.0.0.1:${port}/api/kiosk-log-indir?sinavId=SINAV-2026-FINAL&format=txt`);
+      assert.strictEqual(logIndirTxt.status, 200);
+      const indirilenMetin = await logIndirTxt.text();
+      assert.ok(indirilenMetin.includes('IHLAL_SEKME_UYGULAMA'));
     } finally {
       server.close();
     }
