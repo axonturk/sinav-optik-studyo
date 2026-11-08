@@ -1697,6 +1697,20 @@
           <span class="rozet rozet-sari" id="kiosk-ihlal-sayac">Sekme İhlali: 0</span>
         </div>
 
+        <!-- Canlı Geri Sayım Sayacı ve Süre İlerleme Çubuğu -->
+        <div id="kiosk-canli-sure-panel" style="padding:0.65rem 0.85rem; background:#0f172a; color:#f8fafc; border-radius:8px; margin-bottom:0.6rem; border:1.5px solid #334155;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.4rem;">
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <span style="font-size:0.82rem; font-weight:700; color:#cbd5e1;">⏱️ KALAN SINAV SÜRESİ:</span>
+              <span class="mono" id="kiosk-soru-kalan-sure" style="font-size:1.25rem; font-weight:900; color:#4ade80; letter-spacing:0.5px;">40:00</span>
+            </div>
+            <span id="kiosk-sure-uyari-etiket" style="font-size:0.76rem; font-weight:700; color:#fbbf24;"></span>
+          </div>
+          <div style="width:100%; height:7px; background:#1e293b; border-radius:999px; overflow:hidden;">
+            <div id="kiosk-sure-ilerleme-bar" style="width:100%; height:100%; background:#22c55e; transition:width 0.4s linear, background-color 0.3s ease;"></div>
+          </div>
+        </div>
+
         <!-- İhlal Uyarı Bandı -->
         <div id="kiosk-ihlal-uyari-kutusu" hidden style="padding:0.55rem 0.75rem; background:var(--tehlike-acik); color:var(--tehlike); border:1px solid var(--tehlike); border-radius:6px; margin-bottom:0.6rem; font-size:0.8rem; font-weight:700;"></div>
 

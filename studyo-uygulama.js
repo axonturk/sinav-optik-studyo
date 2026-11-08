@@ -2447,6 +2447,9 @@
           if (veri && veri.token) {
             sessionStorage.setItem('kiosk_token', veri.token);
           }
+          if (veri && Number(veri.bitisMs) > Date.now()) {
+            onl.__sunucuBitisMs = Number(veri.bitisMs);
+          }
         }
       } catch (_) {
         // Sunucu kapalıysa yerel stüdyo önizleme modunda devam et
@@ -2466,6 +2469,12 @@
       } catch (_) {}
     }
 
+    const toplamSn = Math.max(60, (Number(onl.sureDk) || 40) * 60);
+    const bitisMs = onl.__sunucuBitisMs && onl.__sunucuBitisMs > Date.now()
+      ? onl.__sunucuBitisMs
+      : Date.now() + toplamSn * 1000;
+    delete onl.__sunucuBitisMs;
+
     durum.kioskOturum = {
       ogrNo,
       adSoyad,
@@ -2476,7 +2485,9 @@
       cevaplar: [],
       ihlalSayisi: 0,
       maksIhlal: etkinMaksIhlal,
-      kalanSn: (onl.sureDk || 40) * 60,
+      toplamSn,
+      kalanSn: Math.max(0, Math.ceil((bitisMs - Date.now()) / 1000)),
+      bitisMs,
       tamEkranZorunlu,
       tamEkranAktifOldu: false,
       baslangicGenislik: window.innerWidth || 1024,
@@ -2529,17 +2540,71 @@
     );
 
     gosterKioskAktifSoru();
+    guncelleKioskCanliSureUI(durum.kioskOturum);
 
     C.kurGuvenliInterval('kiosk-sayac', () => {
-      if (!durum.kioskOturum) return;
-      durum.kioskOturum.kalanSn = Math.max(0, durum.kioskOturum.kalanSn - 1);
-      const dk = String(Math.floor(durum.kioskOturum.kalanSn / 60)).padStart(2, '0');
-      const sn = String(durum.kioskOturum.kalanSn % 60).padStart(2, '0');
-      document.getElementById('kiosk-kalan-sure').textContent = `${dk}:${sn}`;
-      if (durum.kioskOturum.kalanSn <= 0) {
-        bitirKioskOturumu('Süre Doldu');
+      const ot = durum.kioskOturum;
+      if (!ot) return;
+      if (ot.bitisMs) {
+        ot.kalanSn = Math.max(0, Math.ceil((ot.bitisMs - Date.now()) / 1000));
+      } else {
+        ot.kalanSn = Math.max(0, ot.kalanSn - 1);
+      }
+      guncelleKioskCanliSureUI(ot);
+      if (ot.kalanSn <= 0) {
+        // Süre bittiğinde ekranda açık olan sorunun işaretli yanıtını otomatik kaydet
+        if (ot.aktifSoruIdx < ot.sorular.length) {
+          const aktifSoru = ot.sorular[ot.aktifSoruIdx];
+          if (aktifSoru && aktifSoru.tur === 'klasik') {
+            const kl = document.getElementById('kiosk-klasik-cevap');
+            ot.cevaplar.push(kl ? kl.value.trim() : '');
+          } else {
+            const secili = document.querySelector('input[name="kiosk-secim"]:checked');
+            ot.cevaplar.push(secili ? secili.value : null);
+          }
+        }
+        bitirKioskOturumu('Süre Doldu — Otomatik Teslim');
       }
     }, 1000);
+  }
+
+  function guncelleKioskCanliSureUI(ot) {
+    if (!ot) return;
+    const kalan = Math.max(0, Number(ot.kalanSn) || 0);
+    const toplam = Math.max(1, Number(ot.toplamSn) || 2400);
+    const dk = String(Math.floor(kalan / 60)).padStart(2, '0');
+    const sn = String(kalan % 60).padStart(2, '0');
+    const metin = `${dk}:${sn}`;
+
+    const ustRozet = document.getElementById('kiosk-kalan-sure');
+    if (ustRozet) ustRozet.textContent = metin;
+
+    const soruSureEl = document.getElementById('kiosk-soru-kalan-sure');
+    if (soruSureEl) {
+      soruSureEl.textContent = metin;
+      soruSureEl.style.color = kalan <= 60 ? '#f87171' : (kalan <= 300 ? '#fbbf24' : '#4ade80');
+    }
+
+    const uyariEtiket = document.getElementById('kiosk-sure-uyari-etiket');
+    if (uyariEtiket) {
+      if (kalan <= 60) {
+        uyariEtiket.textContent = '🚨 SON 1 DAKİKA! Süre bitiminde otomatik teslim edilir';
+        uyariEtiket.style.color = '#f87171';
+      } else if (kalan <= 300) {
+        uyariEtiket.textContent = '⚠️ Son 5 Dakikanın İçindesiniz';
+        uyariEtiket.style.color = '#fbbf24';
+      } else {
+        uyariEtiket.textContent = '🟢 Geri Sayım Aktif';
+        uyariEtiket.style.color = '#86efac';
+      }
+    }
+
+    const barEl = document.getElementById('kiosk-sure-ilerleme-bar');
+    if (barEl) {
+      const yuzde = Math.max(0, Math.min(100, (kalan / toplam) * 100));
+      barEl.style.width = `${yuzde.toFixed(1)}%`;
+      barEl.style.backgroundColor = kalan <= 60 ? '#ef4444' : (kalan <= 300 ? '#f59e0b' : '#22c55e');
+    }
   }
 
   let __onbellekCihazParmakIzi = null;

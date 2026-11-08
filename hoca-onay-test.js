@@ -368,7 +368,21 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   // Okudum/Anladım kutucuğunu işaretle ve sınava başla
   await sayfa.click('#kiosk-okudum-onay');
   await sayfa.click('#btn-kiosk-oturum-baslat');
-  await new Promise((r) => setTimeout(r, 300));
+  await new Promise((r) => setTimeout(r, 1150));
+
+  const geriSayimBilgi = await sayfa.evaluate(() => {
+    const sureMetin = document.getElementById('kiosk-soru-kalan-sure').textContent.trim();
+    const etiketMetin = document.getElementById('kiosk-sure-uyari-etiket').textContent.trim();
+    const barGenislik = document.getElementById('kiosk-sure-ilerleme-bar').style.width;
+    return { sureMetin, etiketMetin, barGenislik };
+  });
+  kontrol(
+    /^\d{2}:\d{2}$/.test(geriSayimBilgi.sureMetin) &&
+      geriSayimBilgi.sureMetin !== '40:00' &&
+      geriSayimBilgi.etiketMetin.includes('Geri Sayım Aktif') &&
+      geriSayimBilgi.barGenislik.endsWith('%'),
+    `UI Kiosk: Sınav esnasında canlı geri sayım sayacı (${geriSayimBilgi.sureMetin}) ve ilerleme çubuğu (${geriSayimBilgi.barGenislik}) aktif çalışıyor`
+  );
 
   // 1. soruyu cevapla ve kilitle -> CEVAP_KILITLENDI logu oluşmalı
   await sayfa.click('#btn-kiosk-cevap-kilitle');
