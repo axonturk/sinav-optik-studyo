@@ -8,24 +8,25 @@
   'use strict';
 
   const C = window.SinavOptikCekirdek;
-  const DEPO_ANAHTAR = 'SINAV_OPTIK_STUDYO_VERI_V1';
+  const DEPO_ANAHTAR = 'SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2';
+  const ESKI_DEPO_ANAHTARLARI = ['SINAV_OPTIK_STUDYO_VERI_V1'];
 
-  /* Uygulama Durumu (State) */
+  /* Uygulama Durumu (State) — Örnek/Demo Veri İçermeyen Temiz Başlangıç */
   const durum = {
-    dersler: C.VARSAYILAN_DERSLER.slice(),
-    aktifDersId: 'ders-ag-guvenlik',
-    sorular: C.VARSAYILAN_SORULAR.slice(),
-    ogrenciKayitlari: C.VARSAYILAN_OGRENCILER.map((o) => ({ ...o })),
-    salonlar: [{ id: 'salon-1', ad: 'B-201', kontenjan: 40, gozetmenler: [] }],
+    dersler: [],
+    aktifDersId: 'genel',
+    sorular: [],
+    ogrenciKayitlari: [],
+    salonlar: [{ id: 'salon-1', ad: 'Salon 1', kontenjan: 40, gozetmenler: [] }],
     dagitimModu: 'sirali',
     okumaSonuclari: [],
     arsivDersler: [],
     onlineSinav: {
       aktif: false,
-      sinavId: 'SINAV-2026-VIZE',
-      baslik: '2026-2027 Güz Dönemi Vize Sınavı',
+      sinavId: '',
+      baslik: '',
       sinavTuru: 'Vize (Ara Sınav)',
-      dersId: 'ders-ag-guvenlik',
+      dersId: 'genel',
       baslangic: '2026-11-07T09:00',
       bitis: '2026-11-07T18:00',
       sureDk: 40,
@@ -39,26 +40,8 @@
       geriDonusKilit: true,
       oturumlar: []
     },
-    onlineSinavListesi: [
-      {
-        sinavId: 'SINAV-2026-VIZE',
-        baslik: '2026-2027 Güz Dönemi Vize Sınavı',
-        sinavTuru: 'Vize (Ara Sınav)',
-        dersId: 'ders-ag-guvenlik',
-        aktif: false,
-        baslangic: '2026-11-07T09:00',
-        bitis: '2026-11-07T18:00',
-        sureDk: 40,
-        dySayisi: 10,
-        testSayisi: 10,
-        klasikSayisi: 0,
-        haftaKapsam: 'studyo',
-        maksIhlal: 0,
-        erisimKodu: '',
-        kisiyeOzel: true,
-        geriDonusKilit: true
-      }
-    ],    kaliteGorselDataUrl: null,
+    onlineSinavListesi: [],
+    kaliteGorselDataUrl: null,
     kaliteAltBilgiDataUrl: null,
     kaliteHamTamSayfaDataUrl: null,
     yeniSoruGorselDataUrl: null,
@@ -85,10 +68,21 @@
     kameraStream: null
   };
 
+  function varsayilanBosDers() {
+    return {
+      id: durum.aktifDersId || 'genel',
+      kod: 'DERS',
+      ad: 'Yeni Ders',
+      fakulte: '',
+      bolum: '',
+      ogretimElemani: (durum.hocaHesap && durum.hocaHesap.adSoyad) || 'Dr. Öğr. Üyesi Fatih Çakmak'
+    };
+  }
+
   /* Her öğrenci kaydı hangi derslere kayıtlı olduğunu (dersIdler) taşır.
      Ders bilgisi olmayan eski kayıtlar tüm mevcut derslere kayıtlı sayılır (geriye uyumluluk). */
   function ogrenciKayitlariniHazirla(liste) {
-    const tumDersler = durum.dersler.map((d) => d.id);
+    const tumDersler = durum.dersler.length > 0 ? durum.dersler.map((d) => d.id) : [durum.aktifDersId || 'genel'];
     return (Array.isArray(liste) ? liste : []).map((o) => ({
       ...o,
       dersIdler: Array.isArray(o.dersIdler) && o.dersIdler.length > 0 ? o.dersIdler.slice() : tumDersler.slice()
@@ -96,7 +90,8 @@
   }
 
   function aktifDersOgrencileriniGetir() {
-    return durum.ogrenciKayitlari.filter((o) => Array.isArray(o.dersIdler) && o.dersIdler.includes(durum.aktifDersId));
+    const aktifId = durum.aktifDersId || 'genel';
+    return durum.ogrenciKayitlari.filter((o) => !Array.isArray(o.dersIdler) || o.dersIdler.length === 0 || o.dersIdler.includes(aktifId));
   }
 
   /* durum.ogrenciler = seçili dersin öğrencileri.
@@ -108,7 +103,7 @@
       return aktifDersOgrencileriniGetir();
     },
     set(yeniListe) {
-      const aktif = durum.aktifDersId;
+      const aktif = durum.aktifDersId || 'genel';
       const gelen = Array.isArray(yeniListe) ? yeniListe : [];
       const nolar = new Set(gelen.map((o) => String(o.ogrNo)));
       durum.ogrenciKayitlari.forEach((k) => {
@@ -127,11 +122,13 @@
     }
   });
   function ogrenciEkleAktifDerse(ogrNo, adSoyad) {
+    const aktif = durum.aktifDersId || 'genel';
     const mevcut = durum.ogrenciKayitlari.find((k) => String(k.ogrNo) === String(ogrNo));
     if (mevcut) {
-      if (!mevcut.dersIdler.includes(durum.aktifDersId)) mevcut.dersIdler.push(durum.aktifDersId);
+      if (!Array.isArray(mevcut.dersIdler)) mevcut.dersIdler = [];
+      if (!mevcut.dersIdler.includes(aktif)) mevcut.dersIdler.push(aktif);
     } else {
-      durum.ogrenciKayitlari.push({ ogrNo, adSoyad, bolum: "Genel", dersIdler: [durum.aktifDersId] });
+      durum.ogrenciKayitlari.push({ ogrNo, adSoyad, bolum: "Genel", dersIdler: [aktif] });
     }
   }
 
@@ -149,15 +146,19 @@
   /* Yerel Depodan Güvenli Yükleme ve Kaydetme */
   function verileriYukle() {
     try {
+      ESKI_DEPO_ANAHTARLARI.forEach((eskiAnahtar) => {
+        try { localStorage.removeItem(eskiAnahtar); } catch (_) {}
+      });
       const ham = localStorage.getItem(DEPO_ANAHTAR);
       if (!ham) return;
       const cozulmus = C.semaDogrulaVeTemizle(JSON.parse(ham));
-      if (Array.isArray(cozulmus.dersler) && cozulmus.dersler.length > 0) durum.dersler = cozulmus.dersler;
-      if (typeof cozulmus.aktifDersId === 'string') durum.aktifDersId = cozulmus.aktifDersId;
-      if (Array.isArray(cozulmus.sorular) && cozulmus.sorular.length > 0) durum.sorular = cozulmus.sorular;
+      if (Array.isArray(cozulmus.dersler)) durum.dersler = cozulmus.dersler;
+      if (typeof cozulmus.aktifDersId === 'string' && cozulmus.aktifDersId) durum.aktifDersId = cozulmus.aktifDersId;
+      else if (durum.dersler.length > 0) durum.aktifDersId = durum.dersler[0].id;
+      if (Array.isArray(cozulmus.sorular)) durum.sorular = cozulmus.sorular;
       if (Array.isArray(cozulmus.salonlar) && cozulmus.salonlar.length > 0) durum.salonlar = cozulmus.salonlar;
       if (typeof cozulmus.dagitimModu === 'string') durum.dagitimModu = cozulmus.dagitimModu;
-      if (Array.isArray(cozulmus.ogrenciler) && cozulmus.ogrenciler.length > 0) durum.ogrenciKayitlari = cozulmus.ogrenciler;
+      if (Array.isArray(cozulmus.ogrenciler)) durum.ogrenciKayitlari = cozulmus.ogrenciler;
       durum.ogrenciKayitlari = ogrenciKayitlariniHazirla(durum.ogrenciKayitlari);
       if (Array.isArray(cozulmus.arsivDersler)) durum.arsivDersler = cozulmus.arsivDersler;
       if (cozulmus.onlineSinav && typeof cozulmus.onlineSinav === 'object') Object.assign(durum.onlineSinav, cozulmus.onlineSinav);
@@ -430,7 +431,7 @@
       .filter(Boolean);
     const ciftSikDogruMetni = (document.getElementById('kural-cift-sik-dogru') && document.getElementById('kural-cift-sik-dogru').value) || '';
 
-    const aktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || durum.dersler[0];
+    const aktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || durum.dersler[0] || varsayilanBosDers();
     const dersSorulari = durum.sorular.filter((s) => s.dersId === aktifDers.id || s.dersId === 'genel');
     const zorlukDagilimi = (document.getElementById('ayar-zorluk-dagilimi') && document.getElementById('ayar-zorluk-dagilimi').value) || 'dengeli';
     const haftaDagilimModu = (document.getElementById('ayar-hafta-dagilim-modu') && document.getElementById('ayar-hafta-dagilim-modu').value) || 'otomatik_dengeli';
@@ -2253,7 +2254,7 @@
 
     const tumSinavlar = Array.isArray(durum.onlineSinavListesi) && durum.onlineSinavListesi.length > 0
       ? durum.onlineSinavListesi
-      : (durum.onlineSinav && durum.onlineSinav.sinavId ? [durum.onlineSinav] : []);
+      : (durum.onlineSinav && durum.onlineSinav.sinavId && durum.onlineSinav.aktif ? [durum.onlineSinav] : []);
 
     // Öğrenci belirli derslere kayıtlıysa önce o derslerin sınavlarını filtrele (hiç eşleşme yoksa tüm tanımlı sınavları göster)
     let ogrenciSinavlari = tumSinavlar;
@@ -2406,6 +2407,9 @@
     }
     const hedefDersId = onl.dersId || yapi.ders.id;
     let dersHavuzSorulari = durum.sorular.filter((s) => !s.arsivde && (s.dersId === hedefDersId || s.dersId === 'genel'));
+    if (dersHavuzSorulari.length === 0 && Array.isArray(yapi.tumSeciliSorular) && yapi.tumSeciliSorular.length > 0) {
+      dersHavuzSorulari = yapi.tumSeciliSorular;
+    }
     if (onl.haftaKapsam === 'vize') {
       const vizeSorular = dersHavuzSorulari.filter((s) => C.normalizeHaftaNo(s.hafta, 1) <= 7);
       if (vizeSorular.length >= 2) dersHavuzSorulari = vizeSorular;
@@ -3121,21 +3125,25 @@
 
     const kutuDersler = document.getElementById('kutu-mevcut-dersler-yonetim');
     if (kutuDersler) {
-      kutuDersler.innerHTML = durum.dersler
-        .map((d) => {
-          const soruAdet = durum.sorular.filter((s) => !s.arsivde && s.dersId === d.id).length;
-          const ogrAdet = durum.ogrenciKayitlari.filter((o) => Array.isArray(o.dersIdler) && o.dersIdler.includes(d.id)).length;
-          return `
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:5px 8px; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px;">
-              <div>
-                <strong>${C.kacisHTML(d.kod)} — ${C.kacisHTML(d.ad)}</strong>
-                <span class="mono" style="font-size:0.72rem; color:var(--metin-ikincil);"> (${soruAdet} Soru · ${ogrAdet} Öğrenci)</span>
+      if (durum.dersler.length === 0) {
+        kutuDersler.innerHTML = '<div style="color:var(--metin-soluk);">Henüz kayıtlı ders bulunmuyor. Yukarıdaki alanlardan ilk dersinizi oluşturabilirsiniz.</div>';
+      } else {
+        kutuDersler.innerHTML = durum.dersler
+          .map((d) => {
+            const soruAdet = durum.sorular.filter((s) => !s.arsivde && s.dersId === d.id).length;
+            const ogrAdet = durum.ogrenciKayitlari.filter((o) => Array.isArray(o.dersIdler) && o.dersIdler.includes(d.id)).length;
+            return `
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:5px 8px; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px;">
+                <div>
+                  <strong>${C.kacisHTML(d.kod)} — ${C.kacisHTML(d.ad)}</strong>
+                  <span class="mono" style="font-size:0.72rem; color:var(--metin-ikincil);"> (${soruAdet} Soru · ${ogrAdet} Öğrenci)</span>
+                </div>
+                <button type="button" class="btn btn-tehlike btn-kucuk" data-sil-ders-id="${C.kacisHTML(d.id)}" title="Dersi sil ve sorularını Soru Arşivine aktar">🗑️ Sil (Soruları Arşivle)</button>
               </div>
-              <button type="button" class="btn btn-tehlike btn-kucuk" data-sil-ders-id="${C.kacisHTML(d.id)}" title="Dersi sil ve sorularını Soru Arşivine aktar">🗑️ Sil (Soruları Arşivle)</button>
-            </div>
-          `;
-        })
-        .join('');
+            `;
+          })
+          .join('');
+      }
     }
   }
 
@@ -3169,9 +3177,11 @@
   }
 
   function doldurDersSecici() {
-    const secenekler = durum.dersler
-      .map((d) => `<option value="${C.kacisHTML(d.id)}" ${d.id === durum.aktifDersId ? "selected" : ""}>${C.kacisHTML(d.kod)} \u2014 ${C.kacisHTML(d.ad)}</option>`)
-      .join("");
+    const secenekler = durum.dersler.length > 0
+      ? durum.dersler
+          .map((d) => `<option value="${C.kacisHTML(d.id)}" ${d.id === durum.aktifDersId ? "selected" : ""}>${C.kacisHTML(d.kod)} \u2014 ${C.kacisHTML(d.ad)}</option>`)
+          .join("")
+      : `<option value="genel">\u2014 Hen\u00fcz Ders Eklenmedi (\u2795 Yeni Ders Ekleyin) \u2014</option>`;
     const sel = document.getElementById("aktif-ders-sec");
     if (sel) sel.innerHTML = secenekler;
     const tutSel = document.getElementById("tut-ders-sec");
@@ -3180,7 +3190,7 @@
     if (onlSel) onlSel.innerHTML = secenekler;
     const rozet = document.getElementById("rozet-tutanak-ders");
     const aktif = durum.dersler.find((d) => d.id === durum.aktifDersId);
-    if (rozet && aktif) rozet.textContent = `${aktif.kod} \u00b7 ${aktif.ad}`;
+    if (rozet) rozet.textContent = aktif ? `${aktif.kod} \u00b7 ${aktif.ad}` : "Ders Seçilmedi";
     guncelleDersVeArsivModalUI();
   }
 
@@ -3194,10 +3204,10 @@
       return el ? Boolean(el.checked) : varsayilan;
     };
     return {
-      dersId: al('online-ders-sec', durum.aktifDersId),
-      sinavTuru: al('online-sinav-turu', 'Vize (Ara Sınav)'),
-      baslik: al('online-sinav-baslik', 'Online Sınav'),
-      sinavId: al('online-sinav-kodu', 'SINAV-' + Date.now()),
+      dersId: al('online-ders-sec', durum.aktifDersId) || durum.aktifDersId || 'genel',
+      sinavTuru: al('online-sinav-turu', 'Vize (Ara Sınav)') || 'Vize (Ara Sınav)',
+      baslik: al('online-sinav-baslik', 'Online Sınav') || 'Online Sınav',
+      sinavId: al('online-sinav-kodu', '') || ('SINAV-' + Date.now()),
       baslangic: al('online-baslangic', '2026-11-07T09:00'),
       bitis: al('online-bitis', '2026-11-07T18:00'),
       sureDk: Math.max(5, parseInt(al('online-sure-dk', '40'), 10) || 40),
@@ -3332,7 +3342,7 @@
       const el = document.getElementById(id);
       return el && el.value !== undefined ? String(el.value).trim() : varsayilan;
     };
-    const aktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || durum.dersler[0];
+    const aktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || durum.dersler[0] || varsayilanBosDers();
     const tarihIso = al('tut-tarih');
     const tarih = /^\d{4}-\d{2}-\d{2}$/.test(tarihIso) ? tarihIso.split('-').reverse().join('.') : '';
     const saat = al('tut-saat');
@@ -5366,7 +5376,7 @@
     // Sekme 3: Sentetik OMR Tek Kağıt ve Tüm Sınıf Tarama
     document.getElementById('btn-sim-tek-tara').addEventListener('click', () => {
       const yapi = okuAktifSinavYapisi();
-      const ogrNo = document.getElementById('sim-ogrenci-sec').value || durum.ogrenciler[0].ogrNo;
+      const ogrNo = document.getElementById('sim-ogrenci-sec').value || (durum.ogrenciler[0] && durum.ogrenciler[0].ogrNo) || '2026000011';
       const grup = document.getElementById('sim-kitapcik-sec').value || 'A';
       const senaryo = document.getElementById('sim-senaryo-sec').value || 'basarili';
 
@@ -5395,8 +5405,11 @@
       const ctx = girdiCanvas.getContext('2d');
       const gruplar = ['A', 'B', 'C', 'D'];
       const senaryolar = ['basarili', 'orta', 'basarili', 'zayif', 'orta'];
+      const simOgrenciListesi = durum.ogrenciler.length > 0
+        ? durum.ogrenciler
+        : [{ ogrNo: '2026000011', adSoyad: 'Test Öğrencisi' }];
 
-      durum.ogrenciler.forEach((ogr, idx) => {
+      simOgrenciListesi.forEach((ogr, idx) => {
         const grup = gruplar[idx % gruplar.length];
         const senaryo = idx === 2 ? 'silinti' : senaryolar[idx % senaryolar.length];
         const ogrNoKod = yapi.kimlikModu === 'tam'
@@ -5410,7 +5423,7 @@
           ...simCevap
         });
         const imgData = ctx.getImageData(0, 0, girdiCanvas.width, girdiCanvas.height);
-        const sonuc = C.okuOptikFormImageData(imgData, yapi, durum.ogrenciler, koseler);
+        const sonuc = C.okuOptikFormImageData(imgData, yapi, simOgrenciListesi, koseler);
         kaydetVeGosterOmrSonuc(sonuc);
       });
       sesliBipCal(true);
@@ -6262,6 +6275,36 @@
       });
     }
 
+    const btnTumVerileriSifirla = document.getElementById('btn-tum-verileri-sifirla');
+    if (btnTumVerileriSifirla) {
+      btnTumVerileriSifirla.addEventListener('click', () => {
+        const onay = window.confirm('Tarayıcıda kayıtlı tüm dersler, sorular, öğrenci listesi, online sınavlar ve okuma sonuçları sıfırlanacak (Yönetici hesabınız korunur). Onaylıyor musunuz?');
+        if (!onay) return;
+        durum.dersler = [];
+        durum.aktifDersId = 'genel';
+        durum.sorular = [];
+        durum.ogrenciKayitlari = [];
+        durum.salonlar = [{ id: 'salon-1', ad: 'Salon 1', kontenjan: 40, gozetmenler: [] }];
+        durum.okumaSonuclari = [];
+        durum.arsivDersler = [];
+        durum.onlineSinavListesi = [];
+        durum.onlineSinav = bosOnlineSinavTanimi();
+        durum.kioskDelilLoglari = [];
+        try {
+          localStorage.removeItem(DEPO_ANAHTAR);
+          ESKI_DEPO_ANAHTARLARI.forEach((k) => localStorage.removeItem(k));
+        } catch (_) {}
+        verileriKaydet();
+        doldurDersSecici();
+        guncelleOgrenciListesiSekmesi();
+        guncelleA4Onizleme();
+        guncelleSoruBankasiTablosu();
+        guncelleOmrTabloVeKuyruk();
+        guncelleMaddeAnaliziSekmesi();
+        guncelleOnlineSinavSekmesiUI();
+      });
+    }
+
     // Öğrenciye doğrudan paylaşılan link (?mod=ogrenci, ?kiosk=1 veya #sinav) ile açıldıysa doğrudan Öğrenci Kiosk ekranını aç
     const urlParam = new URLSearchParams(window.location.search || '');
     const dogrudanOgrenciModu =
@@ -6276,9 +6319,6 @@
       const btnCikis = document.getElementById('btn-kiosk-cikis');
       if (btnCikis) btnCikis.style.display = 'none';
     }
-
-    // Başlangıçta örnek 1 sınav kağıdı taramasını hazır göster (Röntgen ekranı boş kalmasın)
-    document.getElementById('btn-sim-tek-tara').click();
   }
 
   if (document.readyState === 'loading') {

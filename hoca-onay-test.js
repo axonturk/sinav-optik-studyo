@@ -198,6 +198,23 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   await sayfa.setViewport({ width: 1440, height: 900 });
   await sayfa.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'networkidle0' });
 
+  // 2B. Temiz Başlangıç (0 Ders, 0 Soru, 0 Öğrenci, 0 Okunan Kağıt, 0 Online Sınav) Doğrulaması
+  const temizDurum = await sayfa.evaluate(() => ({
+    dersMetin: document.getElementById('aktif-ders-sec').textContent.trim(),
+    soruSayisi: document.getElementById('rozet-banka-toplam').textContent.trim(),
+    okunanSayisi: document.getElementById('rozet-okunan-kagit').textContent.trim(),
+    ogrenciSayisi: document.getElementById('rozet-ogrenci-sayisi').textContent.trim(),
+    onlineSayisi: document.getElementById('rozet-tanimli-online-sayisi').textContent.trim()
+  }));
+  kontrol(
+    temizDurum.dersMetin.includes('Henüz Ders Eklenmedi') &&
+      temizDurum.soruSayisi === '0' &&
+      temizDurum.okunanSayisi === '0' &&
+      temizDurum.ogrenciSayisi === '0' &&
+      temizDurum.onlineSayisi === '0 Sınav',
+    'UI Temiz Başlangıç: Örnek dersler, sorular, öğrenciler, okumalar ve online sınavlar tamamen temizlendi (0)'
+  );
+
   // Hoca modalını aç
   await sayfa.click('#btn-hoca-giris-ac');
 
@@ -334,7 +351,11 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   await sayfa.click('[data-sekme="sekme-online"]');
   await new Promise((r) => setTimeout(r, 200));
 
-  // Önce ihlal sınırını 3 yapalım ki Kopyalama + Ekran Bölme + Sekme İhlali adımlarını sırayla test edelim
+  // Önce sınav başlığı, kodu ve ihlal sınırını (3) tanımlayıp başlatalım
+  await sayfa.evaluate(() => {
+    document.getElementById('online-sinav-baslik').value = '2026-2027 Güz Dönemi Vize Sınavı';
+    document.getElementById('online-sinav-kodu').value = 'SINAV-2026-VIZE';
+  });
   await sayfa.select('#online-maks-ihlal', '3');
   await sayfa.click('#btn-online-baslat');
   await new Promise((r) => setTimeout(r, 250));

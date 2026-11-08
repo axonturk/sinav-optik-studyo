@@ -70,6 +70,7 @@
               📂 Yedek Yükle
               <input type="file" id="input-yedek-yukle" accept=".json" style="display:none;" />
             </label>
+            <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-tum-verileri-sifirla" title="Tarayıcıda kayıtlı tüm ders, soru, öğrenci ve sınav verilerini sıfırlar">🧹 Tüm Verileri Sıfırla</button>
             <button type="button" class="btn btn-kucuk" id="btn-tema-degistir">🌙 Koyu Tema</button>
           </div>
         </details>
@@ -86,7 +87,7 @@
       </button>
       <button type="button" class="sekme-btn" data-sekme="sekme-banka" title="Soru Bankası & Word İthalat">
         <span class="sekme-ikon" aria-hidden="true">📚</span>
-        <span class="sekme-metin"><span class="sekme-baslik">2. Soru Bankası</span><span class="sekme-alt">Word / metin ithalat</span></span> <span class="sekme-rozet" id="rozet-banka-toplam">31</span>
+        <span class="sekme-metin"><span class="sekme-baslik">2. Soru Bankası</span><span class="sekme-alt">Word / metin ithalat</span></span> <span class="sekme-rozet" id="rozet-banka-toplam">0</span>
       </button>
       <button type="button" class="sekme-btn" data-sekme="sekme-omr" title="Mobil Optik Okuma (OMR) & Kamera">
         <span class="sekme-ikon" aria-hidden="true">📱</span>
@@ -98,7 +99,7 @@
       </button>
       <button type="button" class="sekme-btn" data-sekme="sekme-ogrenciler" title="Sınıf & Öğrenci Listesi · Salonlar">
         <span class="sekme-ikon" aria-hidden="true">👨‍🎓</span>
-        <span class="sekme-metin"><span class="sekme-baslik">5. Sınıf & Salonlar</span><span class="sekme-alt">öğrenci listesi</span></span> <span class="sekme-rozet" id="rozet-ogrenci-sayisi">15</span>
+        <span class="sekme-metin"><span class="sekme-baslik">5. Sınıf & Salonlar</span><span class="sekme-alt">öğrenci listesi</span></span> <span class="sekme-rozet" id="rozet-ogrenci-sayisi">0</span>
       </button>
       <button type="button" class="sekme-btn" data-sekme="sekme-online" title="Online Sınav & Kiosk Kilidi">
         <span class="sekme-ikon" aria-hidden="true">🌐</span>
@@ -483,7 +484,7 @@
               </div>
               <div>
                 <label class="etiket" for="antet-hoca">Öğretim Elemanı / Öğretmen</label>
-                <input type="text" id="antet-hoca" value="Doç. Dr. Öğretim Üyesi" />
+                <input type="text" id="antet-hoca" value="Dr. Öğr. Üyesi Fatih Çakmak" />
               </div>
             </div>
           </div>
@@ -1385,11 +1386,11 @@
           <div class="form-satir">
             <div>
               <label class="etiket" for="online-sinav-baslik">Sınav Başlığı / Adı</label>
-              <input type="text" id="online-sinav-baslik" value="2026-2027 Güz Dönemi Vize Sınavı" placeholder="Örn: 2026-2027 Güz Vize Sınavı" />
+              <input type="text" id="online-sinav-baslik" value="" placeholder="Örn: 2026-2027 Güz Vize Sınavı" />
             </div>
             <div>
               <label class="etiket" for="online-sinav-kodu">Sınav Kodu</label>
-              <input type="text" id="online-sinav-kodu" value="SINAV-2026-VIZE" placeholder="Örn: SINAV-2026-VIZE" />
+              <input type="text" id="online-sinav-kodu" value="" placeholder="Örn: SINAV-2026-VIZE" />
             </div>
           </div>
 
@@ -1495,7 +1496,7 @@
           <div class="kart">
             <div class="kart-baslik">
               <span>📋 Tanımlı Online Sınavlar Listesi</span>
-              <span class="rozet rozet-mavi" id="rozet-tanimli-online-sayisi">1 Sınav</span>
+              <span class="rozet rozet-mavi" id="rozet-tanimli-online-sayisi">0 Sınav</span>
             </div>
             <div class="tablo-sarmal">
               <table class="veri-tablo">
@@ -1596,11 +1597,11 @@
         <div class="form-satir">
           <div>
             <label class="etiket" for="kiosk-ogr-no">Öğrenci Numaranız (Zorunlu)</label>
-            <input type="text" id="kiosk-ogr-no" placeholder="Örn: 2023104011" value="2023104011" />
+            <input type="text" id="kiosk-ogr-no" placeholder="Örn: 2023104011" value="" />
           </div>
           <div>
             <label class="etiket" for="kiosk-ad-soyad">Adınız Soyadınız</label>
-            <input type="text" id="kiosk-ad-soyad" placeholder="Örn: Ahmet Yılmaz" value="Ahmet Yılmaz" />
+            <input type="text" id="kiosk-ad-soyad" placeholder="Adınız Soyadınız" value="" />
           </div>
         </div>
 
@@ -1610,7 +1611,7 @@
             <span style="font-weight:800; font-size:0.88rem; color:var(--birincil);">
               📋 Size Tanımlı Online Sınavlar (Gireceğiniz Sınavı Seçin)
             </span>
-            <span class="rozet rozet-mavi" id="rozet-kiosk-sinav-sayisi">1 Sınav</span>
+            <span class="rozet rozet-mavi" id="rozet-kiosk-sinav-sayisi">0 Sınav</span>
           </div>
           <div id="kiosk-ogrenci-sinav-listesi" style="display:flex; flex-direction:column; gap:0.45rem;"></div>
           <div id="kiosk-salon-kodu-satir" style="display:none; margin-top:0.55rem;">

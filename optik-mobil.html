@@ -303,7 +303,7 @@
       <!-- Telefona Doğrudan Öğrenci Listesi Aktarma / Yükleme -->
       <div class="kart">
         <div class="kart-baslik">
-          <span>👨‍🎓 3. Telefondaki Öğrenci Listesi (<span id="mobil-ogr-sayac">16</span> Öğrenci)</span>
+          <span>👨‍🎓 3. Telefondaki Öğrenci Listesi (<span id="mobil-ogr-sayac">0</span> Öğrenci)</span>
           <div style="display:flex; gap:0.3rem;">
             <button type="button" class="btn btn-kucuk" id="btn-mobil-bos-ogr-csv">📥 Boş CSV</button>
             <label class="btn btn-birincil btn-kucuk" style="cursor:pointer; margin:0;">
@@ -375,7 +375,7 @@
     (function () {
       'use strict';
       const C = window.SinavOptikCekirdek;
-      const DEPO_ANAHTAR = 'SINAV_OPTIK_STUDYO_VERI_V1';
+      const DEPO_ANAHTAR = 'SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2';
 
       let sesAcik = true;
       let seriTaramaAktif = false;
@@ -385,7 +385,7 @@
       const mobilDurum = {
         sinavYapisi: {
           sinavKodu: 'MOBIL-2026',
-          dersAd: 'BİL304 - Bilgisayar Ağları ve Siber Güvenlik',
+          dersAd: 'Genel Sınav',
           dySayisi: 10,
           dySoruPuan: 2,
           testSayisi: 10,
@@ -418,7 +418,7 @@
             }
           }
         },
-        ogrenciler: C.VARSAYILAN_OGRENCILER.slice(),
+        ogrenciler: [],
         okumaSonuclari: []
       };
 
@@ -427,11 +427,12 @@
 
       /* #setup= Parametresinden veya localStorage'dan Sınav Yapısını Yükle */
       function yukleBaslangicVerisi() {
+        try { localStorage.removeItem('SINAV_OPTIK_STUDYO_VERI_V1'); } catch (_) {}
         try {
           const hamDepo = localStorage.getItem(DEPO_ANAHTAR);
           if (hamDepo) {
             const veri = C.semaDogrulaVeTemizle(JSON.parse(hamDepo));
-            if (Array.isArray(veri.ogrenciler) && veri.ogrenciler.length > 0) mobilDurum.ogrenciler = veri.ogrenciler;
+            if (Array.isArray(veri.ogrenciler)) mobilDurum.ogrenciler = veri.ogrenciler;
             if (Array.isArray(veri.okumaSonuclari)) mobilDurum.okumaSonuclari = veri.okumaSonuclari;
           }
         } catch (_) {}
@@ -466,6 +467,8 @@
         document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
         document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
         document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
+        const ogrSayacEl = document.getElementById('mobil-ogr-sayac');
+        if (ogrSayacEl) ogrSayacEl.textContent = String(mobilDurum.ogrenciler.length);
         guncelleUstOzet();
       }
 
@@ -738,7 +741,9 @@
           return;
         }
         // Kamera kapalıysa sıradaki öğrenci için gölgeli gerçekçi optik form çiz ve OMR ile oku
-        const ogr = mobilDurum.ogrenciler[simSayac % mobilDurum.ogrenciler.length];
+        const ogr = mobilDurum.ogrenciler.length > 0
+          ? mobilDurum.ogrenciler[simSayac % mobilDurum.ogrenciler.length]
+          : { ogrNo: '2026000011', adSoyad: 'Simülasyon Öğrencisi' };
         const gruplar = ['A', 'B', 'C', 'D'];
         const grup = gruplar[simSayac % gruplar.length];
         simSayac++;
@@ -842,7 +847,6 @@
         yukleBaslangicVerisi();
         cizDokunmatikAnahtarEditoru();
         guncelleMobilSonucListesi();
-        taraAktifKareVeyaSimuleEt();
 
         // Alt Sekme Geçişi
         document.querySelectorAll('.mobil-sekme-btn').forEach((btn) => {
