@@ -5,13 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test-suite.js && node e2e-test.js && node dogru-sik-test.js && node omr-gercek-form-test.js && node pwa-test.js && node online-liste-test.js",
+    "test": "node test-suite.js && node e2e-test.js && node dogru-sik-test.js && node omr-gercek-form-test.js && node pwa-test.js && node online-liste-test.js && node hoca-onay-test.js",
     "test:birim": "node test-suite.js",
     "test:e2e": "node e2e-test.js",
     "test:dogru-sik": "node dogru-sik-test.js",
     "test:omr": "node omr-gercek-form-test.js",
     "test:pwa": "node pwa-test.js",
-    "test:online": "node online-liste-test.js"
+    "test:online": "node online-liste-test.js",
+    "test:hoca-onay": "node hoca-onay-test.js"
   },
   "engines": {
     "node": ">=18.0.0"

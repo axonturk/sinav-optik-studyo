@@ -26,10 +26,46 @@ const sunucuDurumu = {
     Cekirdek.VARSAYILAN_OGRENCILER.map((o) => [o.ogrNo, o])
   ),
   hocaHesap: Object.assign({}, Cekirdek.VARSAYILAN_HOCA_HESAP),
+  hocaListesi: [
+    Object.assign({}, Cekirdek.VARSAYILAN_HOCA_HESAP, {
+      rol: 'yonetici',
+      durum: 'aktif',
+      kayitTarihi: '2026-09-01'
+    })
+  ],
+  davetKodu: Cekirdek.VARSAYILAN_DAVET_KODU,
   aktifHocaTokenlar: new Set(),
+  aktifHocaOturumlari: new Map(), // hocaToken -> { kullaniciAdi, adSoyad, rol }
   aktifTokenlar: new Map(), // token -> { ogrNo, adSoyad, bitisMs, cevaplar, bitti }
   omrSonuclari: []
 };
+
+function cozHocaTokenIstekten(req, govde = null, urlNesne = null) {
+  const auth = String(req.headers.authorization || '').trim();
+  if (auth.toLowerCase().startsWith('bearer ')) {
+    const t = auth.slice(7).trim();
+    if (t) return t;
+  }
+  if (govde && typeof govde.token === 'string' && govde.token.trim()) {
+    return govde.token.trim();
+  }
+  if (urlNesne && urlNesne.searchParams && urlNesne.searchParams.get('token')) {
+    return urlNesne.searchParams.get('token').trim();
+  }
+  return '';
+}
+
+function hocaListesiGuvenliOzet(liste) {
+  return (Array.isArray(liste) ? liste : []).map((h) => ({
+    kullaniciAdi: h.kullaniciAdi,
+    adSoyad: h.adSoyad,
+    eposta: h.eposta,
+    telefon: h.telefon || '',
+    rol: h.rol || (String(h.kullaniciAdi).toLowerCase() === 'hoca' ? 'yonetici' : 'hoca'),
+    durum: h.durum || 'aktif',
+    kayitTarihi: h.kayitTarihi || ''
+  }));
+}
 
 /* Öğrenci İstemcisinden Asla Kabul Edilmeyecek Yasaklı Alanlar (Zero-Trust) */
 const YASAKLI_ISTEMCI_ALANLARI = [
@@ -128,18 +164,202 @@ function istekIsleyici(req, res) {
   if (req.method === 'POST' && yol === '/api/hoca-giris') {
     okuJsonGovde(req)
       .then((govde) => {
-        const sonuc = Cekirdek.dogrulaHocaGiris(govde.kullaniciAdi, govde.sifre, sunucuDurumu.hocaHesap);
+        const havuz = Array.isArray(sunucuDurumu.hocaListesi) && sunucuDurumu.hocaListesi.length > 0
+          ? sunucuDurumu.hocaListesi
+          : [sunucuDurumu.hocaHesap];
+        const sonuc = Cekirdek.dogrulaHocaGiris(govde.kullaniciAdi, govde.sifre, havuz);
         if (!sonuc.basarili) {
-          return gonderJson(res, sonuc.kod, { hata: sonuc.hata });
+          return gonderJson(res, sonuc.kod, { hata: sonuc.hata, durum: sonuc.durum || 'reddedildi' });
         }
         const hocaToken = crypto.randomBytes(24).toString('hex');
         sunucuDurumu.aktifHocaTokenlar.add(hocaToken);
+        sunucuDurumu.aktifHocaOturumlari.set(hocaToken, {
+          kullaniciAdi: sonuc.kullaniciAdi,
+          adSoyad: sonuc.adSoyad,
+          rol: sonuc.rol || 'hoca'
+        });
         return gonderJson(res, 200, {
           token: hocaToken,
           kullaniciAdi: sonuc.kullaniciAdi,
           adSoyad: sonuc.adSoyad,
-          eposta: sonuc.eposta
+          eposta: sonuc.eposta,
+          rol: sonuc.rol || 'hoca',
+          durum: sonuc.durum || 'aktif'
         });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  // 0a-2. Davet Kodlu Yeni Hoca Başvurusu (Yönetici Onayına Düşer — Asla Otomatik Oturum Açmaz)
+  if (req.method === 'POST' && yol === '/api/hoca-basvuru') {
+    okuJsonGovde(req)
+      .then((govde) => {
+        const dogrulama = Cekirdek.dogrulaHocaHesapKayit(govde, {
+          davetKoduKontrol: true,
+          beklenenDavetKodu: sunucuDurumu.davetKodu,
+          mevcutHocalar: sunucuDurumu.hocaListesi
+        });
+        if (!dogrulama.gecerli) {
+          const kod = String(dogrulama.hata || '').includes('davet kodu') ? 403 : 400;
+          return gonderJson(res, kod, { hata: dogrulama.hata });
+        }
+        const yeniKayit = {
+          kullaniciAdi: dogrulama.kullaniciAdi,
+          adSoyad: dogrulama.adSoyad,
+          eposta: dogrulama.eposta,
+          telefon: dogrulama.telefon,
+          sifre: String(govde.sifre),
+          rol: 'hoca',
+          durum: 'beklemede',
+          kayitTarihi: new Date().toISOString().slice(0, 10)
+        };
+        sunucuDurumu.hocaListesi.push(yeniKayit);
+        return gonderJson(res, 201, {
+          basarili: true,
+          kullaniciAdi: yeniKayit.kullaniciAdi,
+          adSoyad: yeniKayit.adSoyad,
+          eposta: yeniKayit.eposta,
+          rol: yeniKayit.rol,
+          durum: yeniKayit.durum,
+          mesaj: 'Öğretmen başvurunuz alındı ve yönetici onayına gönderildi. Yönetici onayladıktan sonra giriş yapabilirsiniz.'
+        });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  // 0a-3. Hoca Listesi & Davet Kodu Sorgulama (Şifreler Asla Dönmez)
+  if (req.method === 'GET' && yol === '/api/hoca-liste') {
+    const token = cozHocaTokenIstekten(req, null, urlNesne);
+    const oturum = token ? sunucuDurumu.aktifHocaOturumlari.get(token) : null;
+    if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token) || !oturum) {
+      return gonderJson(res, 401, { hata: 'Hoca listesini görüntülemek için geçerli öğretmen oturumu gereklidir (401 Unauthorized).' });
+    }
+    return gonderJson(res, 200, {
+      hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi),
+      davetKodu: oturum.rol === 'yonetici' ? sunucuDurumu.davetKodu : undefined,
+      aktifRol: oturum.rol
+    });
+  }
+
+  // 0a-4. Yönetici Onay / Askıya Alma / Silme / Davet Kodu Yenileme / Şifre Güncelleme
+  if (req.method === 'POST' && yol === '/api/hoca-yonetim') {
+    okuJsonGovde(req)
+      .then((govde) => {
+        const token = cozHocaTokenIstekten(req, govde, urlNesne);
+        const oturum = token ? sunucuDurumu.aktifHocaOturumlari.get(token) : null;
+        if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token) || !oturum) {
+          return gonderJson(res, 401, { hata: 'Bu işlem için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+        }
+
+        const islem = String(govde.islem || '').trim();
+
+        // Kendi profilini / şifresini güncelleme (Her aktif hoca kendi hesabını güncelleyebilir)
+        if (islem === 'sifre_guncelle') {
+          const dogrulama = Cekirdek.dogrulaHocaHesapKayit(govde, {
+            davetKoduKontrol: false,
+            mevcutHocalar: sunucuDurumu.hocaListesi,
+            haricKullaniciAdi: oturum.kullaniciAdi
+          });
+          if (!dogrulama.gecerli) {
+            return gonderJson(res, 400, { hata: dogrulama.hata });
+          }
+          const kayit = sunucuDurumu.hocaListesi.find(
+            (h) => String(h.kullaniciAdi).toLowerCase() === String(oturum.kullaniciAdi).toLowerCase()
+          );
+          if (!kayit) {
+            return gonderJson(res, 404, { hata: 'Güncellenecek hoca kaydı bulunamadı.' });
+          }
+          kayit.kullaniciAdi = dogrulama.kullaniciAdi;
+          kayit.adSoyad = dogrulama.adSoyad;
+          kayit.eposta = dogrulama.eposta;
+          kayit.telefon = dogrulama.telefon;
+          kayit.sifre = String(govde.sifre);
+          oturum.kullaniciAdi = dogrulama.kullaniciAdi;
+          oturum.adSoyad = dogrulama.adSoyad;
+          if (kayit.rol === 'yonetici') {
+            sunucuDurumu.hocaHesap = Object.assign({}, kayit);
+          }
+          return gonderJson(res, 200, {
+            basarili: true,
+            kullaniciAdi: kayit.kullaniciAdi,
+            adSoyad: kayit.adSoyad,
+            hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi)
+          });
+        }
+
+        // Bundan sonraki işlemler yalnızca 'yonetici' rolüne açıktır
+        if (oturum.rol !== 'yonetici') {
+          return gonderJson(res, 403, { hata: 'Bu işlem yalnızca sistem yöneticisi (Bölüm Başkanı / Koordinatör) yetkisiyle yapılabilir (403 Forbidden).' });
+        }
+
+        if (islem === 'davet_kodu_yenile') {
+          sunucuDurumu.davetKodu = Cekirdek.uretYeniDavetKodu('AKADEMI');
+          return gonderJson(res, 200, {
+            basarili: true,
+            davetKodu: sunucuDurumu.davetKodu,
+            hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi)
+          });
+        }
+
+        const hedefKullanici = String(govde.kullaniciAdi || '').trim().toLowerCase();
+        const idx = sunucuDurumu.hocaListesi.findIndex(
+          (h) => String(h.kullaniciAdi || '').trim().toLowerCase() === hedefKullanici
+        );
+        if (idx === -1) {
+          return gonderJson(res, 404, { hata: 'İşlem yapılacak öğretmen kaydı bulunamadı.' });
+        }
+        const hedefKayit = sunucuDurumu.hocaListesi[idx];
+
+        if (islem === 'onayla') {
+          hedefKayit.durum = 'aktif';
+          return gonderJson(res, 200, {
+            basarili: true,
+            kullaniciAdi: hedefKayit.kullaniciAdi,
+            durum: 'aktif',
+            hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi)
+          });
+        }
+
+        if (islem === 'askiya_al') {
+          if (hedefKayit.rol === 'yonetici') {
+            return gonderJson(res, 400, { hata: 'Ana sistem yöneticisi hesabı askıya alınamaz.' });
+          }
+          hedefKayit.durum = 'askida';
+          for (const [tok, ot] of sunucuDurumu.aktifHocaOturumlari.entries()) {
+            if (String(ot.kullaniciAdi).toLowerCase() === hedefKullanici) {
+              sunucuDurumu.aktifHocaOturumlari.delete(tok);
+              sunucuDurumu.aktifHocaTokenlar.delete(tok);
+            }
+          }
+          return gonderJson(res, 200, {
+            basarili: true,
+            kullaniciAdi: hedefKayit.kullaniciAdi,
+            durum: 'askida',
+            hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi)
+          });
+        }
+
+        if (islem === 'sil') {
+          if (hedefKayit.rol === 'yonetici') {
+            return gonderJson(res, 400, { hata: 'Ana sistem yöneticisi hesabı silinemez.' });
+          }
+          const silinen = sunucuDurumu.hocaListesi.splice(idx, 1)[0];
+          for (const [tok, ot] of sunucuDurumu.aktifHocaOturumlari.entries()) {
+            if (String(ot.kullaniciAdi).toLowerCase() === hedefKullanici) {
+              sunucuDurumu.aktifHocaOturumlari.delete(tok);
+              sunucuDurumu.aktifHocaTokenlar.delete(tok);
+            }
+          }
+          return gonderJson(res, 200, {
+            basarili: true,
+            silinenKullaniciAdi: silinen.kullaniciAdi,
+            hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi)
+          });
+        }
+
+        return gonderJson(res, 400, { hata: 'Geçersiz yönetim işlemi.' });
       })
       .catch((err) => gonderJson(res, 400, { hata: err.message }));
     return;

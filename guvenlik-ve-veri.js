@@ -3807,21 +3807,45 @@
     };
   }
 
-  /* Öğretmen / Öğretim Elemanı (Hoca) Kullanıcı Adı & Şifre Doğrulama Motoru */
+  /* Öğretmen / Öğretim Elemanı (Hoca) Kullanıcı Adı, Davet Kodu, Yönetici Onayı & Şifre Doğrulama Motoru */
+  const VARSAYILAN_DAVET_KODU = 'AKADEMI-2026';
+
   const VARSAYILAN_HOCA_HESAP = {
     kullaniciAdi: 'hoca',
     adSoyad: 'Öğretim Elemanı',
     eposta: 'hoca@universite.edu.tr',
     telefon: '05000000000',
-    sifre: 'Demo!Hoca2026'
+    sifre: 'Demo!Hoca2026',
+    rol: 'yonetici',
+    durum: 'aktif'
   };
 
-  function dogrulaHocaHesapKayit(bilgi = {}) {
+  function uretYeniDavetKodu(onEk = 'AKADEMI') {
+    const alfabe = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let rastgele = '';
+    for (let i = 0; i < 6; i++) {
+      rastgele += alfabe.charAt(Math.floor(Math.random() * alfabe.length));
+    }
+    return `${String(onEk || 'AKADEMI').toUpperCase()}-${rastgele}`;
+  }
+
+  function dogrulaHocaHesapKayit(bilgi = {}, secenekler = {}) {
     const kullaniciAdi = String(bilgi.kullaniciAdi || '').trim();
     const adSoyad = String(bilgi.adSoyad || '').trim();
     const eposta = String(bilgi.eposta || '').trim();
     const telefonHam = String(bilgi.telefon || '').replace(/\D+/g, '');
     const sifreDurum = kontrolCanliSifreKurallari(bilgi.sifre, bilgi.sifreTekrar !== undefined ? bilgi.sifreTekrar : bilgi.sifre);
+
+    if (secenekler && secenekler.davetKoduKontrol === true) {
+      const girilenKod = String(bilgi.davetKodu || '').trim().toUpperCase();
+      const beklenenKod = String(secenekler.beklenenDavetKodu || VARSAYILAN_DAVET_KODU).trim().toUpperCase();
+      if (!girilenKod || girilenKod !== beklenenKod) {
+        return {
+          gecerli: false,
+          hata: 'Kurum davet kodu geçersiz veya hatalı! Lütfen sistem yöneticisinden güncel davet kodunu alınız.'
+        };
+      }
+    }
 
     if (kullaniciAdi.length < 3) {
       return { gecerli: false, hata: 'Hoca kullanıcı adı en az 3 karakter olmalıdır.' };
@@ -3839,6 +3863,24 @@
       return { gecerli: false, hata: 'Hoca şifresi tüm güvenlik kriterlerini (Büyük harf, küçük harf, sayı, simge ve 8+ karakter) sağlamalıdır.' };
     }
 
+    if (secenekler && Array.isArray(secenekler.mevcutHocalar)) {
+      const haricK = String(secenekler.haricKullaniciAdi || '').trim().toLowerCase();
+      const kDusuk = kullaniciAdi.toLowerCase();
+      const eDusuk = eposta.toLowerCase();
+      for (const mevcut of secenekler.mevcutHocalar) {
+        if (!mevcut || typeof mevcut !== 'object') continue;
+        const mK = String(mevcut.kullaniciAdi || '').trim().toLowerCase();
+        const mE = String(mevcut.eposta || '').trim().toLowerCase();
+        if (haricK && mK === haricK) continue;
+        if (mK === kDusuk || (mE && mE === eDusuk)) {
+          return {
+            gecerli: false,
+            hata: 'Bu kullanıcı adı veya kurumsal e-posta adresi sistemde zaten kayıtlıdır.'
+          };
+        }
+      }
+    }
+
     return {
       gecerli: true,
       kullaniciAdi,
@@ -3849,24 +3891,53 @@
     };
   }
 
-  function dogrulaHocaGiris(girilenKullanici, girilenSifre, kayitliHoca = VARSAYILAN_HOCA_HESAP) {
+  function dogrulaHocaGiris(girilenKullanici, girilenSifre, kayitliHocaVeyaListe = VARSAYILAN_HOCA_HESAP) {
     const k = String(girilenKullanici || '').trim().toLowerCase();
     const s = String(girilenSifre || '');
-    const hedefK = String(kayitliHoca.kullaniciAdi || '').trim().toLowerCase();
-    const hedefEposta = String(kayitliHoca.eposta || '').trim().toLowerCase();
 
     if (!k || !s) {
       return { basarili: false, kod: 400, hata: 'Kullanıcı adı ve şifre zorunludur.' };
     }
-    if ((k === hedefK || k === hedefEposta) && s === String(kayitliHoca.sifre)) {
-      return {
-        basarili: true,
-        kod: 200,
-        kullaniciAdi: kayitliHoca.kullaniciAdi,
-        adSoyad: kayitliHoca.adSoyad,
-        eposta: kayitliHoca.eposta
-      };
+
+    const liste = Array.isArray(kayitliHocaVeyaListe)
+      ? kayitliHocaVeyaListe
+      : (kayitliHocaVeyaListe && typeof kayitliHocaVeyaListe === 'object' ? [kayitliHocaVeyaListe] : [VARSAYILAN_HOCA_HESAP]);
+
+    for (const kayit of liste) {
+      if (!kayit || typeof kayit !== 'object') continue;
+      const hedefK = String(kayit.kullaniciAdi || '').trim().toLowerCase();
+      const hedefEposta = String(kayit.eposta || '').trim().toLowerCase();
+      if ((k === hedefK || (hedefEposta && k === hedefEposta)) && s === String(kayit.sifre)) {
+        const hesapDurum = String(kayit.durum || 'aktif').toLowerCase();
+        if (hesapDurum === 'beklemede') {
+          return {
+            basarili: false,
+            kod: 403,
+            durum: 'beklemede',
+            hata: 'Hesabınız yönetici onayı bekliyor (403 Forbidden). Yönetici onayladıktan sonra giriş yapabilirsiniz.'
+          };
+        }
+        if (hesapDurum === 'askida' || hesapDurum === 'reddedildi') {
+          return {
+            basarili: false,
+            kod: 403,
+            durum: hesapDurum,
+            hata: 'Hesabınız yönetici tarafından askıya alınmış veya erişimi kapatılmıştır (403 Forbidden).'
+          };
+        }
+        return {
+          basarili: true,
+          kod: 200,
+          kullaniciAdi: kayit.kullaniciAdi,
+          adSoyad: kayit.adSoyad,
+          eposta: kayit.eposta,
+          telefon: kayit.telefon || '',
+          rol: kayit.rol || (hedefK === 'hoca' ? 'yonetici' : 'hoca'),
+          durum: 'aktif'
+        };
+      }
     }
+
     return { basarili: false, kod: 401, hata: 'Hatalı öğretmen kullanıcı adı veya şifre! (401 Unauthorized)' };
   }
 
@@ -4410,7 +4481,9 @@
     uretResmiObsNotCizelgesiCSV,
     kontrolCanliSifreKurallari,
     dogrulaOgrenciIlkKayit,
+    VARSAYILAN_DAVET_KODU,
     VARSAYILAN_HOCA_HESAP,
+    uretYeniDavetKodu,
     dogrulaHocaHesapKayit,
     dogrulaHocaGiris,
     uretKisiyeOzelOnlineSinav,

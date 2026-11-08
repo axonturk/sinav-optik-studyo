@@ -1716,39 +1716,46 @@
         </div>
       </div>
 
-      <!-- Bölüm 2: Hoca Profil Bilgileri ve Canlı Yeşil Kriterli Yeni Şifre Belirleme -->
-      <div style="padding:0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px;">
-        <div style="font-weight:800; font-size:0.86rem; margin-bottom:0.45rem; color:var(--mor);">
-          🛡️ 2. Hoca Hesap Bilgileri &amp; Yeni Şifre Belirleme (Canlı Güvenlik Kontrolü)
+      <!-- Bölüm 2: Yeni Hoca Davet Kodlu Başvuru veya Kendi Şifresini Güncelleme -->
+      <div style="padding:0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.85rem;">
+        <div style="font-weight:800; font-size:0.86rem; margin-bottom:0.35rem; color:var(--mor);">
+          🛡️ 2. Yeni Öğretmen Kayıt Başvurusu (Davet Kodlu + Yönetici Onaylı) &amp; Şifre Güncelleme
+        </div>
+        <div style="font-size:0.75rem; color:var(--metin-ikincil); margin-bottom:0.5rem; line-height:1.35;">
+          Yeni öğretim elemanları <strong>Kurum Davet Kodu</strong> ile başvurur; hesap <strong>⏳ Onay Bekliyor</strong> durumunda açılır ve sistem yöneticisi onaylayınca aktifleşir.
         </div>
         <div class="form-satir">
           <div>
-            <label class="etiket" for="hoca-kayit-kullanici">Yeni Kullanıcı Adı</label>
+            <label class="etiket" for="hoca-kayit-davet-kodu">Kurum Davet Kodu (Yeni Başvuru İçin)</label>
+            <input type="text" id="hoca-kayit-davet-kodu" placeholder="Örn: AKADEMI-2026" />
+          </div>
+          <div>
+            <label class="etiket" for="hoca-kayit-kullanici">Kullanıcı Adı</label>
             <input type="text" id="hoca-kayit-kullanici" value="hoca" />
           </div>
+        </div>
+        <div class="form-satir">
           <div>
             <label class="etiket" for="hoca-kayit-ad">Unvan ve Ad Soyad</label>
             <input type="text" id="hoca-kayit-ad" value="Öğretim Elemanı" />
           </div>
-        </div>
-        <div class="form-satir">
           <div>
             <label class="etiket" for="hoca-kayit-eposta">Kurumsal E-Posta (Zorunlu)</label>
             <input type="text" id="hoca-kayit-eposta" value="hoca@universite.edu.tr" />
           </div>
+        </div>
+        <div class="form-satir">
           <div>
             <label class="etiket" for="hoca-kayit-telefon">Cep Telefonu (Zorunlu)</label>
             <input type="text" id="hoca-kayit-telefon" value="05000000000" />
           </div>
-        </div>
-        <div class="form-satir">
           <div>
-            <label class="etiket" for="hoca-kayit-sifre">Yeni Şifre</label>
-            <input type="password" id="hoca-kayit-sifre" placeholder="Yeni güçlü şifreniz..." />
+            <label class="etiket" for="hoca-kayit-sifre">Şifre</label>
+            <input type="password" id="hoca-kayit-sifre" placeholder="Güçlü şifreniz..." />
           </div>
           <div>
-            <label class="etiket" for="hoca-kayit-sifre-tekrar">Yeni Şifre (Tekrar)</label>
-            <input type="password" id="hoca-kayit-sifre-tekrar" placeholder="Yeni şifrenizi tekrar yazın..." />
+            <label class="etiket" for="hoca-kayit-sifre-tekrar">Şifre (Tekrar)</label>
+            <input type="password" id="hoca-kayit-sifre-tekrar" placeholder="Şifrenizi tekrar yazın..." />
           </div>
         </div>
 
@@ -1767,9 +1774,43 @@
           </div>
         </div>
 
-        <button type="button" class="btn btn-basari btn-kucuk" id="btn-hoca-kayit-kaydet" style="width:100%;">
-          💾 Hoca Kullanıcı Adı ve Yeni Şifreyi Güncelle
-        </button>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button type="button" class="btn btn-birincil btn-kucuk" id="btn-hoca-basvuru-gonder" style="flex:1;">
+            📨 Davet Koduyla Yeni Hoca Başvurusu Gönder (Onaya Düşer)
+          </button>
+          <button type="button" class="btn btn-basari btn-kucuk" id="btn-hoca-kayit-kaydet" style="flex:1;">
+            💾 Aktif Hesabımın Bilgilerini &amp; Şifresini Güncelle
+          </button>
+        </div>
+      </div>
+
+      <!-- Bölüm 3: Yönetici Onay Paneli — Kurum Davet Kodu ve Hoca Yetkilendirme Listesi -->
+      <div id="kutu-hoca-yonetim-paneli" style="padding:0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.55rem;">
+          <div style="font-weight:800; font-size:0.86rem; color:var(--birincil);">
+            🏛️ 3. Yönetici Onay Paneli — Kurum Davet Kodu &amp; Hoca Yetkilendirme
+          </div>
+          <div style="display:flex; align-items:center; gap:0.4rem;">
+            <span style="font-size:0.75rem; color:var(--metin-ikincil);">Aktif Davet Kodu:</span>
+            <span class="rozet rozet-mavi mono" id="etiket-kurum-davet-kodu">AKADEMI-2026</span>
+            <button type="button" class="btn btn-kucuk" id="btn-davet-kodu-yenile" title="Eski davet kodunu iptal edip yeni kurum davet kodu üretir">
+              🔄 Kodu Yenile
+            </button>
+          </div>
+        </div>
+        <div class="tablo-sarmal" style="max-height:210px; overflow-y:auto;">
+          <table class="veri-tablosu" style="font-size:0.76rem;">
+            <thead>
+              <tr>
+                <th>Kullanıcı / E-Posta</th>
+                <th>Unvan &amp; Ad Soyad</th>
+                <th>Rol &amp; Durum</th>
+                <th style="text-align:right;">Yönetici İşlemi</th>
+              </tr>
+            </thead>
+            <tbody id="tablo-hoca-onay-listesi"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>

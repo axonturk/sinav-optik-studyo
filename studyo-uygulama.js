@@ -71,6 +71,14 @@
     sonSecimYapilandirmaImzasi: '',
     duzenlenenSoruId: null,
     hocaHesap: Object.assign({}, C.VARSAYILAN_HOCA_HESAP),
+    hocaListesi: [
+      Object.assign({}, C.VARSAYILAN_HOCA_HESAP, {
+        rol: 'yonetici',
+        durum: 'aktif',
+        kayitTarihi: '2026-09-01'
+      })
+    ],
+    davetKodu: C.VARSAYILAN_DAVET_KODU || 'AKADEMI-2026',
     hocaOturumAcik: true,
     kioskOturum: null,
     kameraStream: null
@@ -154,6 +162,9 @@
       if (cozulmus.onlineSinav && typeof cozulmus.onlineSinav === 'object') Object.assign(durum.onlineSinav, cozulmus.onlineSinav);
       if (Array.isArray(cozulmus.onlineSinavListesi)) durum.onlineSinavListesi = cozulmus.onlineSinavListesi;
       if (Array.isArray(cozulmus.okumaSonuclari)) durum.okumaSonuclari = cozulmus.okumaSonuclari;
+      if (cozulmus.hocaHesap && typeof cozulmus.hocaHesap === 'object') Object.assign(durum.hocaHesap, cozulmus.hocaHesap);
+      if (Array.isArray(cozulmus.hocaListesi) && cozulmus.hocaListesi.length > 0) durum.hocaListesi = cozulmus.hocaListesi;
+      if (typeof cozulmus.davetKodu === 'string' && cozulmus.davetKodu.trim()) durum.davetKodu = cozulmus.davetKodu.trim();
     } catch (err) {
       console.warn('Yerel veri yükleme uyarısı:', err.message);
     }
@@ -179,7 +190,10 @@
           arsivDersler: durum.arsivDersler,
           onlineSinav: durum.onlineSinav,
           onlineSinavListesi: durum.onlineSinavListesi,
-          okumaSonuclari: durum.okumaSonuclari.map(okumaSonucunuHafifletir)
+          okumaSonuclari: durum.okumaSonuclari.map(okumaSonucunuHafifletir),
+          hocaHesap: durum.hocaHesap,
+          hocaListesi: durum.hocaListesi,
+          davetKodu: durum.davetKodu
         })
       );
     } catch (_) {}
@@ -3324,9 +3338,91 @@
       if (el) el.addEventListener('input', guncelleHocaCanliSifreRozetleri);
     });
 
+    const aktifHocaYoneticiMi = () => {
+      if (!durum.hocaOturumAcik) return false;
+      const rol = String((durum.hocaHesap && durum.hocaHesap.rol) || '').toLowerCase();
+      const kAdi = String((durum.hocaHesap && durum.hocaHesap.kullaniciAdi) || '').toLowerCase();
+      return rol === 'yonetici' || kAdi === 'hoca';
+    };
+
+    const guncelleHocaYonetimPaneliUI = () => {
+      const etiketKod = document.getElementById('etiket-kurum-davet-kodu');
+      const btnKodYenile = document.getElementById('btn-davet-kodu-yenile');
+      const tbody = document.getElementById('tablo-hoca-onay-listesi');
+      const yoneticiMi = aktifHocaYoneticiMi();
+
+      if (etiketKod) {
+        etiketKod.textContent = yoneticiMi ? (durum.davetKodu || 'AKADEMI-2026') : '🔒 Yöneticiye Özel';
+      }
+      if (btnKodYenile) {
+        btnKodYenile.disabled = !yoneticiMi;
+      }
+      if (!tbody) return;
+
+      const liste = Array.isArray(durum.hocaListesi) && durum.hocaListesi.length > 0
+        ? durum.hocaListesi
+        : [durum.hocaHesap];
+
+      tbody.innerHTML = liste
+        .map((h) => {
+          const kAdi = C.temizleHTML(h.kullaniciAdi || '');
+          const ad = C.temizleHTML(h.adSoyad || '');
+          const eposta = C.temizleHTML(h.eposta || '');
+          const rol = String(h.rol || (String(h.kullaniciAdi).toLowerCase() === 'hoca' ? 'yonetici' : 'hoca')).toLowerCase();
+          const durumStr = String(h.durum || 'aktif').toLowerCase();
+
+          let durumRozet = '';
+          if (rol === 'yonetici') {
+            durumRozet = '<span class="rozet rozet-yesil">🏛️ Yönetici (Aktif)</span>';
+          } else if (durumStr === 'beklemede') {
+            durumRozet = '<span class="rozet rozet-sari">⏳ Onay Bekliyor</span>';
+          } else if (durumStr === 'askida' || durumStr === 'reddedildi') {
+            durumRozet = '<span class="rozet rozet-kirmizi">🚫 Askıda</span>';
+          } else {
+            durumRozet = '<span class="rozet rozet-yesil">🟢 Hoca (Aktif)</span>';
+          }
+
+          let islemHtml = '<span style="font-size:0.72rem; color:var(--metin-ikincil);">Ana Yönetici</span>';
+          if (rol !== 'yonetici') {
+            if (!yoneticiMi) {
+              islemHtml = '<span style="font-size:0.72rem; color:var(--metin-ikincil);">🔒 Yönetici Yetkisi Gerekir</span>';
+            } else {
+              const butonlar = [];
+              if (durumStr !== 'aktif') {
+                butonlar.push(
+                  `<button type="button" class="btn btn-basari btn-kucuk" data-hoca-islem="onayla" data-hoca-kullanici="${kAdi}" title="Öğretmen hesabını onayla ve aktifleştir">✅ Onayla</button>`
+                );
+              }
+              if (durumStr === 'aktif') {
+                butonlar.push(
+                  `<button type="button" class="btn btn-kucuk" data-hoca-islem="askiya_al" data-hoca-kullanici="${kAdi}" title="Hesabı geçici olarak askıya al">⏸️ Askıya Al</button>`
+                );
+              }
+              butonlar.push(
+                `<button type="button" class="btn btn-tehlike btn-kucuk" data-hoca-islem="sil" data-hoca-kullanici="${kAdi}" title="Öğretmen kaydını sil">🗑️ Sil</button>`
+              );
+              islemHtml = `<div style="display:inline-flex; gap:0.25rem; flex-wrap:wrap; justify-content:flex-end;">${butonlar.join('')}</div>`;
+            }
+          }
+
+          return `
+            <tr>
+              <td><strong>${kAdi}</strong><br/><span style="font-size:0.7rem; color:var(--metin-ikincil);">${eposta}</span></td>
+              <td>${ad}</td>
+              <td>${durumRozet}</td>
+              <td style="text-align:right;">${islemHtml}</td>
+            </tr>
+          `;
+        })
+        .join('');
+    };
+
+    guncelleHocaYonetimPaneliUI();
+
     const btnHocaModalAc = document.getElementById('btn-hoca-giris-ac');
     if (btnHocaModalAc) {
       btnHocaModalAc.addEventListener('click', () => {
+        guncelleHocaYonetimPaneliUI();
         document.getElementById('modal-hoca-giris').style.display = 'flex';
       });
     }
@@ -3354,8 +3450,12 @@
         hataKutu.hidden = true;
         bilgiKutu.style.display = 'none';
 
-        // Yerel Hoca Hesap Doğrulaması
-        const yerelDogrulama = C.dogrulaHocaGiris(kullaniciAdi, sifre, durum.hocaHesap);
+        const havuz = Array.isArray(durum.hocaListesi) && durum.hocaListesi.length > 0
+          ? durum.hocaListesi
+          : [durum.hocaHesap];
+
+        // Yerel Hoca Hesap & Onay Durumu Doğrulaması
+        const yerelDogrulama = C.dogrulaHocaGiris(kullaniciAdi, sifre, havuz);
         if (!yerelDogrulama.basarili) {
           sessionStorage.removeItem('hoca_token');
           hataKutu.textContent = yerelDogrulama.hata;
@@ -3372,8 +3472,13 @@
               body: JSON.stringify({ kullaniciAdi, sifre })
             });
             if (yanit.status === 401 || yanit.status === 403) {
+              let sunucuHata = 'Sunucu öğretmen kimlik doğrulaması başarısız (401/403).';
+              try {
+                const hVeri = await yanit.json();
+                if (hVeri && hVeri.hata) sunucuHata = hVeri.hata;
+              } catch (_) {}
               sessionStorage.removeItem('hoca_token');
-              hataKutu.textContent = 'Sunucu öğretmen kimlik doğrulaması başarısız (401 Unauthorized).';
+              hataKutu.textContent = sunucuHata;
               hataKutu.hidden = false;
               return;
             }
@@ -3386,6 +3491,14 @@
           } catch (_) {}
         }
 
+        const girisYapanKayit = havuz.find(
+          (h) => String(h.kullaniciAdi).toLowerCase() === String(yerelDogrulama.kullaniciAdi).toLowerCase()
+        ) || yerelDogrulama;
+
+        durum.hocaHesap = Object.assign({}, girisYapanKayit, {
+          rol: yerelDogrulama.rol || girisYapanKayit.rol || 'hoca',
+          durum: 'aktif'
+        });
         durum.hocaOturumAcik = true;
         document.getElementById('ana-icerik-alani').style.filter = 'none';
         document.getElementById('ana-icerik-alani').style.pointerEvents = 'auto';
@@ -3393,6 +3506,7 @@
         const rozetDurum = document.getElementById('rozet-hoca-oturum-durum');
         rozetDurum.className = 'rozet rozet-yesil';
         rozetDurum.textContent = `🟢 Oturum Açık (${durum.hocaHesap.kullaniciAdi})`;
+        guncelleHocaYonetimPaneliUI();
         bilgiKutu.textContent = `✅ Hoş geldiniz ${durum.hocaHesap.adSoyad} (${durum.hocaHesap.kullaniciAdi}). Öğretmen oturumu doğrulandı.`;
         bilgiKutu.style.display = 'block';
       });
@@ -3409,24 +3523,33 @@
         const rozetDurum = document.getElementById('rozet-hoca-oturum-durum');
         rozetDurum.className = 'rozet rozet-kirmizi';
         rozetDurum.textContent = '🔒 Stüdyo Kilitli (Giriş Bekleniyor)';
+        guncelleHocaYonetimPaneliUI();
       });
     }
 
-    const btnHocaKayitKaydet = document.getElementById('btn-hoca-kayit-kaydet');
-    if (btnHocaKayitKaydet) {
-      btnHocaKayitKaydet.addEventListener('click', () => {
+    // Yeni Hoca Davet Kodlu Başvuru Gönderme ('beklemede' olarak eklenir, yönetici onayına düşer)
+    const btnHocaBasvuruGonder = document.getElementById('btn-hoca-basvuru-gonder');
+    if (btnHocaBasvuruGonder) {
+      btnHocaBasvuruGonder.addEventListener('click', async () => {
         const hataKutu = document.getElementById('hoca-giris-hata');
         const bilgiKutu = document.getElementById('hoca-giris-bilgi');
         hataKutu.hidden = true;
         bilgiKutu.style.display = 'none';
 
-        const dogrulama = C.dogrulaHocaHesapKayit({
+        const adayBilgi = {
+          davetKodu: (document.getElementById('hoca-kayit-davet-kodu') && document.getElementById('hoca-kayit-davet-kodu').value) || '',
           kullaniciAdi: document.getElementById('hoca-kayit-kullanici').value,
           adSoyad: document.getElementById('hoca-kayit-ad').value,
           eposta: document.getElementById('hoca-kayit-eposta').value,
           telefon: document.getElementById('hoca-kayit-telefon').value,
           sifre: document.getElementById('hoca-kayit-sifre').value,
           sifreTekrar: document.getElementById('hoca-kayit-sifre-tekrar').value
+        };
+
+        const dogrulama = C.dogrulaHocaHesapKayit(adayBilgi, {
+          davetKoduKontrol: true,
+          beklenenDavetKodu: durum.davetKodu || 'AKADEMI-2026',
+          mevcutHocalar: durum.hocaListesi
         });
 
         if (!dogrulama.gecerli) {
@@ -3435,21 +3558,231 @@
           return;
         }
 
+        if (location.protocol === 'http:' || location.protocol === 'https:') {
+          try {
+            const yanit = await fetch('/api/hoca-basvuru', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(adayBilgi)
+            });
+            if (!yanit.ok) {
+              const hVeri = await yanit.json().catch(() => ({}));
+              hataKutu.textContent = hVeri.hata || 'Öğretmen başvurusu sunucu tarafından reddedildi.';
+              hataKutu.hidden = false;
+              return;
+            }
+          } catch (_) {}
+        }
+
+        const yeniHoca = {
+          kullaniciAdi: dogrulama.kullaniciAdi,
+          adSoyad: dogrulama.adSoyad,
+          eposta: dogrulama.eposta,
+          telefon: dogrulama.telefon,
+          sifre: adayBilgi.sifre,
+          rol: 'hoca',
+          durum: 'beklemede',
+          kayitTarihi: new Date().toISOString().slice(0, 10)
+        };
+
+        durum.hocaListesi.push(yeniHoca);
+        verileriKaydet();
+        guncelleHocaYonetimPaneliUI();
+
+        bilgiKutu.textContent = `📨 Öğretmen başvurunuz (${yeniHoca.kullaniciAdi} - ${yeniHoca.adSoyad}) alındı ve '⏳ Onay Bekliyor' durumuyla yönetici onayına gönderildi. Yönetici onayladıktan sonra giriş yapabilirsiniz.`;
+        bilgiKutu.style.display = 'block';
+      });
+    }
+
+    const btnHocaKayitKaydet = document.getElementById('btn-hoca-kayit-kaydet');
+    if (btnHocaKayitKaydet) {
+      btnHocaKayitKaydet.addEventListener('click', async () => {
+        const hataKutu = document.getElementById('hoca-giris-hata');
+        const bilgiKutu = document.getElementById('hoca-giris-bilgi');
+        hataKutu.hidden = true;
+        bilgiKutu.style.display = 'none';
+
+        if (!durum.hocaOturumAcik) {
+          hataKutu.textContent = 'Kendi hesap bilgilerinizi veya şifrenizi güncellemek için önce mevcut hesabınızla giriş yapmalısınız.';
+          hataKutu.hidden = false;
+          return;
+        }
+
+        const eskiKullaniciAdi = durum.hocaHesap.kullaniciAdi;
+        const guncelBilgi = {
+          kullaniciAdi: document.getElementById('hoca-kayit-kullanici').value,
+          adSoyad: document.getElementById('hoca-kayit-ad').value,
+          eposta: document.getElementById('hoca-kayit-eposta').value,
+          telefon: document.getElementById('hoca-kayit-telefon').value,
+          sifre: document.getElementById('hoca-kayit-sifre').value,
+          sifreTekrar: document.getElementById('hoca-kayit-sifre-tekrar').value
+        };
+
+        const dogrulama = C.dogrulaHocaHesapKayit(guncelBilgi, {
+          davetKoduKontrol: false,
+          mevcutHocalar: durum.hocaListesi,
+          haricKullaniciAdi: eskiKullaniciAdi
+        });
+
+        if (!dogrulama.gecerli) {
+          hataKutu.textContent = dogrulama.hata;
+          hataKutu.hidden = false;
+          return;
+        }
+
+        if (location.protocol === 'http:' || location.protocol === 'https:') {
+          try {
+            const hocaToken = sessionStorage.getItem('hoca_token') || '';
+            if (hocaToken) {
+              await fetch('/api/hoca-yonetim', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${hocaToken}`
+                },
+                body: JSON.stringify(Object.assign({ islem: 'sifre_guncelle' }, guncelBilgi))
+              });
+            }
+          } catch (_) {}
+        }
+
+        const mevcutRol = durum.hocaHesap.rol || 'yonetici';
         durum.hocaHesap = {
           kullaniciAdi: dogrulama.kullaniciAdi,
           adSoyad: dogrulama.adSoyad,
           eposta: dogrulama.eposta,
           telefon: dogrulama.telefon,
-          sifre: document.getElementById('hoca-kayit-sifre').value
+          sifre: guncelBilgi.sifre,
+          rol: mevcutRol,
+          durum: 'aktif'
         };
+
+        const listeIdx = durum.hocaListesi.findIndex(
+          (h) => String(h.kullaniciAdi).toLowerCase() === String(eskiKullaniciAdi).toLowerCase()
+        );
+        if (listeIdx !== -1) {
+          durum.hocaListesi[listeIdx] = Object.assign({}, durum.hocaListesi[listeIdx], durum.hocaHesap);
+        } else {
+          durum.hocaListesi.unshift(Object.assign({}, durum.hocaHesap));
+        }
+
         document.getElementById('hoca-giris-kullanici').value = dogrulama.kullaniciAdi;
         document.getElementById('hoca-giris-sifre').value = durum.hocaHesap.sifre;
         document.getElementById('etiket-aktif-hoca-kullanici').textContent = dogrulama.kullaniciAdi;
         document.getElementById('antet-hoca').value = dogrulama.adSoyad;
         verileriKaydet();
+        guncelleHocaYonetimPaneliUI();
         guncelleA4Onizleme();
 
         bilgiKutu.textContent = `✅ Öğretmen hesap bilgileriniz (${dogrulama.kullaniciAdi}) ve yeni güçlü şifreniz kaydedildi.`;
+        bilgiKutu.style.display = 'block';
+      });
+    }
+
+    // Yönetici: Kurum Davet Kodunu Yenileme
+    const btnDavetKoduYenile = document.getElementById('btn-davet-kodu-yenile');
+    if (btnDavetKoduYenile) {
+      btnDavetKoduYenile.addEventListener('click', async () => {
+        const hataKutu = document.getElementById('hoca-giris-hata');
+        const bilgiKutu = document.getElementById('hoca-giris-bilgi');
+        hataKutu.hidden = true;
+        bilgiKutu.style.display = 'none';
+
+        if (!aktifHocaYoneticiMi()) {
+          hataKutu.textContent = 'Kurum davet kodunu yalnızca sistem yöneticisi yenileyebilir.';
+          hataKutu.hidden = false;
+          return;
+        }
+
+        let yeniKod = C.uretYeniDavetKodu('AKADEMI');
+        if (location.protocol === 'http:' || location.protocol === 'https:') {
+          try {
+            const hocaToken = sessionStorage.getItem('hoca_token') || '';
+            if (hocaToken) {
+              const yanit = await fetch('/api/hoca-yonetim', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${hocaToken}`
+                },
+                body: JSON.stringify({ islem: 'davet_kodu_yenile' })
+              });
+              if (yanit.ok) {
+                const v = await yanit.json();
+                if (v && v.davetKodu) yeniKod = v.davetKodu;
+              }
+            }
+          } catch (_) {}
+        }
+
+        durum.davetKodu = yeniKod;
+        verileriKaydet();
+        guncelleHocaYonetimPaneliUI();
+        bilgiKutu.textContent = `🔄 Yeni kurum davet kodu üretildi: ${yeniKod} (Eski kod geçersiz kılındı).`;
+        bilgiKutu.style.display = 'block';
+      });
+    }
+
+    // Yönetici: Hoca Onaylama / Askıya Alma / Silme Tablo Olayları
+    const tabloHocaOnay = document.getElementById('tablo-hoca-onay-listesi');
+    if (tabloHocaOnay) {
+      tabloHocaOnay.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-hoca-islem]');
+        if (!btn) return;
+        const islem = btn.getAttribute('data-hoca-islem');
+        const hedefKullanici = btn.getAttribute('data-hoca-kullanici') || '';
+        const hataKutu = document.getElementById('hoca-giris-hata');
+        const bilgiKutu = document.getElementById('hoca-giris-bilgi');
+        hataKutu.hidden = true;
+        bilgiKutu.style.display = 'none';
+
+        if (!aktifHocaYoneticiMi()) {
+          hataKutu.textContent = 'Öğretmen onaylama ve yetkilendirme işlemleri yalnızca sistem yöneticisi tarafından yapılabilir.';
+          hataKutu.hidden = false;
+          return;
+        }
+
+        const idx = durum.hocaListesi.findIndex(
+          (h) => String(h.kullaniciAdi).toLowerCase() === String(hedefKullanici).toLowerCase()
+        );
+        if (idx === -1) return;
+        const hedef = durum.hocaListesi[idx];
+
+        if (hedef.rol === 'yonetici') {
+          hataKutu.textContent = 'Ana sistem yöneticisi hesabı silinemez veya askıya alınamaz.';
+          hataKutu.hidden = false;
+          return;
+        }
+
+        if (location.protocol === 'http:' || location.protocol === 'https:') {
+          try {
+            const hocaToken = sessionStorage.getItem('hoca_token') || '';
+            if (hocaToken) {
+              await fetch('/api/hoca-yonetim', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${hocaToken}`
+                },
+                body: JSON.stringify({ islem, kullaniciAdi: hedef.kullaniciAdi })
+              });
+            }
+          } catch (_) {}
+        }
+
+        if (islem === 'onayla') {
+          hedef.durum = 'aktif';
+          bilgiKutu.textContent = `✅ ${hedef.adSoyad} (${hedef.kullaniciAdi}) hesabı onaylandı ve aktifleştirildi. Artık giriş yapabilir.`;
+        } else if (islem === 'askiya_al') {
+          hedef.durum = 'askida';
+          bilgiKutu.textContent = `⏸️ ${hedef.adSoyad} (${hedef.kullaniciAdi}) hesabı askıya alındı; giriş yetkisi kapatıldı.`;
+        } else if (islem === 'sil') {
+          durum.hocaListesi.splice(idx, 1);
+          bilgiKutu.textContent = `🗑️ ${hedef.adSoyad} (${hedef.kullaniciAdi}) öğretmen kaydı sistemden silindi.`;
+        }
+
+        verileriKaydet();
+        guncelleHocaYonetimPaneliUI();
         bilgiKutu.style.display = 'block';
       });
     }
