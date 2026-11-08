@@ -3812,9 +3812,9 @@
 
   const VARSAYILAN_HOCA_HESAP = {
     kullaniciAdi: 'hoca',
-    adSoyad: 'Öğretim Elemanı',
-    eposta: 'hoca@universite.edu.tr',
-    telefon: '05000000000',
+    adSoyad: 'Dr. Öğr. Üyesi Fatih Çakmak',
+    eposta: 'fatihcakmak@gmail.com',
+    telefon: '05065168500',
     sifre: 'Demo!Hoca2026',
     rol: 'yonetici',
     durum: 'aktif'
@@ -3939,6 +3939,61 @@
     }
 
     return { basarili: false, kod: 401, hata: 'Hatalı öğretmen kullanıcı adı veya şifre! (401 Unauthorized)' };
+  }
+
+  /* E-Posta + Cep Telefonu Doğrulaması ile Yönetici/Hoca Şifre Kurtarma (Veri Kaybı Olmadan) */
+  function sifirlaHocaSifreEpostaTelefon(bilgi = {}, kayitliHocaVeyaListe = VARSAYILAN_HOCA_HESAP) {
+    const girilenEposta = String(bilgi.eposta || '').trim().toLowerCase();
+    const girilenTelRakamlari = String(bilgi.telefon || '').replace(/\D+/g, '');
+    const girilenTelSon10 = girilenTelRakamlari.slice(-10);
+    const yeniSifre = String(bilgi.yeniSifre || '');
+    const yeniSifreTekrar = bilgi.yeniSifreTekrar !== undefined ? String(bilgi.yeniSifreTekrar) : yeniSifre;
+
+    if (!girilenEposta || girilenTelSon10.length < 10) {
+      return {
+        basarili: false,
+        kod: 400,
+        hata: 'Şifre sıfırlama için kayıtlı e-posta adresinizi ve 10-11 haneli cep telefonu numaranızı eksiksiz giriniz.'
+      };
+    }
+
+    const sifreDurum = kontrolCanliSifreKurallari(yeniSifre, yeniSifreTekrar);
+    if (!sifreDurum.tumuGecerli) {
+      return {
+        basarili: false,
+        kod: 400,
+        hata: 'Yeni şifreniz tüm güvenlik kriterlerini (Büyük/küçük harf, rakam, simge ve en az 8 karakter) sağlamalıdır.'
+      };
+    }
+
+    const liste = Array.isArray(kayitliHocaVeyaListe)
+      ? kayitliHocaVeyaListe
+      : (kayitliHocaVeyaListe && typeof kayitliHocaVeyaListe === 'object' ? [kayitliHocaVeyaListe] : [VARSAYILAN_HOCA_HESAP]);
+
+    for (const kayit of liste) {
+      if (!kayit || typeof kayit !== 'object') continue;
+      const kEposta = String(kayit.eposta || '').trim().toLowerCase();
+      const kTelSon10 = String(kayit.telefon || '').replace(/\D+/g, '').slice(-10);
+      if (kEposta && kTelSon10.length === 10 && kEposta === girilenEposta && kTelSon10 === girilenTelSon10) {
+        kayit.sifre = yeniSifre;
+        return {
+          basarili: true,
+          kod: 200,
+          kullaniciAdi: kayit.kullaniciAdi,
+          adSoyad: kayit.adSoyad,
+          eposta: kayit.eposta,
+          telefon: kayit.telefon,
+          rol: kayit.rol || (String(kayit.kullaniciAdi).toLowerCase() === 'hoca' ? 'yonetici' : 'hoca'),
+          durum: kayit.durum || 'aktif'
+        };
+      }
+    }
+
+    return {
+      basarili: false,
+      kod: 403,
+      hata: 'Girilen e-posta adresi ve cep telefonu numarası kayıtlı yönetici/hoca hesabıyla eşleşmedi! (403 Forbidden)'
+    };
   }
 
   /* Öğrenciye Özel Online Sınav Üretici:
@@ -4486,6 +4541,7 @@
     uretYeniDavetKodu,
     dogrulaHocaHesapKayit,
     dogrulaHocaGiris,
+    sifirlaHocaSifreEpostaTelefon,
     uretKisiyeOzelOnlineSinav,
     uretOgrenciyeOzelKagitVaryasyonu,
     uretCokSayfaliA4PdfBytes,

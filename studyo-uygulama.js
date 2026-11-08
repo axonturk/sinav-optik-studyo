@@ -165,6 +165,17 @@
       if (cozulmus.hocaHesap && typeof cozulmus.hocaHesap === 'object') Object.assign(durum.hocaHesap, cozulmus.hocaHesap);
       if (Array.isArray(cozulmus.hocaListesi) && cozulmus.hocaListesi.length > 0) durum.hocaListesi = cozulmus.hocaListesi;
       if (typeof cozulmus.davetKodu === 'string' && cozulmus.davetKodu.trim()) durum.davetKodu = cozulmus.davetKodu.trim();
+      // Eski demo e-posta/telefon bilgisini güncel yönetici iletişim bilgisine yükselt
+      const yukseltYoneticiIletisim = (k) => {
+        if (!k || typeof k !== 'object') return;
+        if (String(k.kullaniciAdi || '').toLowerCase() === 'hoca') {
+          if (!k.eposta || k.eposta === 'hoca@universite.edu.tr') k.eposta = C.VARSAYILAN_HOCA_HESAP.eposta;
+          if (!k.telefon || k.telefon === '05000000000') k.telefon = C.VARSAYILAN_HOCA_HESAP.telefon;
+          if (!k.adSoyad || k.adSoyad === 'Öğretim Elemanı') k.adSoyad = C.VARSAYILAN_HOCA_HESAP.adSoyad;
+        }
+      };
+      yukseltYoneticiIletisim(durum.hocaHesap);
+      if (Array.isArray(durum.hocaListesi)) durum.hocaListesi.forEach(yukseltYoneticiIletisim);
     } catch (err) {
       console.warn('Yerel veri yükleme uyarısı:', err.message);
     }
@@ -3368,6 +3379,7 @@
           const kAdi = C.temizleHTML(h.kullaniciAdi || '');
           const ad = C.temizleHTML(h.adSoyad || '');
           const eposta = C.temizleHTML(h.eposta || '');
+          const tel = C.temizleHTML(h.telefon || '');
           const rol = String(h.rol || (String(h.kullaniciAdi).toLowerCase() === 'hoca' ? 'yonetici' : 'hoca')).toLowerCase();
           const durumStr = String(h.durum || 'aktif').toLowerCase();
 
@@ -3407,7 +3419,7 @@
 
           return `
             <tr>
-              <td><strong>${kAdi}</strong><br/><span style="font-size:0.7rem; color:var(--metin-ikincil);">${eposta}</span></td>
+              <td><strong>${kAdi}</strong><br/><span style="font-size:0.69rem; color:var(--metin-ikincil);">${eposta}${tel ? ` · ${tel}` : ''}</span></td>
               <td>${ad}</td>
               <td>${durumRozet}</td>
               <td style="text-align:right;">${islemHtml}</td>
@@ -3524,6 +3536,62 @@
         rozetDurum.className = 'rozet rozet-kirmizi';
         rozetDurum.textContent = '🔒 Stüdyo Kilitli (Giriş Bekleniyor)';
         guncelleHocaYonetimPaneliUI();
+      });
+    }
+
+    // Şifremi Unuttum: Kayıtlı E-Posta + Cep Telefonu Doğrulaması ile Şifre Sıfırlama
+    const btnHocaSifreSifirla = document.getElementById('btn-hoca-sifre-sifirla');
+    if (btnHocaSifreSifirla) {
+      btnHocaSifreSifirla.addEventListener('click', async () => {
+        const hataKutu = document.getElementById('hoca-giris-hata');
+        const bilgiKutu = document.getElementById('hoca-giris-bilgi');
+        hataKutu.hidden = true;
+        bilgiKutu.style.display = 'none';
+
+        const kurtarmaVeri = {
+          eposta: (document.getElementById('hoca-kurtarma-eposta') && document.getElementById('hoca-kurtarma-eposta').value) || '',
+          telefon: (document.getElementById('hoca-kurtarma-telefon') && document.getElementById('hoca-kurtarma-telefon').value) || '',
+          yeniSifre: (document.getElementById('hoca-kurtarma-yeni-sifre') && document.getElementById('hoca-kurtarma-yeni-sifre').value) || '',
+          yeniSifreTekrar: (document.getElementById('hoca-kurtarma-yeni-sifre-tekrar') && document.getElementById('hoca-kurtarma-yeni-sifre-tekrar').value) || ''
+        };
+
+        const havuz = Array.isArray(durum.hocaListesi) && durum.hocaListesi.length > 0
+          ? durum.hocaListesi
+          : [durum.hocaHesap];
+
+        const sonuc = C.sifirlaHocaSifreEpostaTelefon(kurtarmaVeri, havuz);
+        if (!sonuc.basarili) {
+          hataKutu.textContent = sonuc.hata;
+          hataKutu.hidden = false;
+          return;
+        }
+
+        if (location.protocol === 'http:' || location.protocol === 'https:') {
+          try {
+            const yanit = await fetch('/api/hoca-sifre-kurtar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(kurtarmaVeri)
+            });
+            if (!yanit.ok) {
+              const hVeri = await yanit.json().catch(() => ({}));
+              hataKutu.textContent = hVeri.hata || 'Sunucu şifre sıfırlama doğrulaması başarısız.';
+              hataKutu.hidden = false;
+              return;
+            }
+          } catch (_) {}
+        }
+
+        if (String(durum.hocaHesap.kullaniciAdi).toLowerCase() === String(sonuc.kullaniciAdi).toLowerCase()) {
+          durum.hocaHesap.sifre = kurtarmaVeri.yeniSifre;
+        }
+        document.getElementById('hoca-giris-kullanici').value = sonuc.kullaniciAdi;
+        document.getElementById('hoca-giris-sifre').value = kurtarmaVeri.yeniSifre;
+        verileriKaydet();
+        guncelleHocaYonetimPaneliUI();
+
+        bilgiKutu.textContent = `✅ E-Posta (${sonuc.eposta}) ve telefon doğrulandı! ${sonuc.adSoyad} (${sonuc.kullaniciAdi}) şifresi sıfırlandı; şimdi 'Giriş Yap' düğmesine basabilirsiniz.`;
+        bilgiKutu.style.display = 'block';
       });
     }
 

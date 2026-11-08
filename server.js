@@ -229,6 +229,33 @@ function istekIsleyici(req, res) {
     return;
   }
 
+  // 0a-2b. E-Posta + Cep Telefonu Doğrulaması ile Yönetici / Hoca Şifre Sıfırlama
+  if (req.method === 'POST' && yol === '/api/hoca-sifre-kurtar') {
+    okuJsonGovde(req)
+      .then((govde) => {
+        const havuz = Array.isArray(sunucuDurumu.hocaListesi) && sunucuDurumu.hocaListesi.length > 0
+          ? sunucuDurumu.hocaListesi
+          : [sunucuDurumu.hocaHesap];
+        const sonuc = Cekirdek.sifirlaHocaSifreEpostaTelefon(govde, havuz);
+        if (!sonuc.basarili) {
+          return gonderJson(res, sonuc.kod || 403, { hata: sonuc.hata });
+        }
+        if (sonuc.rol === 'yonetici') {
+          sunucuDurumu.hocaHesap.sifre = String(govde.yeniSifre);
+        }
+        return gonderJson(res, 200, {
+          basarili: true,
+          kullaniciAdi: sonuc.kullaniciAdi,
+          adSoyad: sonuc.adSoyad,
+          eposta: sonuc.eposta,
+          rol: sonuc.rol,
+          mesaj: `Şifreniz başarıyla sıfırlandı (${sonuc.kullaniciAdi}). Yeni şifrenizle giriş yapabilirsiniz.`
+        });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
   // 0a-3. Hoca Listesi & Davet Kodu Sorgulama (Şifreler Asla Dönmez)
   if (req.method === 'GET' && yol === '/api/hoca-liste') {
     const token = cozHocaTokenIstekten(req, null, urlNesne);

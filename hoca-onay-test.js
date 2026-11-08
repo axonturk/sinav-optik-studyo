@@ -201,6 +201,39 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   // Hoca modalını aç
   await sayfa.click('#btn-hoca-giris-ac');
 
+  // Modalın ekrana tam sığdığını ve üst başlık/düğmelerin ezilmediğini doğrula
+  const modalGeometri = await sayfa.evaluate(() => {
+    const kart = document.querySelector('#modal-hoca-giris > .kart');
+    const btnKapat = document.getElementById('btn-modal-hoca-kapat');
+    const btnGiris = document.getElementById('btn-hoca-giris-yap');
+    const btnBasvuru = document.getElementById('btn-hoca-basvuru-gonder');
+    const rKart = kart.getBoundingClientRect();
+    const rKapat = btnKapat.getBoundingClientRect();
+    const rGiris = btnGiris.getBoundingClientRect();
+    const rBasvuru = btnBasvuru.getBoundingClientRect();
+    return {
+      kartUstGorunur: rKart.top >= 0,
+      kartAltEkranda: rKart.bottom <= window.innerHeight,
+      kapatYukseklik: rKapat.height,
+      girisYukseklik: rGiris.height,
+      basvuruYukseklik: rBasvuru.height,
+      varsayilanEposta: document.getElementById('hoca-kayit-eposta').value,
+      varsayilanTelefon: document.getElementById('hoca-kayit-telefon').value
+    };
+  });
+  kontrol(
+    modalGeometri.kartUstGorunur &&
+      modalGeometri.kapatYukseklik >= 26 &&
+      modalGeometri.girisYukseklik >= 30 &&
+      modalGeometri.basvuruYukseklik >= 32,
+    'UI: Hoca modalı ekrana sığıyor, üst başlık ve düğmeler ezilmiyor'
+  );
+  kontrol(
+    modalGeometri.varsayilanEposta === 'fatihcakmak@gmail.com' &&
+      modalGeometri.varsayilanTelefon === '05065168500',
+    'UI: Yönetici iletişim bilgileri (fatihcakmak@gmail.com / 05065168500) kayıtlı geldi'
+  );
+
   // Yeni hoca başvurusu gönder (UI üzerinden: dr_zeynep)
   await sayfa.evaluate(() => {
     document.getElementById('hoca-kayit-davet-kodu').value = 'AKADEMI-2026';
@@ -258,6 +291,42 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   kontrol(
     aktifHocaEtiket === 'dr_zeynep' && stuyoAcikMi,
     'UI: Yönetici onayından sonra dr_zeynep başarıyla giriş yaptı ve stüdyo kilidi açıldı'
+  );
+
+  // 4. Yönetici (Admin) Şifresini Unuttuğunda E-Posta + Telefon ile Kurtarma Testi
+  await sayfa.click('#btn-hoca-kilitle');
+
+  // Yanlış telefonla kurtarma denemesi -> reddedilmeli
+  await sayfa.evaluate(() => {
+    document.getElementById('hoca-kurtarma-eposta').value = 'fatihcakmak@gmail.com';
+    document.getElementById('hoca-kurtarma-telefon').value = '05009998877';
+    document.getElementById('hoca-kurtarma-yeni-sifre').value = 'YeniAdmin!2026';
+    document.getElementById('hoca-kurtarma-yeni-sifre-tekrar').value = 'YeniAdmin!2026';
+  });
+  await sayfa.click('#btn-hoca-sifre-sifirla');
+  await new Promise((r) => setTimeout(r, 200));
+  const kurtarmaHataGorundu = await sayfa.$eval('#hoca-giris-hata', (el) => !el.hidden && el.innerText.includes('403'));
+  kontrol(kurtarmaHataGorundu, 'UI: Hatalı telefon numarasıyla admin şifre sıfırlama girişimi 403 ile reddedildi');
+
+  // Doğru e-posta (fatihcakmak@gmail.com) ve doğru telefon (05065168500) ile admin şifresini sıfırla
+  await sayfa.evaluate(() => {
+    document.getElementById('hoca-kurtarma-eposta').value = 'fatihcakmak@gmail.com';
+    document.getElementById('hoca-kurtarma-telefon').value = '05065168500';
+    document.getElementById('hoca-kurtarma-yeni-sifre').value = 'Fatih!Yeni2026';
+    document.getElementById('hoca-kurtarma-yeni-sifre-tekrar').value = 'Fatih!Yeni2026';
+  });
+  await sayfa.click('#btn-hoca-sifre-sifirla');
+  await new Promise((r) => setTimeout(r, 250));
+
+  // Sıfırlanan yeni şifreyle yönetici girişi yap
+  await sayfa.click('#btn-hoca-giris-yap');
+  await new Promise((r) => setTimeout(r, 250));
+
+  const kurtarmaSonrasiKullanici = await sayfa.$eval('#etiket-aktif-hoca-kullanici', (el) => el.innerText.trim());
+  const kurtarmaSonrasiAcikMi = await sayfa.$eval('#ana-icerik-alani', (el) => el.style.pointerEvents === 'auto');
+  kontrol(
+    kurtarmaSonrasiKullanici === 'hoca' && kurtarmaSonrasiAcikMi,
+    'UI: Yönetici (fatihcakmak@gmail.com / 05065168500) şifresini sıfırlayıp yeni şifresiyle başarıyla giriş yaptı'
   );
 
   await tarayici.close();
