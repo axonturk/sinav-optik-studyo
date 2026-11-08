@@ -300,11 +300,11 @@
         <div id="mobil-dokunmatik-anahtar-alani"></div>
       </div>
 
-      <!-- Telefona Doğrudan Öğrenci Listesi Aktarma / Yükleme -->
+      <!-- Telefona Doğrudan Öğrenci Listesi Aktarma / Yükleme & QR ile Bilgisayara Aktarma -->
       <div class="kart">
         <div class="kart-baslik">
           <span>👨‍🎓 3. Telefondaki Öğrenci Listesi (<span id="mobil-ogr-sayac">0</span> Öğrenci)</span>
-          <div style="display:flex; gap:0.3rem;">
+          <div style="display:flex; gap:0.3rem; flex-wrap:wrap;">
             <button type="button" class="btn btn-kucuk" id="btn-mobil-bos-ogr-csv">📥 Boş CSV</button>
             <label class="btn btn-birincil btn-kucuk" style="cursor:pointer; margin:0;">
               📂 Öğrenci CSV Yükle
@@ -312,9 +312,37 @@
             </label>
           </div>
         </div>
-        <p style="font-size:0.78rem; color:var(--metin-ikincil);">
-          Bilgisayardan <code>#setup=</code> QR koduyla otomatik gelir veya doğrudan telefonunuza öğrenci CSV listesi yükleyebilirsiniz. Son 2 hanesi aynı olan öğrenciler okuma anında sorulur.
+        <p style="font-size:0.78rem; color:var(--metin-ikincil); margin-bottom:0.45rem;">
+          Bilgisayardan <code>#setup=</code> / <code>#ogr=</code> QR koduyla otomatik gelir, CSV yükleyebilir veya telefondaki öğrenci listesini <strong>QR ile bilgisayara aktarabilirsiniz</strong>:
         </p>
+        <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.45rem;">
+          <button type="button" class="btn btn-basari btn-kucuk" id="btn-mobil-ogr-qr-bilgisayara" style="flex:1;">
+            💻 Öğrenci Listesini QR ile Bilgisayara Aktar
+          </button>
+        </div>
+
+        <!-- Telefondaki Öğrenci Listesini QR veya Ağ ile Bilgisayara Aktarma Kutusu -->
+        <div id="kutu-mobil-ogr-qr-bilgisayara" style="display:none; padding:0.65rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-top:0.45rem; text-align:center;">
+          <div style="font-weight:800; font-size:0.84rem; color:var(--birincil); margin-bottom:0.35rem;">
+            💻 Telefondaki Öğrenci Listesini Bilgisayara Aktar (QR + Canlı Senkron)
+          </div>
+          <div id="alan-mobil-ogr-qr-svg" style="background:#fff; padding:10px; border:1px solid #000; border-radius:6px; display:inline-block; min-width:200px; min-height:200px;"></div>
+          <div id="kutu-mobil-qr-parcalar" style="display:none; justify-content:center; align-items:center; gap:0.45rem; margin-top:0.4rem;">
+            <button type="button" class="btn btn-kucuk" id="btn-mobil-qr-onceki">◀ Önceki</button>
+            <span class="rozet rozet-mor mono" id="etiket-mobil-qr-parca">Parça 1 / 1</span>
+            <button type="button" class="btn btn-kucuk" id="btn-mobil-qr-sonraki">Sonraki ▶</button>
+          </div>
+          <div id="etiket-mobil-qr-bilgi" style="font-size:0.76rem; margin-top:0.4rem; color:var(--metin-ikincil);"></div>
+          <div style="display:flex; gap:0.4rem; align-items:center; justify-content:center; flex-wrap:wrap; margin-top:0.5rem;">
+            <input type="text" id="mobil-pc-oturum-kodu" placeholder="Bilgisayar Oturum Kodu (Örn: PC-AB12CD)" style="max-width:210px; font-size:0.78rem;" />
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-pc-ag-gonder">
+              📡 Bilgisayara Gönder
+            </button>
+            <button type="button" class="btn btn-kucuk" id="btn-mobil-qr-kod-kopyala">
+              📋 QR Paketi Kopyala
+            </button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -370,6 +398,7 @@
     </button>
   </nav>
 
+  <script src="qrcode-generator.js"></script>
   <script src="guvenlik-ve-veri.js"></script>
   <script>
     (function () {
@@ -381,6 +410,29 @@
       let seriTaramaAktif = false;
       let kameraStream = null;
       let simSayac = 0;
+      let mobilQrParcaIdx = 0;
+
+      function uretMobilQrSvg(metin, boyutPx) {
+        if (typeof window.qrcode !== 'function' || !metin) return '';
+        const piksel = Math.max(120, Number(boyutPx) || 210);
+        for (const ec of ['M', 'L']) {
+          try {
+            const qr = window.qrcode(0, ec);
+            qr.addData(String(metin), 'Byte');
+            qr.make();
+            const n = qr.getModuleCount();
+            const tam = n + 8;
+            let yollar = '';
+            for (let r = 0; r < n; r++) {
+              for (let c = 0; c < n; c++) {
+                if (qr.isDark(r, c)) yollar += `M${c + 4},${r + 4}h1v1h-1z`;
+              }
+            }
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="${piksel}" height="${piksel}" viewBox="0 0 ${tam} ${tam}" shape-rendering="crispEdges" style="display:block; margin:auto;"><rect width="100%" height="100%" fill="#fff"/><path d="${yollar}" fill="#000"/></svg>`;
+          } catch (_) {}
+        }
+        return '';
+      }
 
       const mobilDurum = {
         sinavYapisi: {
@@ -437,31 +489,47 @@
           }
         } catch (_) {}
 
-        if (location.hash && location.hash.startsWith('#ogr=')) {
+        if (location.hash && location.hash.includes('ogr=')) {
           try {
-            const metin = decodeURIComponent(escape(atob(decodeURIComponent(location.hash.slice('#ogr='.length)))));
-            const liste = metin.split('\n').map((s) => s.trim()).filter(Boolean).map((s) => {
-              const i = s.indexOf(';');
-              return { ogrNo: s.slice(0, i), adSoyad: s.slice(i + 1), bolum: 'Genel' };
-            }).filter((o) => /^\d{2,12}$/.test(o.ogrNo) && o.adSoyad);
-            if (liste.length > 0) mobilDurum.ogrenciler = liste;
+            const cozulmusOgr = C.cozOgrenciQrPaketi(location.hash);
+            if (cozulmusOgr.gecerli && cozulmusOgr.ogrenciler.length > 0) {
+              mobilDurum.ogrenciler = cozulmusOgr.ogrenciler;
+              kaydetYerelDepoya();
+            }
           } catch (err) {
             console.warn('Öğrenci QR parametresi çözülemedi:', err.message);
           }
         }
 
-        if (location.hash && location.hash.startsWith('#setup=')) {
+        if (location.hash && location.hash.includes('setup=')) {
           try {
-            const b64 = decodeURIComponent(location.hash.slice('#setup='.length));
-            const jsonStr = decodeURIComponent(escape(atob(b64)));
-            const paket = C.derinTemizleNesne(JSON.parse(jsonStr));
-            if (paket && typeof paket === 'object') {
-              Object.assign(mobilDurum.sinavYapisi, paket);
-              if (Array.isArray(paket.ogrenciler)) mobilDurum.ogrenciler = paket.ogrenciler;
+            const cozulmusSetup = C.cozKompaktSetupQrPaketi(location.hash);
+            if (cozulmusSetup) {
+              Object.assign(mobilDurum.sinavYapisi, cozulmusSetup);
+              if (Array.isArray(cozulmusSetup.ogrenciler) && cozulmusSetup.ogrenciler.length > 0) {
+                mobilDurum.ogrenciler = cozulmusSetup.ogrenciler;
+              }
+              kaydetYerelDepoya();
             }
           } catch (err) {
             console.warn('Setup QR parametresi çözülemedi:', err.message);
           }
+        }
+
+        if (location.hash && location.hash.startsWith('#pc-aktar=')) {
+          const kod = decodeURIComponent(location.hash.slice('#pc-aktar='.length)).trim();
+          const kodInput = document.getElementById('mobil-pc-oturum-kodu');
+          if (kodInput && kod) kodInput.value = kod;
+          setTimeout(() => {
+            const sekmeBtn = document.querySelector('[data-msekme="m-panel-anahtar"]');
+            if (sekmeBtn) sekmeBtn.click();
+            const kutu = document.getElementById('kutu-mobil-ogr-qr-bilgisayara');
+            if (kutu) kutu.style.display = 'block';
+            cizMobilOgrenciQrBilgisayara();
+            if (kod && mobilDurum.ogrenciler.length > 0) {
+              gonderMobilOgrenciListesiBilgisayara(kod);
+            }
+          }, 120);
         }
 
         document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
@@ -483,8 +551,75 @@
           const mevcutHam = localStorage.getItem(DEPO_ANAHTAR);
           const mevcut = mevcutHam ? JSON.parse(mevcutHam) : {};
           mevcut.okumaSonuclari = mobilDurum.okumaSonuclari;
+          if (Array.isArray(mobilDurum.ogrenciler) && mobilDurum.ogrenciler.length > 0) {
+            mevcut.ogrenciler = mobilDurum.ogrenciler;
+          }
           localStorage.setItem(DEPO_ANAHTAR, JSON.stringify(mevcut));
         } catch (_) {}
+      }
+
+      function cizMobilOgrenciQrBilgisayara() {
+        const alan = document.getElementById('alan-mobil-ogr-qr-svg');
+        const bilgi = document.getElementById('etiket-mobil-qr-bilgi');
+        const parcaKutu = document.getElementById('kutu-mobil-qr-parcalar');
+        const parcaEtiket = document.getElementById('etiket-mobil-qr-parca');
+        if (!alan || !bilgi) return;
+
+        if (!Array.isArray(mobilDurum.ogrenciler) || mobilDurum.ogrenciler.length === 0) {
+          alan.innerHTML = '<div style="padding:1.2rem; font-size:0.78rem; color:#475569;">Telefonda henüz kayıtlı öğrenci yok. Önce "📂 Öğrenci CSV Yükle" ile listeyi yükleyin.</div>';
+          bilgi.textContent = '0 öğrenci kayıtlı.';
+          if (parcaKutu) parcaKutu.style.display = 'none';
+          return;
+        }
+
+        const taban = location.protocol.startsWith('http') ? location.origin : 'https://sinav.axonturk.workers.dev';
+        const paket = C.uretOgrenciQrPaketi(mobilDurum.ogrenciler, {
+          tabanAdres: taban,
+          hedefSayfa: 'index.html',
+          maksDilimBoyutu: 25
+        });
+        if (mobilQrParcaIdx >= paket.toplamParca) mobilQrParcaIdx = 0;
+        const aktifParca = paket.parcalar[mobilQrParcaIdx] || paket.parcalar[0];
+        const qrMetni = aktifParca ? (aktifParca.url.length <= 1600 ? aktifParca.url : aktifParca.kod) : paket.tekUrl;
+        const svg = uretMobilQrSvg(qrMetni, 210);
+
+        if (parcaKutu && parcaEtiket) {
+          if (paket.toplamParca > 1) {
+            parcaKutu.style.display = 'flex';
+            parcaEtiket.textContent = `Parça ${aktifParca.parcaNo} / ${paket.toplamParca} (${aktifParca.adet} Öğr.)`;
+          } else {
+            parcaKutu.style.display = 'none';
+          }
+        }
+
+        alan.innerHTML = svg || '<div style="color:#b91c1c; font-size:0.8rem;">QR üretilemedi. Kodu kopyalayın.</div>';
+        bilgi.textContent = `✅ ${paket.toplamOgrenci} öğrenci bilgisayara aktarılmaya hazır. Bilgisayar kamerasına gösterin, "📡 Bilgisayara Gönder"e dokunun veya QR paketi kopyalayın.`;
+      }
+
+      async function gonderMobilOgrenciListesiBilgisayara(oturumKoduGirdi) {
+        const bilgi = document.getElementById('etiket-mobil-qr-bilgi');
+        const kodInput = document.getElementById('mobil-pc-oturum-kodu');
+        const oturumKodu = (oturumKoduGirdi || (kodInput && kodInput.value) || 'VARSAYILAN').trim().toUpperCase();
+        if (!Array.isArray(mobilDurum.ogrenciler) || mobilDurum.ogrenciler.length === 0) {
+          if (bilgi) bilgi.textContent = '⚠️ Gönderilecek öğrenci listesi boş. Önce öğrenci CSV yükleyin.';
+          return;
+        }
+        try {
+          const y = await fetch('/api/ogrenci-qr-senkron', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oturumKodu, ogrenciler: mobilDurum.ogrenciler })
+          });
+          const v = await y.json();
+          if (y.ok && v && v.basarili) {
+            if (bilgi) bilgi.textContent = `✅ ${v.adet} öğrenci "${v.oturumKodu}" oturumuyla bilgisayara gönderildi!`;
+            bipCal(true);
+            return;
+          }
+          if (bilgi) bilgi.textContent = `⚠️ Sunucu yanıtı: ${(v && v.hata) || y.status}. QR kodunu bilgisayar kamerasına okutabilir veya paketi kopyalayabilirsiniz.`;
+        } catch (_) {
+          if (bilgi) bilgi.textContent = 'ℹ️ Çevrimdışı mod: Yukarıdaki QR kodunu bilgisayar kamerasına okutun veya "📋 QR Paketi Kopyala" düğmesini kullanın.';
+        }
       }
 
       function bipCal(basarili = true) {
@@ -1040,12 +1175,58 @@
             const liste = C.cozOgrenciListesiCSV(String(reader.result));
             if (liste.length > 0) {
               mobilDurum.ogrenciler = liste;
+              kaydetYerelDepoya();
               document.getElementById('mobil-ogr-sayac').textContent = String(liste.length);
+              cizMobilOgrenciQrBilgisayara();
               bipCal(true);
             }
           };
           reader.readAsText(dosya, 'UTF-8');
         });
+
+        const btnMobilOgrQrBilgisayara = document.getElementById('btn-mobil-ogr-qr-bilgisayara');
+        if (btnMobilOgrQrBilgisayara) {
+          btnMobilOgrQrBilgisayara.addEventListener('click', () => {
+            const kutu = document.getElementById('kutu-mobil-ogr-qr-bilgisayara');
+            if (!kutu) return;
+            kutu.style.display = kutu.style.display === 'none' ? 'block' : 'none';
+            if (kutu.style.display === 'block') cizMobilOgrenciQrBilgisayara();
+          });
+        }
+
+        const btnMobilQrOnceki = document.getElementById('btn-mobil-qr-onceki');
+        if (btnMobilQrOnceki) {
+          btnMobilQrOnceki.addEventListener('click', () => {
+            mobilQrParcaIdx = Math.max(0, mobilQrParcaIdx - 1);
+            cizMobilOgrenciQrBilgisayara();
+          });
+        }
+
+        const btnMobilQrSonraki = document.getElementById('btn-mobil-qr-sonraki');
+        if (btnMobilQrSonraki) {
+          btnMobilQrSonraki.addEventListener('click', () => {
+            mobilQrParcaIdx += 1;
+            cizMobilOgrenciQrBilgisayara();
+          });
+        }
+
+        const btnMobilPcAgGonder = document.getElementById('btn-mobil-pc-ag-gonder');
+        if (btnMobilPcAgGonder) {
+          btnMobilPcAgGonder.addEventListener('click', () => gonderMobilOgrenciListesiBilgisayara());
+        }
+
+        const btnMobilQrKodKopyala = document.getElementById('btn-mobil-qr-kod-kopyala');
+        if (btnMobilQrKodKopyala) {
+          btnMobilQrKodKopyala.addEventListener('click', () => {
+            const taban = location.protocol.startsWith('http') ? location.origin : 'https://sinav.axonturk.workers.dev';
+            const paket = C.uretOgrenciQrPaketi(mobilDurum.ogrenciler, { tabanAdres: taban, hedefSayfa: 'index.html' });
+            const aktifParca = paket.parcalar[mobilQrParcaIdx] || paket.parcalar[0];
+            const kopyalanacak = (aktifParca && aktifParca.kod) || paket.tekUrl || '';
+            if (navigator.clipboard && kopyalanacak) navigator.clipboard.writeText(kopyalanacak);
+            const bilgi = document.getElementById('etiket-mobil-qr-bilgi');
+            if (bilgi) bilgi.textContent = '📋 Öğrenci QR paketi panoya kopyalandı; bilgisayarda "Yöntem 3" kutusuna yapıştırabilirsiniz.';
+          });
+        }
 
         document.getElementById('btn-mobil-obs-csv').addEventListener('click', () => {
           const csv = C.uretResmiObsNotCizelgesiCSV(mobilDurum.ogrenciler, mobilDurum.okumaSonuclari);

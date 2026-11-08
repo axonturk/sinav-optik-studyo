@@ -161,6 +161,68 @@ function istekIsleyici(req, res) {
     return gonderJson(res, 200, { adresler: ipler.map((ip) => `http://${ip}:${port}`) });
   }
 
+  // 0a-QR. Telefondan -> Bilgisayara Öğrenci Listesi QR / Ağ Senkronizasyon Köprüsü
+  if (yol === '/api/ogrenci-qr-senkron') {
+    if (!sunucuDurumu.ogrenciQrKuyrugu) {
+      sunucuDurumu.ogrenciQrKuyrugu = new Map();
+    }
+    if (req.method === 'POST') {
+      okuJsonGovde(req, 524288)
+        .then((govde) => {
+          const oturumKodu = String((govde && govde.oturumKodu) || 'GENEL').trim().toUpperCase() || 'GENEL';
+          let ogrenciler = [];
+          if (Array.isArray(govde && govde.ogrenciler)) {
+            ogrenciler = govde.ogrenciler
+              .filter((o) => o && String(o.ogrNo || '').trim() && String(o.adSoyad || '').trim())
+              .map((o) => ({
+                ogrNo: String(o.ogrNo).trim(),
+                adSoyad: String(o.adSoyad).trim(),
+                bolum: String(o.bolum || 'Genel').trim()
+              }));
+          } else if (govde && govde.paket) {
+            const cozum = Cekirdek.cozOgrenciQrPaketi(String(govde.paket));
+            if (cozum.gecerli) ogrenciler = cozum.ogrenciler;
+          }
+          if (ogrenciler.length === 0) {
+            return gonderJson(res, 400, { hata: 'Aktarılacak geçerli öğrenci listesi bulunamadı.' });
+          }
+          const kayit = {
+            oturumKodu,
+            ogrenciler,
+            ogrenciSayisi: ogrenciler.length,
+            zamanMs: Date.now()
+          };
+          sunucuDurumu.ogrenciQrKuyrugu.set(oturumKodu, kayit);
+          sunucuDurumu.ogrenciQrKuyrugu.set('GENEL', kayit);
+          ogrenciler.forEach((o) => {
+            sunucuDurumu.kayitliOgrenciler.set(o.ogrNo, o);
+          });
+          return gonderJson(res, 200, {
+            basarili: true,
+            oturumKodu,
+            aktarilanSayi: ogrenciler.length
+          });
+        })
+        .catch((err) => gonderJson(res, 400, { hata: err.message }));
+      return;
+    }
+    if (req.method === 'GET') {
+      const oturumKodu = String(urlNesne.searchParams.get('oturum') || 'GENEL').trim().toUpperCase() || 'GENEL';
+      const tuket = urlNesne.searchParams.get('tuket') === '1';
+      const kayit = sunucuDurumu.ogrenciQrKuyrugu.get(oturumKodu) || sunucuDurumu.ogrenciQrKuyrugu.get('GENEL') || null;
+      if (kayit && tuket) {
+        sunucuDurumu.ogrenciQrKuyrugu.delete(oturumKodu);
+        if (oturumKodu !== 'GENEL') sunucuDurumu.ogrenciQrKuyrugu.delete('GENEL');
+      }
+      return gonderJson(res, 200, {
+        varMi: Boolean(kayit && Array.isArray(kayit.ogrenciler) && kayit.ogrenciler.length > 0),
+        oturumKodu,
+        ogrenciler: kayit ? kayit.ogrenciler : [],
+        zamanMs: kayit ? kayit.zamanMs : 0
+      });
+    }
+  }
+
   // 0. Öğretmen / Öğretim Elemanı (Hoca) Kullanıcı Adı & Şifre Giriş Doğrulaması
   if (req.method === 'POST' && yol === '/api/hoca-giris') {
     okuJsonGovde(req)

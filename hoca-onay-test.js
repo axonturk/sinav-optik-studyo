@@ -533,6 +533,132 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
     'UI Sınav Kağıdı ÖÇ Görünümü: 5 maddelik ÖÇ kaydedildi; A4 kağıtta hem sayfa başında ÖÇ listesi hem de soru sonunda [ÖÇ-X] etiketi görüntülendi'
   );
 
+  // 7. Seçmeli Evrak Şablonu: MÜHENDİSLİK FAKÜLTESİ ve FRM-059 dayatması kaldırıldı; Okul (Üst Başlık) ve Bölüm ayrıldı; Şablon Kaydet kalıcı
+  await sayfa.click('[data-sekme="sekme-stüdyo"]');
+  await new Promise((r) => setTimeout(r, 150));
+  await sayfa.evaluate(() => {
+    const tur = document.getElementById('baski-kapsam-sec');
+    tur.value = 'yoklama';
+    tur.dispatchEvent(new Event('change'));
+    const f = document.getElementById('tut-fakulte');
+    const b = document.getElementById('tut-bolum');
+    f.value = 'KIRIKHAN MESLEK YÜKSEKOKULU';
+    b.value = 'Bilgisayar Teknolojileri Bölümü';
+    f.dispatchEvent(new Event('input'));
+    b.dispatchEvent(new Event('input'));
+  });
+  await new Promise((r) => setTimeout(r, 320));
+
+  const sadeYoklamaKontrol = await sayfa.evaluate(() => {
+    const metin = (document.getElementById('a4-onizleme-sahne').textContent || '') + ' ' + (document.getElementById('baski-mini-onizleme').textContent || '');
+    const kunyeModu = document.getElementById('tut-kunye-modu').value;
+    return {
+      kunyeModu,
+      muhendislikVarMi: metin.includes('MÜHENDİSLİK FAKÜLTESİ'),
+      frm059VarMi: metin.includes('FRM-059') || metin.includes('Doküman No.'),
+      okulUstBaslikVarMi: metin.includes('KIRIKHAN MESLEK YÜKSEKOKULU'),
+      bolumHucresiVarMi: metin.includes('Bilgisayar Teknolojileri Bölümü')
+    };
+  });
+  kontrol(
+    sadeYoklamaKontrol.kunyeModu === 'sade' &&
+      !sadeYoklamaKontrol.muhendislikVarMi &&
+      !sadeYoklamaKontrol.frm059VarMi &&
+      sadeYoklamaKontrol.okulUstBaslikVarMi &&
+      sadeYoklamaKontrol.bolumHucresiVarMi,
+    'UI Yoklama Evrakı (Sade Şablon): Sabit MÜHENDİSLİK FAKÜLTESİ ve FRM-059 kaldırıldı; üstte Okul/MYO, BÖLÜMÜ hücresinde Bölüm adı göründü'
+  );
+
+  // Seçmeli Belge No / Kalite Künyesi moduna geç, özel belge no gir ve Şablon Yapısını Kaydet
+  await sayfa.evaluate(() => {
+    const km = document.getElementById('tut-kunye-modu');
+    km.value = 'kunyeli';
+    km.dispatchEvent(new Event('change'));
+    const dNo = document.getElementById('tut-dokuman-no-yoklama');
+    dNo.value = 'KMYO-YOK-2026';
+    dNo.dispatchEvent(new Event('input'));
+  });
+  await sayfa.click('#btn-evrak-sablon-kaydet');
+  await new Promise((r) => setTimeout(r, 320));
+
+  const kunyeliKayitKontrol = await sayfa.evaluate(() => {
+    const metin = (document.getElementById('a4-onizleme-sahne').textContent || '') + ' ' + (document.getElementById('baski-mini-onizleme').textContent || '');
+    const depo = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+    return {
+      ozelBelgeNoGorundu: metin.includes('KMYO-YOK-2026'),
+      kayitliSablon: depo.evrakSablonu || null
+    };
+  });
+  kontrol(
+    kunyeliKayitKontrol.ozelBelgeNoGorundu &&
+      kunyeliKayitKontrol.kayitliSablon &&
+      kunyeliKayitKontrol.kayitliSablon.fakulte === 'KIRIKHAN MESLEK YÜKSEKOKULU' &&
+      kunyeliKayitKontrol.kayitliSablon.dokumanNoYoklama === 'KMYO-YOK-2026',
+    'UI Seçmeli Künye & Şablon Kaydet: Kullanıcı özel Belge No (KMYO-YOK-2026) düzenledi ve varsayılan şablon olarak kalıcı kaydedildi'
+  );
+
+  // 8. Telefon Kurulum QR (#kutu-telefon-qr) Vektör SVG ve Kompakt #setup= Doğrulaması
+  await sayfa.click('#btn-telefon-qr-goster');
+  await new Promise((r) => setTimeout(r, 200));
+
+  const kurulumQrBilgi = await sayfa.evaluate(() => {
+    const svg = document.querySelector('#alan-setup-qr-svg svg');
+    const url = (document.getElementById('link-qr-dogrudan-ac') || {}).href || '';
+    return {
+      svgVar: Boolean(svg),
+      viewBoxVar: Boolean(svg && svg.getAttribute('viewBox')),
+      kompaktUrlMi: url.includes('#setup='),
+      urlUzunluk: url.length
+    };
+  });
+  kontrol(
+    kurulumQrBilgi.svgVar &&
+      kurulumQrBilgi.viewBoxVar &&
+      kurulumQrBilgi.kompaktUrlMi &&
+      kurulumQrBilgi.urlUzunluk < 950,
+    'UI Telefon Kurulum QR: Vektör SVG (viewBox) üretildi ve #setup= kompakt paket ile QR taşması önlendi'
+  );
+
+  // 9. Öğrenci Listesini QR ile Bilgisayara Aktarma (#modal-ogrenci-qr) Testi
+  await sayfa.click('#btn-cikti-merkezi-ogr-qr');
+  await new Promise((r) => setTimeout(r, 200));
+
+  const pcQrModalBilgi = await sayfa.evaluate(() => {
+    const modalAcik = document.getElementById('modal-ogrenci-qr').style.display === 'flex';
+    const pcPanelAcik = document.getElementById('panel-qr-bilgisayara').style.display !== 'none';
+    const eslestirmeSvg = Boolean(document.querySelector('#alan-pc-eslesme-qr-svg svg'));
+    const oturumKodu = (document.getElementById('rozet-pc-eslesme-kod') || {}).textContent.trim();
+    return { modalAcik, pcPanelAcik, eslestirmeSvg, oturumKodu };
+  });
+
+  // QR paketini yapıştırıp Bilgisayara Aktar düğmesine tıkla
+  await sayfa.evaluate(() => {
+    const C = window.SinavOptikCekirdek;
+    const paket = C.uretOgrenciQrPaketi([
+      { ogrNo: '2026550011', adSoyad: 'Elif Karaca' },
+      { ogrNo: '2026550022', adSoyad: 'Burak Şahin' },
+      { ogrNo: '2026550033', adSoyad: 'Selin Aydın' }
+    ]);
+    document.getElementById('girdi-pc-qr-paket').value = paket.parcalar[0].paketKodu;
+  });
+  await sayfa.click('#btn-pc-qr-paket-aktar');
+  await new Promise((r) => setTimeout(r, 200));
+
+  const pcAktarimSonuc = await sayfa.evaluate(() => {
+    return {
+      tabloMetin: document.getElementById('tablo-ogrenci-listesi').textContent || ''
+    };
+  });
+  kontrol(
+    pcQrModalBilgi.modalAcik &&
+      pcQrModalBilgi.pcPanelAcik &&
+      pcQrModalBilgi.eslestirmeSvg &&
+      pcQrModalBilgi.oturumKodu.length >= 4 &&
+      pcAktarimSonuc.tabloMetin.includes('Elif Karaca') &&
+      pcAktarimSonuc.tabloMetin.includes('Burak Şahin'),
+    'UI Öğrenci Listesini QR ile Bilgisayara Aktar: Eşleştirme QR üretildi ve QR öğrenci paketi bilgisayardaki derse başarıyla aktarıldı'
+  );
+
   await tarayici.close();
   sunucu.close();
   console.log(`\n🎉 TÜM HOCA DAVET KODU, YÖNETİCİ ONAY, SERT KİOSK VE DELİL LOG TESTLERİ GEÇTİ (${gecen}/${gecen})`);

@@ -441,30 +441,30 @@
 
             <div class="form-satir">
               <div>
-                <label class="etiket" for="kalite-form-tipi">Kurumsal Kalite Formu Standardı</label>
+                <label class="etiket" for="kalite-form-tipi">Kurumsal Antet &amp; Seçmeli Kalite Künyesi Yapısı</label>
                 <select id="kalite-form-tipi">
-                  <option value="iso9001" selected>🏛️ ISO 9001 / YÖKAK Üniversite Kalite Formu (Doküman/Revizyon Künyeli)</option>
+                  <option value="standart" selected>⚡ Sade Kurumsal Antet (Belge No / Kalite Künyesi Yok — Varsayılan)</option>
+                  <option value="iso9001">🏛️ ISO 9001 / YÖKAK Kalite Künyeli Form (Seçmeli: Doküman No &amp; Revizyon Kutulu)</option>
                   <option value="mudek">🎓 MÜDEK / Bologna Akreditasyon Formu (Kalite Künyesi + ÖÇ Puan Tablolu)</option>
                   <option value="meb">🏫 MEB TKY / OKYS Standart Yazılı Formu (Not Kutulu + Zümre/Müdür Onaylı)</option>
-                  <option value="standart">⚡ Kompakt Akademik Antet (Maksimum Soru Alanı)</option>
                   <option value="ozel-banner">📄 Yüklenen Hazır Okul PDF / Form Anteti (Mükerrer Başlıklar Gizlenir)</option>
                 </select>
               </div>
             </div>
 
-            <!-- ISO 9001 / YÖKAK / MEB Kalite Künyesi Alanları -->
-            <div id="alan-kalite-kunye" class="form-satir">
+            <!-- ISO 9001 / YÖKAK / MEB Seçmeli Kalite Künyesi Alanları -->
+            <div id="alan-kalite-kunye" class="form-satir" style="display:none;">
               <div>
-                <label class="etiket" for="kalite-dokuman-no">Doküman No</label>
-                <input type="text" id="kalite-dokuman-no" value="BLM-FRM-004" />
+                <label class="etiket" for="kalite-dokuman-no">Doküman / Belge No (Seçmeli)</label>
+                <input type="text" id="kalite-dokuman-no" value="" placeholder="Örn: FRM-004 (İsteğe bağlı)" />
               </div>
               <div>
                 <label class="etiket" for="kalite-yayin-tarihi">İlk Yayın Tarihi</label>
-                <input type="text" id="kalite-yayin-tarihi" value="15.09.2022" />
+                <input type="text" id="kalite-yayin-tarihi" value="" placeholder="Örn: 15.09.2026" />
               </div>
               <div>
                 <label class="etiket" for="kalite-revizyon">Revizyon No / Tarihi</label>
-                <input type="text" id="kalite-revizyon" value="Rev.02 / 01.09.2026" />
+                <input type="text" id="kalite-revizyon" value="" placeholder="Örn: Rev.01" />
               </div>
             </div>
 
@@ -487,8 +487,8 @@
             </div>
 
             <div class="form-grup">
-              <label class="etiket" for="antet-kurum">Üniversite / Okul / Kurum Adı</label>
-              <input type="text" id="antet-kurum" value="T.C. TEKNOLOJİ ÜNİVERSİTESİ — MÜHENDİSLİK FAKÜLTESİ" />
+              <label class="etiket" for="antet-kurum">Üniversite / Yüksekokul / Okul Adı (Üst Başlık)</label>
+              <input type="text" id="antet-kurum" value="KIRIKHAN MESLEK YÜKSEKOKULU" placeholder="Örn: Hatay Mustafa Kemal Üniversitesi — Kırıkhan Meslek Yüksekokulu" />
             </div>
             <div class="form-satir">
               <div>
@@ -507,8 +507,13 @@
               </div>
               <div>
                 <label class="etiket" for="antet-hoca">Öğretim Elemanı / Öğretmen</label>
-                <input type="text" id="antet-hoca" value="Dr. Öğr. Üyesi Fatih Çakmak" />
+                <input type="text" id="antet-hoca" value="Öğr. Gör. Fatih Akman ÇAKMAK" />
               </div>
+            </div>
+            <div style="margin-top:0.45rem; display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+              <button type="button" class="btn btn-basari btn-kucuk" id="btn-antet-sablon-kaydet" style="width:100%;">
+                💾 Okul &amp; Şablon Yapısını Varsayılan Olarak Kaydet (Her Seferinde Bilgi Girmeyin)
+              </button>
             </div>
           </div>
 
@@ -586,7 +591,70 @@
             </div>
 
             <!-- 3) Yalnız tutanak / yoklama seçilince görünür -->
-            <div id="panel-tutanak" style="display:none; margin-bottom:0.5rem; padding:0.6rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:var(--radius-kucuk);">
+            <div id="panel-tutanak" style="display:none; margin-bottom:0.5rem; padding:0.65rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:var(--radius-kucuk);">
+              <!-- Kayıtlı Şablon Seçici ve Kaydetme Çubuğu -->
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:0.45rem; flex-wrap:wrap; padding-bottom:0.45rem; margin-bottom:0.45rem; border-bottom:1px dashed var(--kenar);">
+                <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; flex:1;">
+                  <label class="etiket" for="tut-sablon-sec" style="margin:0; white-space:nowrap;">📂 Evrak Şablon Yapısı:</label>
+                  <select id="tut-sablon-sec" style="width:auto; min-width:220px; font-weight:700;">
+                    <option value="kayitli" selected>⭐ Kayıtlı Varsayılan Şablonum</option>
+                    <option value="sade">⚡ Sade Resmi Evrak (Belge No / Kalite Künyesi Yok)</option>
+                    <option value="kunyeli">🏛️ Seçmeli Belge No / Kalite Künyeli Evrak</option>
+                  </select>
+                  <span id="etiket-evrak-sablon-durum" style="font-size:0.74rem; color:var(--basari); font-weight:700;"></span>
+                </div>
+                <button type="button" class="btn btn-basari btn-kucuk" id="btn-evrak-sablon-kaydet" title="Okul/MYO, Bölüm, Sorumlu ve Belge No künye tercihini kaydeder; her seferinde tekrar bilgi girmezsiniz">
+                  💾 Şablon Yapısını Kaydet
+                </button>
+              </div>
+
+              <!-- Okul / Fakülte / MYO (Üst Başlık), Bölüm, Sorumlu ve Seçmeli Künye Modu -->
+              <div class="form-satir" style="margin-bottom:0.4rem;">
+                <div>
+                  <label class="etiket" for="tut-fakulte">Okul / Fakülte / MYO (Üst Başlık)</label>
+                  <input type="text" id="tut-fakulte" value="" placeholder="Örn: KIRIKHAN MESLEK YÜKSEKOKULU" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-bolum">Bölümü / Programı</label>
+                  <input type="text" id="tut-bolum" value="" placeholder="Örn: Bilgisayar Teknolojileri Bölümü" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-sorumlu">Dersin Sorumlusu</label>
+                  <input type="text" id="tut-sorumlu" value="" placeholder="Örn: Öğr. Gör. Fatih Akman ÇAKMAK" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-kunye-modu">Belge No / Kalite Künyesi (Seçmeli)</label>
+                  <select id="tut-kunye-modu">
+                    <option value="sade" selected>⚡ Künye Yok (Sade Başlık)</option>
+                    <option value="kunyeli">🏛️ Belge No / Kalite Künyesi Göster (Düzenlenebilir)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Seçmeli Kalite / Belge No Künyesi Alanları (Yalnız kunyeli seçildiğinde açılır ve düzenlenebilir) -->
+              <div id="alan-tut-kunye-detay" class="form-satir" style="display:none; margin-bottom:0.4rem; padding:0.45rem; background:var(--bg-kart); border:1px dashed var(--birincil); border-radius:6px;">
+                <div>
+                  <label class="etiket" for="tut-dokuman-no-durum">Tutanak Doküman / Belge No</label>
+                  <input type="text" id="tut-dokuman-no-durum" value="FRM-046" placeholder="Örn: FRM-046" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-dokuman-no-yoklama">Yoklama Doküman / Belge No</label>
+                  <input type="text" id="tut-dokuman-no-yoklama" value="FRM-059" placeholder="Örn: FRM-059" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-yayin-tarihi">İlk Yayın Tarihi</label>
+                  <input type="text" id="tut-yayin-tarihi" value="30.01.2023" placeholder="Örn: 30.01.2023" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-rev-tarihi">Revizyon Tarihi</label>
+                  <input type="text" id="tut-rev-tarihi" value="-" placeholder="Örn: -" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-rev-no">Revizyon No</label>
+                  <input type="text" id="tut-rev-no" value="-" placeholder="Örn: -" />
+                </div>
+              </div>
+
               <div class="form-satir" style="margin-bottom:0.4rem;">
                 <div>
                   <label class="etiket" for="tut-sinav-turu">Sınav türü</label>
@@ -617,7 +685,7 @@
                 <button type="button" class="btn btn-kucuk" id="btn-salon-duzenle">🏫 Salon &amp; kontenjanları düzenle</button>
               </div>
               <details>
-                <summary style="cursor:pointer; font-size:0.8rem; font-weight:700;">Diğer ayarlar (gözetmen, durum, fakülte, kalite künyesi)</summary>
+                <summary style="cursor:pointer; font-size:0.8rem; font-weight:700;">Gözetmenler &amp; Sınav Durumu Seçenekleri</summary>
                 <div class="form-satir" style="margin-top:0.4rem;">
                   <div>
                     <label class="etiket" for="tut-gozetmen1">Gözetmen 1 (salonda tanımlı değilse)</label>
@@ -635,28 +703,6 @@
                       <option value="bos">☐ Boş bırak (elle işaretlenecek)</option>
                     </select>
                   </div>
-                  <div>
-                    <label class="etiket" for="tut-fakulte">Fakülte / Yüksekokul</label>
-                    <input type="text" id="tut-fakulte" value="MÜHENDİSLİK FAKÜLTESİ" />
-                  </div>
-                </div>
-                <div class="form-satir">
-                  <div>
-                    <label class="etiket" for="tut-dokuman-no-durum">Tutanak doküman no</label>
-                    <input type="text" id="tut-dokuman-no-durum" value="FRM-046" />
-                  </div>
-                  <div>
-                    <label class="etiket" for="tut-dokuman-no-yoklama">Yoklama doküman no</label>
-                    <input type="text" id="tut-dokuman-no-yoklama" value="FRM-059" />
-                  </div>
-                  <div>
-                    <label class="etiket" for="tut-yayin-tarihi">İlk yayın tarihi</label>
-                    <input type="text" id="tut-yayin-tarihi" value="30.01.2023" />
-                  </div>
-                  <div>
-                    <label class="etiket" for="tut-rev-no">Revizyon</label>
-                    <input type="text" id="tut-rev-no" value="-" />
-                  </div>
                 </div>
               </details>
             </div>
@@ -665,6 +711,7 @@
             <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; padding-top:0.5rem; border-top:1px dashed var(--kenar);">
               <button type="button" class="btn btn-birincil" id="btn-secili-baski-calistir" title="Seçtiğiniz belgeyi seçtiğiniz formatta indirir veya yazdırır">🚀 Çıktıyı Al</button>
               <button type="button" class="btn btn-uyari btn-kucuk" id="btn-telefon-qr-goster">📲 Telefon QR</button>
+              <button type="button" class="btn btn-mor btn-kucuk" id="btn-cikti-merkezi-ogr-qr" title="Öğrenci listesini QR ile telefona veya telefondan bilgisayara aktar">🔄 Öğrenci Listesi QR Aktar</button>
               <details style="margin-left:auto;">
                 <summary style="cursor:pointer; font-size:0.78rem; font-weight:700;">Kısayollar</summary>
                 <div style="display:flex; gap:0.35rem; flex-wrap:wrap; margin-top:0.4rem;">
@@ -691,18 +738,25 @@
             <!-- Telefon Kurulum QR Açılır Kutusu -->
             <div id="kutu-telefon-qr" style="display:none; margin-top:0.85rem; padding:0.85rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:var(--radius-kucuk);">
               <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
-                <div id="alan-setup-qr-svg" style="background:#fff; padding:8px; border:1px solid #000; border-radius:6px;"></div>
+                <div id="alan-setup-qr-svg" style="background:#fff; padding:10px; border:1px solid #000; border-radius:6px; min-width:200px; min-height:200px; display:flex; align-items:center; justify-content:center;"></div>
                 <div style="flex:1; min-width:240px;">
                   <h4 style="margin-bottom:0.3rem;">📲 Cep Telefonu Optik Okuyucu Sıfır-Ayar Kurulumu</h4>
-                  <p style="font-size:0.83rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">
-                    Bu sınavın <strong>A/B/C/D cevap anahtarları</strong>, <strong>Doğru/Yanlış + Test + Klasik soru sayıları</strong> ve <strong>Öğrenci No eşleşme tablosu</strong> aşağıdaki bağlantıda mühürlenmiştir. Telefonunuzdan açtığınızda internet olmasa bile anında okuma yapar:
+                  <p style="font-size:0.82rem; color:var(--metin-ikincil); margin-bottom:0.45rem;">
+                    Bu sınavın <strong>A/B/C/D cevap anahtarları</strong> ve <strong>Doğru/Yanlış + Test + Klasik soru sayıları</strong> kompakt QR paketi olarak mühürlenmiştir:
                   </p>
-                  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                  <div class="form-grup" style="margin-bottom:0.45rem;">
+                    <label class="etiket" for="setup-qr-taban-adres">Telefonun erişeceği sunucu / bulut adresi</label>
+                    <input type="text" id="setup-qr-taban-adres" placeholder="https://sinav.axonturk.workers.dev" />
+                  </div>
+                  <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
                     <a href="optik-mobil.html" target="_blank" class="btn btn-birincil btn-kucuk" id="link-qr-dogrudan-ac">
                       🚀 Kurulumlu Mobil Okuyucuyu Aç
                     </a>
                     <button type="button" class="btn btn-kucuk" id="btn-setup-kod-kopyala">
                       📋 Kurulum Bağlantısını Kopyala
+                    </button>
+                    <button type="button" class="btn btn-mor btn-kucuk" id="btn-setup-kutu-ogr-qr-ac">
+                      🔄 Öğrenci Listesini QR ile Aktar (Telefon ↔ Bilgisayar)
                     </button>
                   </div>
                 </div>
@@ -1355,6 +1409,9 @@
               <button type="button" class="btn btn-basari" id="btn-toplu-ogrenci-ekle" style="flex:1;">
                 📋 Metindeki Listeyi Aktar
               </button>
+              <button type="button" class="btn btn-birincil" id="btn-ogrenci-bilgisayara-aktar" style="flex:1;">
+                💻 Öğrenci Listesini QR ile Bilgisayara Aktar
+              </button>
               <button type="button" class="btn btn-mor" id="btn-ogrenci-telefona-aktar" style="flex:1;">
                 📲 Öğrenci Listesini Telefona Aktar
               </button>
@@ -1838,12 +1895,16 @@
       </div>
       <div class="form-satir">
         <div>
-          <label class="etiket" for="yeni-ders-bolum">Fakülte / Okul / Bölüm</label>
-          <input type="text" id="yeni-ders-bolum" placeholder="Örn: Mühendislik Fakültesi" />
+          <label class="etiket" for="yeni-ders-fakulte">Okul / Fakülte / MYO (Evrak Üst Başlığı)</label>
+          <input type="text" id="yeni-ders-fakulte" placeholder="Örn: Kırıkhan Meslek Yüksekokulu" />
+        </div>
+        <div>
+          <label class="etiket" for="yeni-ders-bolum">Bölümü / Programı (BÖLÜMÜ Hücresi)</label>
+          <input type="text" id="yeni-ders-bolum" placeholder="Örn: Bilgisayar Teknolojileri Bölümü" />
         </div>
         <div>
           <label class="etiket" for="yeni-ders-hoca">Öğretim Elemanı / Öğretmen</label>
-          <input type="text" id="yeni-ders-hoca" placeholder="Örn: Doç. Dr. Öğretim Elemanı" />
+          <input type="text" id="yeni-ders-hoca" placeholder="Örn: Öğr. Gör. Fatih Akman ÇAKMAK" />
         </div>
       </div>
 
@@ -2174,19 +2235,101 @@
     </div>
   </div>
 
-  <!-- ÖĞRENCİ LİSTESİNİ TELEFONA AKTARAN GERÇEK QR MODALI -->
-  <div id="modal-ogrenci-qr" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:230; align-items:center; justify-content:center; padding:1rem;">
-    <div class="kart" style="width:100%; max-width:440px; margin:0; text-align:center;">
+  <!-- ÖĞRENCİ LİSTESİNİ ÇİFT YÖNLÜ (TELEFONDAN BİLGİSAYARA & BİLGİSAYARDAN TELEFONA) AKTARAN GERÇEK QR MODALI -->
+  <div id="modal-ogrenci-qr" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.75); z-index:230; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
+    <div class="kart" style="width:100%; max-width:620px; margin:auto; max-height:92vh; overflow-y:auto;">
       <div class="kart-baslik">
-        <span>📲 Öğrenci Listesini Telefona Aktar (QR)</span>
+        <span>🔄 Öğrenci Listesi QR Aktarımı (Bilgisayara ↔ Telefona)</span>
         <button type="button" class="btn btn-kucuk" id="btn-modal-ogrenci-qr-kapat">✕</button>
       </div>
-      <div class="form-grup" style="text-align:left;">
-        <label class="etiket" for="ogrenci-qr-taban-adres">Telefonun erişeceği adres (aynı Wi-Fi'deki bilgisayar IP'si)</label>
-        <input type="text" id="ogrenci-qr-taban-adres" placeholder="http://192.168.1.20:3000" />
+
+      <!-- Yön Seçici Sekmeler -->
+      <div style="display:flex; gap:0.45rem; padding:0.35rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.65rem;">
+        <button type="button" class="btn btn-birincil btn-kucuk" id="btn-qr-mod-bilgisayara" style="flex:1; font-weight:800;">
+          💻 Telefondan / QR'dan Bilgisayara Aktar
+        </button>
+        <button type="button" class="btn btn-kucuk" id="btn-qr-mod-telefona" style="flex:1; font-weight:800;">
+          📲 Bilgisayardan Telefona Aktar
+        </button>
       </div>
-      <div id="alan-ogrenci-qr-svg" style="background:#fff; padding:10px; border:1px solid #000; border-radius:6px; display:inline-block;"></div>
-      <div id="etiket-ogrenci-qr-bilgi" style="font-size:0.78rem; margin-top:0.5rem;"></div>
+
+      <!-- MOD 1: TELEFONDAN / QR'DAN BİLGİSAYARA ÖĞRENCİ LİSTESİ AKTARMA -->
+      <div id="panel-qr-bilgisayara">
+        <div style="padding:0.65rem 0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.65rem;">
+          <div style="font-weight:800; font-size:0.84rem; color:var(--birincil); margin-bottom:0.35rem;">
+            📡 Yöntem 1: Telefonunuzdan Bu Eşleşme QR'ını Okutarak Listeyi Bilgisayara Gönderin
+          </div>
+          <div style="display:flex; gap:0.85rem; align-items:center; flex-wrap:wrap;">
+            <div id="alan-pc-eslesme-qr-svg" style="background:#fff; padding:8px; border:1px solid #000; border-radius:6px; min-width:165px; min-height:165px; display:flex; align-items:center; justify-content:center;"></div>
+            <div style="flex:1; min-width:220px; font-size:0.79rem; line-height:1.45;">
+              <p style="margin:0 0 0.4rem; color:var(--metin-ikincil);">
+                <strong>1.</strong> Telefon kameranızla yandaki QR kodu okutun (veya telefondaki <code>optik-mobil.html</code> ekranında <strong>"💻 Öğrenci Listesini QR ile Bilgisayara Aktar"</strong> düğmesine basın).<br />
+                <strong>2.</strong> Telefondaki öğrenci listesi <strong>otomatik olarak bu bilgisayara aktarılır</strong> ve aktif derse kaydedilir.
+              </p>
+              <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                <span class="rozet rozet-mavi mono" id="rozet-pc-eslesme-kod">Oturum: —</span>
+                <span id="etiket-pc-eslesme-durum" style="font-size:0.76rem; font-weight:700; color:var(--basari);">📡 Telefondan gelecek liste dinleniyor...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:0.65rem 0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.65rem;">
+          <div style="font-weight:800; font-size:0.84rem; color:var(--mor); margin-bottom:0.35rem;">
+            📷 Yöntem 2: Telefon Ekranındaki Öğrenci QR Kodunu Bilgisayar Kamerasına (Webcam) Gösterin veya Görsel Yükleyin
+          </div>
+          <div style="display:flex; gap:0.45rem; flex-wrap:wrap; margin-bottom:0.45rem;">
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-pc-qr-kamera-ac">
+              📷 Bilgisayar Kamerasını (Webcam) Aç ve QR Okut
+            </button>
+            <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-pc-qr-kamera-kapat" style="display:none;">
+              ⏹️ Kamerayı Kapat
+            </button>
+            <label class="btn btn-kucuk" style="cursor:pointer; margin:0;">
+              🖼️ QR Ekran Görüntüsü / Fotoğraf Seç
+              <input type="file" id="input-pc-qr-gorsel" accept="image/*" style="display:none;" />
+            </label>
+          </div>
+          <div id="kutu-pc-qr-kamera" style="display:none; background:#000; border-radius:6px; overflow:hidden; margin-bottom:0.4rem; text-align:center;">
+            <video id="video-pc-qr-kamera" autoplay playsinline muted style="width:100%; max-height:240px; display:block; margin:auto;"></video>
+          </div>
+        </div>
+
+        <div style="padding:0.65rem 0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px;">
+          <div style="font-weight:800; font-size:0.84rem; color:var(--metin-ana); margin-bottom:0.35rem;">
+            📋 Yöntem 3: Telefondan Kopyalanan QR Paket Kodunu / Bağlantıyı Yapıştırın
+          </div>
+          <textarea id="girdi-pc-qr-paket" rows="2" placeholder="OGR-QR|1/1|... veya https://...#ogr=... veya 2023104011;Ahmet Yılmaz" style="font-size:0.78rem; margin-bottom:0.4rem;"></textarea>
+          <button type="button" class="btn btn-basari btn-kucuk" id="btn-pc-qr-paket-aktar" style="width:100%;">
+            📥 QR Paketteki Öğrenci Listesini Bilgisayara Aktar ve Kaydet
+          </button>
+        </div>
+
+        <div id="etiket-pc-qr-aktarim-sonuc" style="font-size:0.8rem; font-weight:700; margin-top:0.5rem; text-align:center;"></div>
+      </div>
+
+      <!-- MOD 2: BİLGİSAYARDAN TELEFONA ÖĞRENCİ LİSTESİ AKTARMA -->
+      <div id="panel-qr-telefona" style="display:none; text-align:center;">
+        <div class="form-grup" style="text-align:left; margin-bottom:0.5rem;">
+          <label class="etiket" for="ogrenci-qr-taban-adres">Telefonun erişeceği sunucu / bulut adresi</label>
+          <input type="text" id="ogrenci-qr-taban-adres" placeholder="https://sinav.axonturk.workers.dev" />
+        </div>
+        <div id="alan-ogrenci-qr-svg" style="background:#fff; padding:12px; border:1px solid #000; border-radius:6px; display:inline-block; min-width:220px; min-height:220px;"></div>
+        <div id="kutu-ogrenci-qr-parcalar" style="display:none; justify-content:center; align-items:center; gap:0.5rem; margin-top:0.45rem;">
+          <button type="button" class="btn btn-kucuk" id="btn-ogr-qr-onceki">◀ Önceki Parça</button>
+          <span class="rozet rozet-mor mono" id="etiket-ogr-qr-parca">Parça 1 / 1</span>
+          <button type="button" class="btn btn-kucuk" id="btn-ogr-qr-sonraki">Sonraki Parça ▶</button>
+        </div>
+        <div id="etiket-ogrenci-qr-bilgi" style="font-size:0.78rem; margin-top:0.5rem;"></div>
+        <div style="display:flex; justify-content:center; gap:0.45rem; flex-wrap:wrap; margin-top:0.55rem;">
+          <a href="optik-mobil.html" target="_blank" class="btn btn-birincil btn-kucuk" id="link-ogrenci-qr-dogrudan-ac">
+            🚀 Öğrenci Listeli Mobil Okuyucuyu Aç
+          </a>
+          <button type="button" class="btn btn-kucuk" id="btn-ogrenci-qr-baglanti-kopyala">
+            📋 QR Bağlantısını / Paketi Kopyala
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

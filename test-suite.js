@@ -983,6 +983,107 @@ async function calistirTumTestler() {
     assert.strictEqual(belirtke.ocSatirlar.length, 5);
   });
 
+  // 15. Çift Yönlü Öğrenci QR Paketi (Bilgisayara/Telefona Aktarım), Kompakt Setup QR (#setup=) ve /api/ogrenci-qr-senkron Testi
+  await testEt('15. Çift yönlü öğrenci QR paketi (OGR-QR / #ogr=), kompakt #setup= QR ve /api/ogrenci-qr-senkron API', async () => {
+    const ornekOgrenciler = [
+      { ogrNo: '2025101011', adSoyad: 'Ahmet Yılmaz' },
+      { ogrNo: '2025101015', adSoyad: 'Zeynep Kaya' },
+      { ogrNo: '2025101042', adSoyad: 'Mehmet Demir' }
+    ];
+
+    // 15.1 Tek parça ve çok parçalı öğrenci QR paketi üretimi & çözümü
+    const qrPaket = Cekirdek.uretOgrenciQrPaketi(ornekOgrenciler, {
+      tabanAdres: 'https://sinav.axonturk.workers.dev'
+    });
+    assert.strictEqual(qrPaket.ogrenciSayisi, 3);
+    assert.strictEqual(qrPaket.toplamParca, 1);
+    assert.ok(qrPaket.urlTelefon.includes('#ogr='));
+
+    const cozulmusUrl = Cekirdek.cozOgrenciQrPaketi(qrPaket.urlTelefon);
+    assert.strictEqual(cozulmusUrl.gecerli, true);
+    assert.strictEqual(cozulmusUrl.ogrenciler.length, 3);
+    assert.strictEqual(cozulmusUrl.ogrenciler[0].ogrNo, '2025101011');
+    assert.strictEqual(cozulmusUrl.ogrenciler[1].adSoyad, 'Zeynep Kaya');
+
+    const cozulmusParca = Cekirdek.cozOgrenciQrPaketi(qrPaket.parcalar[0].paketKodu);
+    assert.strictEqual(cozulmusParca.gecerli, true);
+    assert.strictEqual(cozulmusParca.parcaNo, 1);
+    assert.strictEqual(cozulmusParca.toplamParca, 1);
+    assert.strictEqual(cozulmusParca.ogrenciler.length, 3);
+
+    // 15.2 Kompakt #setup= Kurulum QR Paketi (A/B/C/D 4 grup 10 D/Y + 10 Test taşmadan sıkıştırılmalı)
+    const tamSinavYapi = {
+      sinavKodu: 'SINAV-2026-VIZE',
+      dersAd: 'BİL304 - Ağ Güvenliği',
+      dySayisi: 10,
+      dySoruPuan: 3,
+      testSayisi: 10,
+      testSoruPuan: 7,
+      sikSayisi: 5,
+      klasikSayisi: 0,
+      klasikSoruPuan: 0,
+      kimlikModu: 'son2',
+      haneSayisi: 2,
+      cevapAnahtarlari: {
+        A: { dy: ['D', 'Y', 'D', 'Y', 'D', 'D', 'Y', 'D', 'Y', 'D'], test: ['A', 'B', 'C', 'D', 'E', 'A', 'B', 'C', 'D', 'E'] },
+        B: { dy: ['Y', 'D', 'D', 'Y', 'Y', 'D', 'D', 'Y', 'D', 'Y'], test: ['C', 'D', 'E', 'A', 'B', 'D', 'E', 'A', 'B', 'C'] },
+        C: { dy: ['D', 'D', 'Y', 'D', 'Y', 'Y', 'D', 'D', 'Y', 'D'], test: ['E', 'A', 'B', 'C', 'D', 'B', 'C', 'D', 'E', 'A'] },
+        D: { dy: ['Y', 'Y', 'D', 'D', 'Y', 'D', 'Y', 'D', 'D', 'Y'], test: ['B', 'C', 'D', 'E', 'A', 'E', 'A', 'B', 'C', 'D'] }
+      }
+    };
+
+    const kompaktSetup = Cekirdek.uretKompaktSetupQrPaketi(
+      tamSinavYapi,
+      ornekOgrenciler,
+      'https://sinav.axonturk.workers.dev'
+    );
+    assert.ok(kompaktSetup.tamUrl.includes('#setup='), 'Kompakt kurulum URL\'i #setup= içermelidir');
+    assert.ok(kompaktSetup.tamUrl.length < 950, `Kompakt kurulum URL'i QR taşmasını önlemek için 950 karakterden kısa olmalıdır (Bulunan: ${kompaktSetup.tamUrl.length})`);
+
+    const cozulmusSetup = Cekirdek.cozKompaktSetupQrPaketi(kompaktSetup.tamUrl);
+    assert.ok(cozulmusSetup && cozulmusSetup.cevapAnahtarlari, 'Kompakt setup paketi eksiksiz çözülmelidir');
+    assert.strictEqual(cozulmusSetup.dySayisi, 10);
+    assert.strictEqual(cozulmusSetup.testSayisi, 10);
+    assert.deepStrictEqual(
+      cozulmusSetup.cevapAnahtarlari.A.dy,
+      tamSinavYapi.cevapAnahtarlari.A.dy,
+      'A grubu D/Y cevap anahtarı birebir korunmalıdır'
+    );
+    assert.deepStrictEqual(
+      cozulmusSetup.cevapAnahtarlari.B.test,
+      tamSinavYapi.cevapAnahtarlari.B.test,
+      'B grubu Test cevap anahtarı birebir korunmalıdır'
+    );
+    assert.strictEqual(cozulmusSetup.ogrenciler.length, 3);
+
+    // 15.3 /api/ogrenci-qr-senkron (Telefondan Bilgisayara Canlı Öğrenci Listesi Aktarımı API)
+    const server = await baslatSunucu(0);
+    try {
+      const port = server.address().port;
+      const gonderYanit = await fetch(`http://127.0.0.1:${port}/api/ogrenci-qr-senkron`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          oturumKodu: 'KMYO99',
+          ogrenciler: ornekOgrenciler
+        })
+      });
+      assert.strictEqual(gonderYanit.status, 200);
+      const gonderJson = await gonderYanit.json();
+      assert.strictEqual(gonderJson.basarili, true);
+      assert.strictEqual(gonderJson.aktarilanSayi, 3);
+
+      const alYanit = await fetch(`http://127.0.0.1:${port}/api/ogrenci-qr-senkron?oturum=KMYO99&tuket=1`);
+      assert.strictEqual(alYanit.status, 200);
+      const alJson = await alYanit.json();
+      assert.strictEqual(alJson.varMi, true);
+      assert.strictEqual(alJson.ogrenciler.length, 3);
+      assert.strictEqual(alJson.ogrenciler[2].adSoyad, 'Mehmet Demir');
+    } finally {
+      server.close();
+    }
+  });
+
   console.log(`\n=== TÜM TESTLER BAŞARIYLA TAMAMLANDI (${gecen}/${gecen} GEÇTİ · 0 HATA) ===`);
 }
 

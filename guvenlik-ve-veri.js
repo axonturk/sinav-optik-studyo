@@ -4158,6 +4158,298 @@
     return liste;
   }
 
+  /* ------------------------------------------------------------------------
+     ÖĞRENCİ LİSTESİ ÇİFT YÖNLÜ QR PAKET ÜRETİCİ VE ÇÖZÜCÜ
+     (Telefondan -> Bilgisayara ve Bilgisayardan -> Telefona QR Aktarımı)
+     ------------------------------------------------------------------------ */
+  function utf8ToBase64Guvenli(metin) {
+    const dizge = String(metin || '');
+    if (typeof btoa === 'function') {
+      return btoa(unescape(encodeURIComponent(dizge)));
+    }
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(dizge, 'utf8').toString('base64');
+    }
+    return '';
+  }
+
+  function base64ToUtf8Guvenli(b64) {
+    const temiz = String(b64 || '').trim().replace(/\s+/g, '');
+    if (!temiz) return '';
+    if (typeof atob === 'function') {
+      return decodeURIComponent(escape(atob(temiz)));
+    }
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(temiz, 'base64').toString('utf8');
+    }
+    return '';
+  }
+
+  function uretOgrenciQrPaketi(ogrenciler = [], secenekler = {}) {
+    const temizListe = (Array.isArray(ogrenciler) ? ogrenciler : [])
+      .filter((o) => o && String(o.ogrNo || '').trim() && String(o.adSoyad || '').trim())
+      .map((o) => ({
+        ogrNo: String(o.ogrNo).trim().replace(/;/g, ''),
+        adSoyad: String(o.adSoyad).trim().replace(/;/g, ' '),
+        bolum: String(o.bolum || '').trim().replace(/;/g, ' ')
+      }));
+
+    const tabanAdres = String(secenekler.tabanAdres || '').trim().replace(/\/+$/, '');
+    const parcaBoyutu = Math.max(10, Math.min(60, parseInt(secenekler.parcaBoyutu, 10) || 30));
+
+    const satirKodla = (liste) =>
+      liste
+        .map((o) => (o.bolum && o.bolum !== 'Genel' ? `${o.ogrNo};${o.adSoyad};${o.bolum}` : `${o.ogrNo};${o.adSoyad}`))
+        .join('\n');
+
+    const tamMetin = satirKodla(temizListe);
+    const tamB64 = utf8ToBase64Guvenli(tamMetin);
+    const kodlanmisB64 = encodeURIComponent(tamB64);
+
+    const parcalar = [];
+    const toplamParca = Math.max(1, Math.ceil(temizListe.length / parcaBoyutu));
+    for (let i = 0; i < toplamParca; i++) {
+      const dilim = temizListe.slice(i * parcaBoyutu, (i + 1) * parcaBoyutu);
+      const dilimMetin = satirKodla(dilim);
+      const dilimB64 = utf8ToBase64Guvenli(dilimMetin);
+      const dilimKodlanmis = encodeURIComponent(dilimB64);
+      const parcaNo = i + 1;
+      const paketKodu = `OGR-QR|${parcaNo}/${toplamParca}|${dilimB64}`;
+      parcalar.push({
+        parcaNo,
+        toplamParca,
+        ogrenciSayisi: dilim.length,
+        b64: dilimB64,
+        paketKodu,
+        urlBilgisayar: `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${dilimKodlanmis}`,
+        urlTelefon: `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${dilimKodlanmis}`
+      });
+    }
+
+    return {
+      ogrenciSayisi: temizListe.length,
+      b64: tamB64,
+      paketKodu: `OGR-QR|1/1|${tamB64}`,
+      hashParam: `#ogr=${kodlanmisB64}`,
+      urlBilgisayar: `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${kodlanmisB64}`,
+      urlTelefon: `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${kodlanmisB64}`,
+      toplamParca,
+      parcalar
+    };
+  }
+
+  function cozOgrenciQrPaketi(girdiMetni = '') {
+    const ham = String(girdiMetni || '').trim();
+    if (!ham) {
+      return { gecerli: false, ogrenciler: [], parcaNo: 1, toplamParca: 1, hata: 'Boş QR verisi.' };
+    }
+
+    let parcaNo = 1;
+    let toplamParca = 1;
+    let b64Aday = '';
+    let duzMetinAday = '';
+
+    // 1. OGR-QR|p/t|<base64> veya OGR-QR|<base64> formatı
+    if (ham.startsWith('OGR-QR|')) {
+      const bolumler = ham.split('|');
+      if (bolumler.length >= 3 && /^\d+\/\d+$/.test(bolumler[1])) {
+        const [p, t] = bolumler[1].split('/').map((n) => parseInt(n, 10) || 1);
+        parcaNo = p;
+        toplamParca = t;
+        b64Aday = bolumler.slice(2).join('|').trim();
+      } else {
+        b64Aday = bolumler.slice(1).join('|').trim();
+      }
+    } else if (ham.includes('#ogr=')) {
+      // 2. Tam URL veya #ogr=<base64> hash formatı
+      const idx = ham.indexOf('#ogr=');
+      const parca = ham.slice(idx + 5).split('&')[0].trim();
+      try {
+        b64Aday = decodeURIComponent(parca);
+      } catch (_) {
+        b64Aday = parca;
+      }
+    } else if (ham.startsWith('ogr=')) {
+      const parca = ham.slice(4).split('&')[0].trim();
+      try {
+        b64Aday = decodeURIComponent(parca);
+      } catch (_) {
+        b64Aday = parca;
+      }
+    } else if (ham.includes(';') && /\d{3,}/.test(ham)) {
+      // 3. Doğrudan noktalı virgüllü öğrenci satırları
+      duzMetinAday = ham;
+    } else {
+      // 4. Doğrudan Base64 dizgesi
+      try {
+        b64Aday = decodeURIComponent(ham);
+      } catch (_) {
+        b64Aday = ham;
+      }
+    }
+
+    if (b64Aday && !duzMetinAday) {
+      try {
+        duzMetinAday = base64ToUtf8Guvenli(b64Aday);
+      } catch (_) {
+        duzMetinAday = '';
+      }
+    }
+
+    if (!duzMetinAday) {
+      return { gecerli: false, ogrenciler: [], parcaNo, toplamParca, hata: 'QR öğrenci paketi çözümlenemedi.' };
+    }
+
+    const ogrenciler = [];
+    const gorulenNo = new Set();
+    const satirlar = duzMetinAday.replace(/^\ufeff/, '').replace(/\r\n/g, '\n').split('\n').map((s) => s.trim()).filter(Boolean);
+    for (const s of satirlar) {
+      if (/^ogrenci_no|^numara/i.test(s)) continue;
+      let ogrNo = '';
+      let adSoyad = '';
+      let bolum = 'Genel';
+      if (s.includes(';')) {
+        const p = s.split(';').map((x) => x.trim());
+        ogrNo = p[0] || '';
+        adSoyad = p[1] || '';
+        bolum = p[2] || 'Genel';
+      } else if (s.includes(',')) {
+        const p = s.split(',').map((x) => x.trim());
+        ogrNo = p[0] || '';
+        adSoyad = p[1] || '';
+        bolum = p[2] || 'Genel';
+      } else {
+        const p = s.split(/\s+/);
+        if (p.length >= 2) {
+          ogrNo = p[0];
+          adSoyad = p.slice(1).join(' ');
+        }
+      }
+      if (ogrNo && adSoyad && !gorulenNo.has(ogrNo)) {
+        gorulenNo.add(ogrNo);
+        ogrenciler.push({ ogrNo, adSoyad, bolum: bolum || 'Genel' });
+      }
+    }
+
+    if (ogrenciler.length === 0) {
+      return { gecerli: false, ogrenciler: [], parcaNo, toplamParca, hata: 'QR paketi içinde geçerli öğrenci kaydı bulunamadı.' };
+    }
+
+    return {
+      gecerli: true,
+      ogrenciler,
+      ogrenciSayisi: ogrenciler.length,
+      parcaNo,
+      toplamParca,
+      hata: ''
+    };
+  }
+
+  /* Sınav Cevap Anahtarı ve Yapısını Telefon QR'ına Sığacak Kompakt Formatta Üretme & Çözme */
+  function uretKompaktSetupQrPaketi(yapi = {}, ogrenciler = [], tabanAdres = '') {
+    const anahtarlar = {};
+    for (const g of ['A', 'B', 'C', 'D']) {
+      const a = (yapi.cevapAnahtarlari && yapi.cevapAnahtarlari[g]) || { dy: [], test: [] };
+      anahtarlar[g] = {
+        dy: Array.isArray(a.dy) ? a.dy.join('') : String(a.dy || ''),
+        test: Array.isArray(a.test) ? a.test.join('') : String(a.test || '')
+      };
+    }
+
+    const dersAdStr = yapi.ders
+      ? `${yapi.ders.kod || 'DERS'} - ${yapi.ders.ad || 'Sınav'}`
+      : String(yapi.dersAd || 'Sınav');
+
+    const temelPaket = {
+      sinavKodu: String(yapi.sinavKodu || 'SINAV-2026'),
+      dersAd: dersAdStr.slice(0, 60),
+      dySayisi: Number(yapi.dySayisi) || 0,
+      dySoruPuan: Number(yapi.dySoruPuan) || 2,
+      testSayisi: Number(yapi.testSayisi) || 0,
+      testSoruPuan: Number(yapi.testSoruPuan) || 4,
+      sikSayisi: Number(yapi.sikSayisi) || 5,
+      klasikSayisi: Number(yapi.klasikSayisi) || 0,
+      klasikSoruPuan: Number(yapi.klasikSoruPuan) || 10,
+      kimlikModu: String(yapi.kimlikModu || 'son2'),
+      haneSayisi: Number(yapi.haneSayisi) || 2,
+      cevapAnahtarlari: anahtarlar
+    };
+
+    const temizTaban = String(tabanAdres || '').trim().replace(/\/+$/, '');
+    const ogrKisa = (Array.isArray(ogrenciler) ? ogrenciler : [])
+      .filter((o) => o && o.ogrNo && o.adSoyad)
+      .map((o) => [String(o.ogrNo).trim(), String(o.adSoyad).trim().slice(0, 28)]);
+
+    const kodlaUrl = (nesne) => {
+      const b64 = utf8ToBase64Guvenli(JSON.stringify(nesne));
+      const kodlu = encodeURIComponent(b64);
+      const tamUrl = `${temizTaban ? temizTaban + '/optik-mobil.html' : 'optik-mobil.html'}#setup=${kodlu}`;
+      return {
+        b64,
+        encoded: kodlu,
+        hashHref: `optik-mobil.html#setup=${kodlu}`,
+        url: tamUrl,
+        tamUrl
+      };
+    };
+
+    // Eğer öğrenci listesi <= 25 ise ve QR boyutu 1100 karakteri aşmıyorsa öğrenci listesini de aynı QR içine göm
+    if (ogrKisa.length > 0 && ogrKisa.length <= 25) {
+      const birlikte = kodlaUrl({ ...temelPaket, ogrKisa });
+      if (birlikte.tamUrl.length <= 1150) {
+        return {
+          ...birlikte,
+          ogrenciDahilMi: true,
+          ogrenciSayisi: ogrKisa.length,
+          not: `Sınav cevap anahtarı (A/B/C/D) ve ${ogrKisa.length} kişilik öğrenci listesi tek QR içine sığdırıldı.`
+        };
+      }
+    }
+
+    const sadeceSetup = kodlaUrl(temelPaket);
+    return {
+      ...sadeceSetup,
+      ogrenciDahilMi: false,
+      ogrenciSayisi: ogrKisa.length,
+      not: ogrKisa.length > 0
+        ? `Cevap anahtarı QR'a işlendi (${ogrKisa.length} öğrenci için yan sekmedeki Öğrenci QR'ını okutabilirsiniz).`
+        : 'Sınav cevap anahtarı (A/B/C/D) ve puan yapısı QR içine işlendi.'
+    };
+  }
+
+  function cozKompaktSetupQrPaketi(girdi = '') {
+    let ham = String(girdi || '').trim();
+    if (!ham) return null;
+    if (ham.includes('#setup=')) {
+      ham = ham.slice(ham.indexOf('#setup=') + 7).split('&')[0];
+    } else if (ham.startsWith('setup=')) {
+      ham = ham.slice(6).split('&')[0];
+    }
+    try {
+      const jsonStr = base64ToUtf8Guvenli(decodeURIComponent(ham));
+      const v = JSON.parse(jsonStr);
+      if (!v || typeof v !== 'object') return null;
+      if (v.cevapAnahtarlari && typeof v.cevapAnahtarlari === 'object') {
+        for (const g of ['A', 'B', 'C', 'D']) {
+          const a = v.cevapAnahtarlari[g];
+          if (a) {
+            a.dy = Array.isArray(a.dy) ? a.dy : String(a.dy || '').split('').filter(Boolean);
+            a.test = Array.isArray(a.test) ? a.test : String(a.test || '').split('').filter(Boolean);
+            if (!Array.isArray(a.klasik)) a.klasik = [];
+          }
+        }
+      }
+      if (Array.isArray(v.ogrKisa) && !Array.isArray(v.ogrenciler)) {
+        v.ogrenciler = v.ogrKisa
+          .filter((x) => Array.isArray(x) && x[0] && x[1])
+          .map((x) => ({ ogrNo: String(x[0]), adSoyad: String(x[1]), bolum: 'Genel' }));
+      }
+      return v;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function uretBosCevapAnahtariCSV(dySayisi = 10, testSayisi = 10) {
     const satirlar = ['Bolum;Soru_No;A_Grubu;B_Grubu;C_Grubu;D_Grubu'];
     for (let i = 1; i <= dySayisi; i++) {
@@ -5439,6 +5731,10 @@
     uretSinavBelirtkeTablosu,
     uretBosOgrenciSablonuCSV,
     cozOgrenciListesiCSV,
+    uretOgrenciQrPaketi,
+    cozOgrenciQrPaketi,
+    uretKompaktSetupQrPaketi,
+    cozKompaktSetupQrPaketi,
     uretBosCevapAnahtariCSV,
     cozCevapAnahtariCSV,
     hesaplaHarfNotu,
