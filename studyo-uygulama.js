@@ -2542,6 +2542,119 @@
     }, 1000);
   }
 
+  let __onbellekCihazParmakIzi = null;
+  let __onbellekIpBilgisi = 'Tespit Ediliyor / Yerel';
+
+  async function sorgulaIstemciIpBilgisi() {
+    if (typeof window === 'undefined' || (location.protocol !== 'http:' && location.protocol !== 'https:')) return;
+    // 1. Cloudflare yerleşik /cdn-cgi/trace uç noktasından gerçek dış IP ve konum bilgisini al
+    try {
+      const rTrace = await fetch('/cdn-cgi/trace', { cache: 'no-store' });
+      if (rTrace.ok) {
+        const metin = await rTrace.text();
+        const satirlar = {};
+        metin.split('\n').forEach((s) => {
+          const i = s.indexOf('=');
+          if (i > 0) satirlar[s.slice(0, i).trim()] = s.slice(i + 1).trim();
+        });
+        if (satirlar.ip) {
+          __onbellekIpBilgisi = `${satirlar.ip}${satirlar.loc ? ` (${satirlar.loc}${satirlar.colo ? '/' + satirlar.colo : ''})` : ''}${satirlar.warp && satirlar.warp !== 'off' ? ' [VPN/WARP]' : ''}`;
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Yerel Node.js sunucusu açıksa /api/ag-adresi uç noktasından yerel IP'yi al
+    try {
+      const rAg = await fetch('/api/ag-adresi', { cache: 'no-store' });
+      if (rAg.ok) {
+        const v = await rAg.json();
+        if (v && Array.isArray(v.adresler) && v.adresler.length > 0) {
+          __onbellekIpBilgisi = `${v.adresler[0]} (Yerel Ağ)`;
+        }
+      }
+    } catch (_) {}
+  }
+
+  function uretCihazDonanimParmakIzi() {
+    if (typeof window === 'undefined') return { cihazId: 'HW-SUNUCU', ozet: 'Sunucu' };
+    if (!__onbellekCihazParmakIzi) {
+      const nav = window.navigator || {};
+      const scr = window.screen || {};
+      let gpuModel = 'Standart-GPU';
+      try {
+        const cnv = document.createElement('canvas');
+        const gl = cnv.getContext('webgl') || cnv.getContext('experimental-webgl');
+        if (gl) {
+          const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+          if (dbg) {
+            gpuModel = String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || gpuModel).slice(0, 48);
+          }
+        }
+      } catch (_) {}
+
+      const ua = String(nav.userAgent || '');
+      let sistemOzet = nav.platform || 'Bilinmeyen-OS';
+      if (/Android\s+([\d.]+);\s*([^;)]+)/i.test(ua)) {
+        const m = ua.match(/Android\s+([\d.]+);\s*([^;)]+)/i);
+        sistemOzet = `Android ${m[1]} (${m[2].trim()})`;
+      } else if (/iPhone|iPad/i.test(ua)) {
+        sistemOzet = 'iOS (iPhone/iPad)';
+      } else if (/Windows NT 10\.0/i.test(ua)) {
+        sistemOzet = 'Windows 10/11';
+      } else if (/Mac OS X/i.test(ua)) {
+        sistemOzet = 'macOS';
+      }
+
+      let tarayici = 'Tarayıcı';
+      if (/Edg\/([\d.]+)/.test(ua)) tarayici = `Edge/${RegExp.$1.split('.')[0]}`;
+      else if (/Chrome\/([\d.]+)/.test(ua)) tarayici = `Chrome/${RegExp.$1.split('.')[0]}`;
+      else if (/Firefox\/([\d.]+)/.test(ua)) tarayici = `Firefox/${RegExp.$1.split('.')[0]}`;
+      else if (/Version\/([\d.]+).*Safari/.test(ua)) tarayici = `Safari/${RegExp.$1.split('.')[0]}`;
+
+      const cpu = nav.hardwareConcurrency ? `${nav.hardwareConcurrency}Çekirdek` : '';
+      const ram = nav.deviceMemory ? `${nav.deviceMemory}GB-RAM` : '';
+      const dokunmatik = nav.maxTouchPoints ? `Dokunmatik:${nav.maxTouchPoints}` : 'Masaüstü';
+      const saatDilimi = (typeof Intl !== 'undefined' && Intl.DateTimeFormat().resolvedOptions().timeZone) || '';
+      const hamImza = [
+        ua,
+        nav.platform || '',
+        `${scr.width || 0}x${scr.height || 0}x${scr.colorDepth || 24}`,
+        String(window.devicePixelRatio || 1),
+        cpu,
+        ram,
+        dokunmatik,
+        gpuModel,
+        saatDilimi
+      ].join('|');
+
+      const cihazId = `HW-${C.uretDelilLogHash(hamImza).slice(0, 12)}`;
+      __onbellekCihazParmakIzi = {
+        cihazId,
+        sistemOzet: `${sistemOzet} · ${tarayici}`,
+        donanimOzet: [cpu, ram, dokunmatik, gpuModel].filter(Boolean).join('/'),
+        ekranFiziksel: `${scr.width || 0}x${scr.height || 0}@${window.devicePixelRatio || 1}x`
+      };
+      sorgulaIstemciIpBilgisi();
+    }
+    const baglanti = (window.navigator && window.navigator.connection && window.navigator.connection.effectiveType)
+      ? `Ağ:${window.navigator.connection.effectiveType.toUpperCase()}`
+      : '';
+    return {
+      cihazId: __onbellekCihazParmakIzi.cihazId,
+      metin: [
+        `IP:${__onbellekIpBilgisi}`,
+        `CihazID(Donanımİmzası):${__onbellekCihazParmakIzi.cihazId}`,
+        `Sistem:${__onbellekCihazParmakIzi.sistemOzet}`,
+        `Donanım:${__onbellekCihazParmakIzi.donanimOzet}`,
+        baglanti,
+        `Ekran:${__onbellekCihazParmakIzi.ekranFiziksel}`,
+        `Pencere:${window.innerWidth || 0}x${window.innerHeight || 0}`,
+        `TamEkran:${Boolean(document.fullscreenElement)}`
+      ].filter(Boolean).join(' | ')
+    };
+  }
+
   function ekleKioskDelilLog(olayTuru, aciklama, ekVeri = {}) {
     const ot = durum.kioskOturum || ekVeri;
     if (!Array.isArray(durum.kioskDelilLoglari)) durum.kioskDelilLoglari = [];
@@ -2549,9 +2662,8 @@
       ? durum.kioskDelilLoglari[durum.kioskDelilLoglari.length - 1].olayHash
       : 'GENESIS-00000000';
 
-    const ekranStr = typeof window !== 'undefined'
-      ? `Ekran:${(window.screen && window.screen.width) || 0}x${(window.screen && window.screen.height) || 0} Pencere:${window.innerWidth || 0}x${window.innerHeight || 0} TamEkran:${Boolean(document.fullscreenElement)}`
-      : '';
+    const parmakIzi = uretCihazDonanimParmakIzi();
+    const ekranStr = parmakIzi.metin;
 
     const logNesnesi = C.olusturKioskDelilLogKaydi(
       {
@@ -2751,12 +2863,15 @@
         const ihlalMi = String(l.olayTuru || '').startsWith('IHLAL_');
         const renk = ihlalMi ? 'var(--tehlike)' : (l.olayTuru === 'OTURUM_BASLADI' || l.olayTuru === 'OTURUM_BITTI' ? 'var(--basari)' : 'var(--birincil)');
         return `
-          <div style="padding:3px 0; border-bottom:1px dashed var(--kenar);">
-            <span style="color:var(--metin-ikincil);">[${C.kacisHTML(l.yerelZaman)}]</span>
-            <strong style="color:${renk};">[${C.kacisHTML(l.olayTuru)}]</strong>
-            <strong>${C.kacisHTML(l.ogrNo)} (${C.kacisHTML(l.adSoyad)})</strong> —
-            <span>${C.kacisHTML(l.aciklama)}</span>
-            <span style="color:var(--metin-soluk); font-size:0.66rem;"> [Mühür: #${C.kacisHTML((l.olayHash || '').slice(0, 12))}]</span>
+          <div style="padding:4px 0; border-bottom:1px dashed var(--kenar);">
+            <div>
+              <span style="color:var(--metin-ikincil);">[${C.kacisHTML(l.yerelZaman)}]</span>
+              <strong style="color:${renk};">[${C.kacisHTML(l.olayTuru)}]</strong>
+              <strong>${C.kacisHTML(l.ogrNo)} (${C.kacisHTML(l.adSoyad)})</strong> —
+              <span>${C.kacisHTML(l.aciklama)}</span>
+              <span style="color:var(--metin-soluk); font-size:0.66rem;"> [Mühür: #${C.kacisHTML((l.olayHash || '').slice(0, 12))}]</span>
+            </div>
+            ${l.cihazBilgisi ? `<div style="font-size:0.66rem; color:var(--metin-ikincil); margin-top:1px;">🌐 ${C.kacisHTML(l.cihazBilgisi)}</div>` : ''}
           </div>
         `;
       })
@@ -5758,6 +5873,9 @@
         guncelleMaddeAnaliziSekmesi();
       });
     }
+
+    sorgulaIstemciIpBilgisi();
+    uretCihazDonanimParmakIzi();
 
     document.getElementById('btn-kiosk-ogrenci-modu').addEventListener('click', () => {
       guncelleKioskOgrenciSinavListesiUI();

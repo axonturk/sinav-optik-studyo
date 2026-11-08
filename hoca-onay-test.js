@@ -428,8 +428,10 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
       delilPanelBilgi.canliMetin.includes('IHLAL_KOPYALA_SAG_TIK') &&
       delilPanelBilgi.canliMetin.includes('IHLAL_EKRAN_BOLME') &&
       delilPanelBilgi.canliMetin.includes('OTURUM_BITTI') &&
+      delilPanelBilgi.canliMetin.includes('IP:') &&
+      delilPanelBilgi.canliMetin.includes('CihazID(Donanımİmzası):HW-') &&
       delilPanelBilgi.oturumTablo.includes('📜 Delil İndir'),
-    'UI Delil Log Paneli: KURALLAR_ONAYLANDI dahil sınav bazlı tüm adımlar, ihlaller ve mühür kodları listelendi'
+    'UI Delil Log Paneli: IP adresi, Donanım Parmak İzi (HW-ID), KURALLAR_ONAYLANDI ve tüm ihlaller listelendi'
   );
 
   await tarayici.close();
