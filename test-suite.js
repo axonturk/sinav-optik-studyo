@@ -347,6 +347,27 @@ async function calistirTumTestler() {
       assert.strictEqual(ts.siklar[harfler.indexOf(ts.dogruHarf)], ts.dogruSikDegeri);
     }
 
+    // Öğrenciye özel sınav İspat Kaydı (#ISPAT-...) ve Resmi İspat Tutanağı (.txt) doğrulaması
+    assert.ok(ozelKagit1.ispatKaydi && ozelKagit1.ispatKaydi.ispatMuhurKodu.startsWith('#ISPAT-'), 'Öğrenciye özel kağıtta kriptografik #ISPAT-... mührü bulunmalıdır');
+    assert.ok(Array.isArray(ozelKagit1.ispatKaydi.soruIzlemListesi) && ozelKagit1.ispatKaydi.soruIzlemListesi.length === 22, 'İspat kaydında tüm soruların (10 DY + 10 Test + 2 Klasik) izlem kaydı bulunmalıdır');
+    const ispatTxt = Cekirdek.uretOgrenciyeOzelSinavIspatRaporuTXT({
+      sinavKodu: 'BMG101-10-10-2',
+      baslik: { dersAdi: 'BMG101 - Bilgisayar Mühendisliğine Giriş', sinavBasligi: 'Güz Vize Sınavı' },
+      ogrenciOzelPaketler: [ozelKagit1, ozelKagit2]
+    });
+    assert.ok(ispatTxt.includes('ÖĞRENCİYE ÖZEL SINAV RESMİ İSPAT VE DENETİM TUTANAĞI'), 'İspat raporu resmi başlığı içermelidir');
+    assert.ok(ispatTxt.includes(ozelKagit1.ispatKaydi.ispatMuhurKodu), 'İspat raporu öğrencinin #ISPAT-... mührünü içermelidir');
+    assert.ok(ispatTxt.includes('Orijinal Şık:') && ispatTxt.includes('Öğrenci Kağıdındaki Doğru Şık:'), 'İspat raporu orijinal -> karışık şık eşleşmesini kanıtlamalıdır');
+
+    // Seçmeli Bologna ÖÇ madde ayrıştırıcı (4 madde, 5 madde, satır veya noktalı virgül ayrımı) doğrulaması
+    const oc4 = Cekirdek.ayiklaDersOcMaddeleri('1. Ağ katmanlarını açıklar\n2. Kriptografiyi uygular\n3. Güvenlik duvarı kurar\n4. Güvenli kod yazar');
+    assert.strictEqual(oc4.length, 4);
+    assert.strictEqual(oc4[0].kod, 'ÖÇ-1');
+    assert.strictEqual(oc4[3].kod, 'ÖÇ-4');
+    const oc5 = Cekirdek.ayiklaDersOcMaddeleri('Veri yapıları; Algoritma analizi; Ağ protokolleri; İşletim sistemleri; Yazılım mühendisliği');
+    assert.strictEqual(oc5.length, 5);
+    assert.strictEqual(oc5[4].kod, 'ÖÇ-5');
+
     // Çok sayfalı A4 PDF ikili (binary) üretici testi
     const sahteJpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9]);
     const pdfBytes = Cekirdek.uretCokSayfaliA4PdfBytes([

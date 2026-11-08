@@ -2881,6 +2881,79 @@
     return m ? parseInt(m[1], 10) : 99;
   }
 
+  /* Dersin Bologna Öğrenim Çıktıları (ÖÇ) Maddelerini Ayrıştıran ve Normalize Eden Yardımcı
+     - Dizi ([{ kod: 'ÖÇ-1', aciklama: '...' }, ...] veya ['...', '...']) ya da çok satırlı / noktalı virgüllü metin kabul eder.
+     - 4 madde, 5 madde veya istenen sayıda maddeyi birbirinden ayırarak otomatik ÖÇ-1, ÖÇ-2... numaralandırır. */
+  function ayiklaDersOcMaddeleri(hamGirdi) {
+    if (!hamGirdi) return [];
+    let hamParcalar = [];
+    if (Array.isArray(hamGirdi)) {
+      hamParcalar = hamGirdi;
+    } else if (typeof hamGirdi === 'string') {
+      // Satır sonu (\n) veya noktalı virgül (;) veya dikey çizgi (|) ile ayrılmış maddeleri böl
+      hamParcalar = hamGirdi
+        .split(/\r?\n|;|\|/g)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else if (typeof hamGirdi === 'object') {
+      hamParcalar = Object.values(hamGirdi);
+    }
+
+    const sonuc = [];
+    const gorulenKodlar = new Set();
+
+    hamParcalar.forEach((parca, idx) => {
+      let kod = '';
+      let aciklama = '';
+      if (parca && typeof parca === 'object') {
+        const hamKod = String(parca.kod || parca.ocKodu || '').trim();
+        const hamAciklama = String(parca.aciklama || parca.metin || parca.tanim || '').trim();
+        if (!hamKod && !hamAciklama) return;
+        kod = normalizeOcKodu(hamKod || hamAciklama, `ÖÇ-${idx + 1}`);
+        aciklama = hamAciklama
+          .replace(/^(?:ÖÇ|OC|LO|MADDE)\s*[-_\.\s]?\s*\d{1,2}\s*[:\-–\)\.]?\s*/i, '')
+          .replace(/^\d{1,2}\s*[\.\)\-:]\s*/, '')
+          .trim();
+      } else {
+        const satir = String(parca || '').trim();
+        if (!satir) return;
+        // Başında "ÖÇ-1:", "1.", "1)", "Madde 1 -" vb. varsa ayıkla
+        const acikOc = satir.match(/^(?:ÖÇ|OC|LO|ÖĞRENİM\s*ÇIKTISI)\s*[-_\.\s]?\s*(\d{1,2})\s*[:\-–\)\.]?\s*(.*)$/i);
+        const sayiBaslik = !acikOc ? satir.match(/^(\d{1,2})\s*[\.\)\-:]\s*(.+)$/) : null;
+        if (acikOc) {
+          const no = Math.max(1, Math.min(25, parseInt(acikOc[1], 10) || (idx + 1)));
+          kod = `ÖÇ-${no}`;
+          aciklama = String(acikOc[2] || '').trim();
+        } else if (sayiBaslik) {
+          const no = Math.max(1, Math.min(25, parseInt(sayiBaslik[1], 10) || (idx + 1)));
+          kod = `ÖÇ-${no}`;
+          aciklama = String(sayiBaslik[2] || '').trim();
+        } else {
+          kod = `ÖÇ-${sonuc.length + 1}`;
+          aciklama = satir;
+        }
+      }
+
+      if (!aciklama && !kod) return;
+      if (gorulenKodlar.has(kod)) {
+        kod = `ÖÇ-${sonuc.length + 1}`;
+      }
+      gorulenKodlar.add(kod);
+      sonuc.push({
+        kod,
+        aciklama: aciklama || `${kod} Öğrenim Çıktısı`,
+        tamMetin: aciklama ? `${kod}: ${aciklama}` : kod
+      });
+    });
+
+    return sonuc.sort((a, b) => ocKoduSiraNo(a.kod) - ocKoduSiraNo(b.kod));
+  }
+
+  function formatlaDersOcMaddeleriMetin(ocListesi = []) {
+    const temiz = ayiklaDersOcMaddeleri(ocListesi);
+    return temiz.map((m) => `${m.kod}: ${m.aciklama}`).join('\n');
+  }
+
   /* 1. Çoktan Seçmeli Test İçin Özel Boş CSV Şablonu (Ogrenim_Ciktisi_OC, Konu_Kazanim, Zorluk_Derecesi ve Hafta Dahil — Puan Sütunu Yoktur) */
   function uretBosTestSablonuCSV() {
     const baslik = 'Soru_Metni;Sik_A;Sik_B;Sik_C;Sik_D;Sik_E;Dogru_Sik_Secenegi;Zorluk_Derecesi;Ogrenim_Ciktisi_OC;Konu_Kazanim;Hafta';
@@ -3616,7 +3689,7 @@
   }
 
   /* Akademik Sınav Belirtke Tablosu (Hafta × Bologna Öğrenim Çıktısı ÖÇ × Soru Türü × Zorluk × Puan) Üretici */
-  function uretSinavBelirtkeTablosu(seciliSorular = [], puanYapisi = {}, tumHavuzSorulari = []) {
+  function uretSinavBelirtkeTablosu(seciliSorular = [], puanYapisi = {}, tumHavuzSorulari = [], dersOgrenimCiktilari = []) {
     const dyPuan = Number(puanYapisi.dySoruPuan || 2);
     const testPuan = Number(puanYapisi.testSoruPuan || 5);
     const klasikPuanlar = Array.isArray(puanYapisi.klasikSoruPuanlari) ? puanYapisi.klasikSoruPuanlari : [];
@@ -3629,6 +3702,27 @@
     let testSayac = 0;
     let klasikSayac = 0;
     let genelToplamPuan = 0;
+
+    // Ders için kayıtlı Bologna ÖÇ maddeleri varsa önce onları kaydet
+    const kayitliDersOcleri = ayiklaDersOcMaddeleri(dersOgrenimCiktilari);
+    for (const doc of kayitliDersOcleri) {
+      if (!ocHarita.has(doc.kod)) {
+        ocHarita.set(doc.kod, {
+          ocKodu: doc.kod,
+          aciklamaSet: new Set(doc.aciklama ? [doc.aciklama] : []),
+          haftaSet: new Set(),
+          soruEtiketleri: [],
+          dyAdet: 0,
+          testAdet: 0,
+          klasikAdet: 0,
+          kolayAdet: 0,
+          ortaAdet: 0,
+          zorAdet: 0,
+          toplamAdet: 0,
+          toplamPuan: 0
+        });
+      }
+    }
 
     // Havuzdaki tüm hedef ÖÇ'leri önceden kaydet (Eksik ÖÇ varsa 0 soru olarak da izlenebilsin)
     if (Array.isArray(tumHavuzSorulari)) {
@@ -4630,6 +4724,48 @@
 
     // Mod 1: A/B/C/D Kitapçık Dağıtımlı İsme Özel Kağıt
     if (soruModu === 'abcd_dagitim' && sinavYapisi.kitapciklar && sinavYapisi.kitapciklar[grupHarfi]) {
+      const kVar = sinavYapisi.kitapciklar[grupHarfi];
+      const kAnahtar = sinavYapisi.cevapAnahtarlari[grupHarfi];
+      const sinavKoduAbcd = sinavYapisi.sinavKodu || 'SINAV-2026';
+      const soruIzlemAbcd = [
+        ...(kVar.dy || []).map((s, i) => ({
+          bolum: 'DY',
+          soruNo: i + 1,
+          soruId: s.id || `DY-${i + 1}`,
+          hafta: s.hafta || 1,
+          ocKodu: s.ocKodu || 'ÖÇ-1',
+          zorluk: s.zorluk || 'Orta',
+          metinOzet: String(s.metin || '').slice(0, 90),
+          dogruCevap: s.dogruDY || 'D',
+          orijinalDogru: s.dogruDY || 'D'
+        })),
+        ...(kVar.test || []).map((s, i) => ({
+          bolum: 'TEST',
+          soruNo: i + 1,
+          soruId: s.id || `T-${i + 1}`,
+          hafta: s.hafta || 1,
+          ocKodu: s.ocKodu || 'ÖÇ-1',
+          zorluk: s.zorluk || 'Orta',
+          metinOzet: String(s.metin || '').slice(0, 90),
+          dogruCevap: s.dogruHarf || 'A',
+          orijinalDogru: s.orijinalDogruHarf || s.dogruHarf || 'A',
+          dogruSikDegeri: s.dogruSikDegeri || (s.siklar && s.siklar[s.dogruHarf || 'A']) || '',
+          sikHaritasi: s.siklar || {}
+        })),
+        ...(kVar.klasik || []).map((s, i) => ({
+          bolum: 'KLASIK',
+          soruNo: i + 1,
+          soruId: s.id || `K-${i + 1}`,
+          hafta: s.hafta || 1,
+          ocKodu: s.ocKodu || 'ÖÇ-1',
+          zorluk: s.zorluk || 'Orta',
+          metinOzet: String(s.metin || '').slice(0, 90),
+          dogruCevap: s.rubrik || ''
+        }))
+      ];
+      const ispatHamAbcd = `${sinavKoduAbcd}|${ogrNo}|${adSoyad}|ABCD|${grupHarfi}|` +
+        soruIzlemAbcd.map((x) => `${x.bolum}${x.soruNo}:${x.soruId}:${x.dogruCevap}`).join(',');
+      const ispatHashAbcd = uretDelilLogHash(ispatHamAbcd, 'ABCD-ISPAT-2026');
       return {
         ogrNo,
         adSoyad,
@@ -4637,29 +4773,49 @@
         grupHarfi,
         ozelKod,
         soruModu,
-        varyasyon: sinavYapisi.kitapciklar[grupHarfi],
-        anahtar: sinavYapisi.cevapAnahtarlari[grupHarfi]
+        varyasyon: kVar,
+        anahtar: kAnahtar,
+        ispatKaydi: {
+          sinavKodu: sinavKoduAbcd,
+          ogrNo,
+          adSoyad,
+          bolum,
+          soruModu: 'abcd_dagitim',
+          grupHarfi,
+          ozelKod,
+          tohumlar: {
+            kitapcikTohumu: `${sinavKoduAbcd}-${grupHarfi}`
+          },
+          ispatMuhurKodu: `#ISPAT-${ispatHashAbcd.slice(0, 12)}`,
+          tamMuhurHash: ispatHashAbcd,
+          soruIzlemListesi: soruIzlemAbcd
+        }
       };
     }
 
-    // Mod 2: Tam Kişiye Özel Havuz (Bankada yeterli soru varsa farklı soru + Her ÖÇ ≥ 1 Soru garantisi)
+    // Mod 2: Tam Kişiye Özel Havuz (Bankada yeterli soru varsa farklı soru + Seçmeli ÖÇ garantisi)
     const sinavKodu = sinavYapisi.sinavKodu || 'SINAV-2026';
     const dySayisi = Number(sinavYapisi.dySayisi || 0);
     const testSayisi = Number(sinavYapisi.testSayisi || 0);
     const klasikSayisi = Number(sinavYapisi.klasikSayisi || 0);
     const sikSayisi = Number(sinavYapisi.sikSayisi || 5) === 4 ? 4 : 5;
+    const herOcEnAzBirSoru = sinavYapisi.herOcEnAzBirSoru !== undefined ? Boolean(sinavYapisi.herOcEnAzBirSoru) : false;
+
+    const tohumDy = `OGR-DY-HAVUZ-${sinavKodu}-${ogrNo}`;
+    const tohumTest = `OGR-TEST-HAVUZ-${sinavKodu}-${ogrNo}`;
+    const tohumKlasik = `OGR-KLASIK-HAVUZ-${sinavKodu}-${ogrNo}`;
 
     const dyHavuz = diziKaristirDeterministik(
       tumHavuzSorulari.filter((s) => s.tur === 'dy'),
-      `OGR-DY-HAVUZ-${sinavKodu}-${ogrNo}`
+      tohumDy
     );
     const testHavuz = diziKaristirDeterministik(
       tumHavuzSorulari.filter((s) => s.tur === 'test'),
-      `OGR-TEST-HAVUZ-${sinavKodu}-${ogrNo}`
+      tohumTest
     );
     const klasikHavuz = diziKaristirDeterministik(
       tumHavuzSorulari.filter((s) => s.tur === 'klasik'),
-      `OGR-KLASIK-HAVUZ-${sinavKodu}-${ogrNo}`
+      tohumKlasik
     );
 
     const ocSecim = secHaftalikVeKotaliSinavSorulari(
@@ -4668,7 +4824,7 @@
         dySayisi,
         testSayisi,
         klasikSayisi,
-        herOcEnAzBirSoru: true,
+        herOcEnAzBirSoru,
         zorlukModu: 'tumu'
       }
     );
@@ -4680,14 +4836,16 @@
     }));
 
     const seciliTest = ocSecim.test.slice(0, testSayisi).map((s, i) => {
+      const sikTohumu = `OGR-SIK-${sinavKodu}-${ogrNo}-${s.id}-${i}`;
       const korunan = karistirSoruSiklariVeKoru(
         s,
-        `OGR-SIK-${sinavKodu}-${ogrNo}-${s.id}-${i}`,
+        sikTohumu,
         sikSayisi,
         true
       );
       return {
         ...korunan,
+        sikTohumu,
         kitapcikSoruNo: i + 1,
         orijinalNo: i + 1
       };
@@ -4711,11 +4869,73 @@
       dy: seciliDy.map((s) => s.dogruDY || 'D'),
       test: seciliTest.map((s) => s.dogruHarf || 'A'),
       testDetay: seciliTest.map((s) => ({
+        soruId: s.id || '',
         dogruHarf: s.dogruHarf || 'A',
         orijinalDogruHarf: s.orijinalDogruHarf || s.dogruHarf || 'A',
         dogruSikDegeri: s.dogruSikDegeri || ''
       })),
       klasik: seciliKlasik.map((s) => s.rubrik || '')
+    };
+
+    const soruIzlemListesi = [
+      ...seciliDy.map((s, i) => ({
+        bolum: 'DY',
+        soruNo: i + 1,
+        soruId: s.id || `DY-${i + 1}`,
+        hafta: s.hafta || 1,
+        ocKodu: s.ocKodu || 'ÖÇ-1',
+        zorluk: s.zorluk || 'Orta',
+        metinOzet: String(s.metin || '').slice(0, 90),
+        dogruCevap: s.dogruDY || 'D',
+        orijinalDogru: s.dogruDY || 'D'
+      })),
+      ...seciliTest.map((s, i) => ({
+        bolum: 'TEST',
+        soruNo: i + 1,
+        soruId: s.id || `T-${i + 1}`,
+        hafta: s.hafta || 1,
+        ocKodu: s.ocKodu || 'ÖÇ-1',
+        zorluk: s.zorluk || 'Orta',
+        metinOzet: String(s.metin || '').slice(0, 90),
+        dogruCevap: s.dogruHarf || 'A',
+        orijinalDogru: s.orijinalDogruHarf || s.dogruHarf || 'A',
+        dogruSikDegeri: s.dogruSikDegeri || '',
+        sikTohumu: s.sikTohumu || '',
+        sikHaritasi: s.siklar || {}
+      })),
+      ...seciliKlasik.map((s, i) => ({
+        bolum: 'KLASIK',
+        soruNo: i + 1,
+        soruId: s.id || `K-${i + 1}`,
+        hafta: s.hafta || 1,
+        ocKodu: s.ocKodu || 'ÖÇ-1',
+        zorluk: s.zorluk || 'Orta',
+        metinOzet: String(s.metin || '').slice(0, 90),
+        dogruCevap: s.rubrik || ''
+      }))
+    ];
+
+    const ispatHamVeri = `${sinavKodu}|${ogrNo}|${adSoyad}|KISIYE_OZEL|${ozelKod}|` +
+      soruIzlemListesi.map((x) => `${x.bolum}${x.soruNo}:${x.soruId}:${x.orijinalDogru}->${x.dogruCevap}:${x.dogruSikDegeri || ''}`).join('|');
+    const tamMuhurHash = uretDelilLogHash(ispatHamVeri, `OGR-OZEL-ISPAT-${sinavKodu}`);
+
+    const ispatKaydi = {
+      sinavKodu,
+      ogrNo,
+      adSoyad,
+      bolum,
+      soruModu: 'kisiye_ozel_havuz',
+      grupHarfi,
+      ozelKod,
+      tohumlar: {
+        dyHavuzTohumu: tohumDy,
+        testHavuzTohumu: tohumTest,
+        klasikHavuzTohumu: tohumKlasik,
+        sikTohumFormulu: `OGR-SIK-${sinavKodu}-${ogrNo}-<SoruID>-<SoruIndeks>`
+      },
+      ispatMuhurKodu: `#ISPAT-${tamMuhurHash.slice(0, 12)}`,
+      tamMuhurHash,
+      soruIzlemListesi
     };
 
     return {
@@ -4726,8 +4946,91 @@
       ozelKod,
       soruModu,
       varyasyon,
-      anahtar
+      anahtar,
+      ispatKaydi
     };
+  }
+
+  /* Öğrenciye Özel Sınav (Baskı ve Online) Resmi İspat & Denetim Raporu (.txt) Üretici
+     - Öğrenci itirazında veya maddi hata incelemesinde hangi öğrenciye hangi soru ID'lerinin, hangi şık dizilimiyle ve hangi doğru şıkla atandığını deterministik tohum (seed) ve kriptografik mühürle kanıtlar. */
+  function uretOgrenciyeOzelSinavIspatRaporuTXT(sinavYapisi = {}, filtreOgrNo = '') {
+    const baslik = (sinavYapisi.baslik && sinavYapisi.baslik.sinavBasligi) || 'AKADEMİK SINAV';
+    const dersAdi = (sinavYapisi.baslik && sinavYapisi.baslik.dersAdi) || 'Ders';
+    const sinavKodu = sinavYapisi.sinavKodu || 'SINAV-2026';
+    const paketler = Array.isArray(sinavYapisi.ogrenciOzelPaketler) ? sinavYapisi.ogrenciOzelPaketler : [];
+    const aranan = String(filtreOgrNo || '').trim();
+    const seciliPaketler = aranan
+      ? paketler.filter((p) => String(p.ogrNo || '').includes(aranan) || String(p.adSoyad || '').toLowerCase().includes(aranan.toLowerCase()))
+      : paketler;
+
+    const cizgi = '========================================================================================';
+    const altCizgi = '----------------------------------------------------------------------------------------';
+    const satirlar = [
+      cizgi,
+      'T.C. YÜKSEKÖĞRETİM KURUMLARI — ÖĞRENCİYE ÖZEL SINAV RESMİ İSPAT VE DENETİM TUTANAĞI',
+      'Deterministik Soru/Şık Atama Matrisi, Orjinal->Karışık Şık İzleme ve Kriptografik Mühür Raporu',
+      cizgi,
+      `Ders Adı               : ${dersAdi}`,
+      `Sınav Başlığı          : ${baslik}`,
+      `Sınav Kodu (Seed Kökü) : ${sinavKodu}`,
+      `Rapor Üretim Zamanı    : ${new Date().toISOString()}`,
+      `Toplam Öğrenci Paketi  : ${seciliPaketler.length} / ${paketler.length}`,
+      `İspat Mekanizması      : Mulberry32 Deterministik PRNG + FNV-1a Çift Turlu Bütünlük Mührü`,
+      `Yeniden Üretilebilirlik: Aynı Sınav Kodu + Öğrenci No + Soru Bankası ile %100 aynı kağıt tekrar üretilir.`,
+      cizgi,
+      ''
+    ];
+
+    if (seciliPaketler.length === 0) {
+      satirlar.push('(!) Henüz öğrenciye özel sınav paketi üretilmemiş veya filtreyle eşleşen öğrenci bulunamadı.');
+      return satirlar.join('\r\n');
+    }
+
+    seciliPaketler.forEach((p, idx) => {
+      const ispat = p.ispatKaydi || {};
+      const muhur = ispat.ispatMuhurKodu || `#ISPAT-${uretDelilLogHash(`${sinavKodu}|${p.ogrNo}`, 'ISPAT').slice(0, 12)}`;
+      satirlar.push(`[ÖĞRENCİ ${idx + 1}/${seciliPaketler.length}] ${p.ogrNo} — ${p.adSoyad} (${p.bolum || 'Genel'})`);
+      satirlar.push(`  • Kağıt Varyasyon Kodu : ${p.ozelKod || '-'} | Kitapçık Grubu: ${p.grupHarfi || 'A'} | Mod: ${p.soruModu || 'kisiye_ozel_havuz'}`);
+      satirlar.push(`  • İspat Mühür Kodu     : ${muhur} (Tam Hash: ${ispat.tamMuhurHash || '-'})`);
+      if (ispat.tohumlar) {
+        satirlar.push(`  • Deterministik Tohum  : Test=${ispat.tohumlar.testHavuzTohumu || ispat.tohumlar.kitapcikTohumu || '-'} | DY=${ispat.tohumlar.dyHavuzTohumu || '-'}`);
+      }
+      satirlar.push('  • Soru & Şık Eşleştirme İzlem Listesi (Maddi Hata / İtiraz Kanıt Tablosu):');
+
+      const izlem = Array.isArray(ispat.soruIzlemListesi) ? ispat.soruIzlemListesi : [];
+      if (izlem.length > 0) {
+        izlem.forEach((s) => {
+          if (s.bolum === 'TEST') {
+            const sikDizilim = s.sikHaritasi
+              ? Object.entries(s.sikHaritasi)
+                  .filter(([, m]) => m !== undefined && m !== '')
+                  .map(([h, m]) => `${h}="${String(m).slice(0, 28)}"`)
+                  .join(' | ')
+              : '';
+            satirlar.push(
+              `      [TEST S.${String(s.soruNo).padStart(2, '0')}] HavuzID: ${String(s.soruId).padEnd(8, ' ')} | Hafta: ${s.hafta} | ${s.ocKodu} | Orijinal Şık: ${s.orijinalDogru} -> Öğrenci Kağıdındaki Doğru Şık: ${s.dogruCevap} (Değer: "${s.dogruSikDegeri}")`
+            );
+            if (sikDizilim) {
+              satirlar.push(`                  Kağıttaki Şık Dizilimi: ${sikDizilim}`);
+            }
+          } else if (s.bolum === 'DY') {
+            satirlar.push(
+              `      [D/Y  S.${String(s.soruNo).padStart(2, '0')}] HavuzID: ${String(s.soruId).padEnd(8, ' ')} | Hafta: ${s.hafta} | ${s.ocKodu} | Doğru Cevap: ${s.dogruCevap} | Soru: "${s.metinOzet}"`
+            );
+          } else {
+            satirlar.push(
+              `      [KLASİK ${String(s.soruNo).padStart(2, '0')}] HavuzID: ${String(s.soruId).padEnd(8, ' ')} | Hafta: ${s.hafta} | ${s.ocKodu} | Rubrik: "${String(s.dogruCevap || '').slice(0, 60)}"`
+            );
+          }
+        });
+      }
+      satirlar.push(altCizgi);
+    });
+
+    const genelMuhur = uretDelilLogHash(satirlar.join('\n'), `GENEL-ISPAT-${sinavKodu}`);
+    satirlar.push(`GENEL BELGE BÜTÜNLÜK MÜHRÜ (SHA/FNV-64): #BELGE-${genelMuhur}`);
+    satirlar.push(cizgi);
+    return satirlar.join('\r\n');
   }
 
   /* Saf JavaScript Çok Sayfalı A4 %PDF-1.4 Üretici (JPEG DCTDecode Akışı Gömülü) */
@@ -5122,6 +5425,8 @@
     normalizeOcKodu,
     ayiklaOcBilesenleri,
     ocKoduSiraNo,
+    ayiklaDersOcMaddeleri,
+    formatlaDersOcMaddeleriMetin,
     uretBosTestSablonuCSV,
     uretBosDySablonuCSV,
     uretBosKlasikSablonuCSV,
@@ -5152,6 +5457,7 @@
     uretDelilLogCSV,
     uretKisiyeOzelOnlineSinav,
     uretOgrenciyeOzelKagitVaryasyonu,
+    uretOgrenciyeOzelSinavIspatRaporuTXT,
     uretCokSayfaliA4PdfBytes,
     VARSAYILAN_DERSLER,
     VARSAYILAN_SORULAR,

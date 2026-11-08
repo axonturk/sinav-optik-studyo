@@ -198,13 +198,15 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   await sayfa.setViewport({ width: 1440, height: 900 });
   await sayfa.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'networkidle0' });
 
-  // 2B. Temiz Başlangıç (0 Ders, 0 Soru, 0 Öğrenci, 0 Okunan Kağıt, 0 Online Sınav) Doğrulaması
+  // 2B. Temiz Başlangıç (0 Ders, 0 Soru, 0 Öğrenci, 0 Okunan Kağıt, 0 Online Sınav) ve Başlangıçta Ortak Giriş Kapısı Kilidi Doğrulaması
   const temizDurum = await sayfa.evaluate(() => ({
     dersMetin: document.getElementById('aktif-ders-sec').textContent.trim(),
     soruSayisi: document.getElementById('rozet-banka-toplam').textContent.trim(),
     okunanSayisi: document.getElementById('rozet-okunan-kagit').textContent.trim(),
     ogrenciSayisi: document.getElementById('rozet-ogrenci-sayisi').textContent.trim(),
-    onlineSayisi: document.getElementById('rozet-tanimli-online-sayisi').textContent.trim()
+    onlineSayisi: document.getElementById('rozet-tanimli-online-sayisi').textContent.trim(),
+    baslangicKilitliMi: document.getElementById('ana-icerik-alani').style.pointerEvents === 'none',
+    girisKapisiAcikMi: document.getElementById('modal-hoca-giris').style.display === 'flex'
   }));
   kontrol(
     temizDurum.dersMetin.includes('Henüz Ders Eklenmedi') &&
@@ -213,6 +215,20 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
       temizDurum.ogrenciSayisi === '0' &&
       temizDurum.onlineSayisi === '0 Sınav',
     'UI Temiz Başlangıç: Örnek dersler, sorular, öğrenciler, okumalar ve online sınavlar tamamen temizlendi (0)'
+  );
+  kontrol(
+    temizDurum.baslangicKilitliMi && temizDurum.girisKapisiAcikMi,
+    'UI Ortak Giriş Kapısı: Doğru şifreyle giriş yapılana kadar ana ekran kilitli (blur + pointer-events:none) ve giriş kapısı açık başladı'
+  );
+
+  // Ortak Giriş Kapısından Öğrenci Girişi <-> Eğitmen Girişi geçişini doğrula
+  await sayfa.click('#btn-giris-rol-ogrenci');
+  const ogrenciGirisGorunur = await sayfa.$eval('#kiosk-sinav-alani', (el) => el.style.display === 'block');
+  await sayfa.click('#btn-kiosk-rol-egitmen');
+  const egitmenGirisGorunur = await sayfa.$eval('#modal-hoca-giris', (el) => el.style.display === 'flex');
+  kontrol(
+    ogrenciGirisGorunur && egitmenGirisGorunur,
+    'UI Ortak Giriş Kapısı: Öğrenci Girişi ve Eğitmen Girişi seçenekleri aynı başlangıç kapısından sorunsuz geçiş yapıyor'
   );
 
   // Hoca modalını aç
@@ -465,8 +481,56 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
       delilPanelBilgi.canliMetin.includes('OTURUM_BITTI') &&
       delilPanelBilgi.canliMetin.includes('IP:') &&
       delilPanelBilgi.canliMetin.includes('CihazID(Donanımİmzası):HW-') &&
+      delilPanelBilgi.canliMetin.includes('#ISPAT-') &&
       delilPanelBilgi.oturumTablo.includes('📜 Delil İndir'),
-    'UI Delil Log Paneli: IP adresi, Donanım Parmak İzi (HW-ID), KURALLAR_ONAYLANDI ve tüm ihlaller listelendi'
+    'UI Delil Log Paneli: IP adresi, Donanım Parmak İzi (HW-ID), #ISPAT mührü, KURALLAR_ONAYLANDI ve tüm ihlaller listelendi'
+  );
+
+  // 6. Seçmeli Bologna ÖÇ Sistemi: ÖÇ Kayıtlı Değilken Önce ÖÇ Kaydı İsteme + Madde Madde Giriş + Sayfa Başı & Soru Sonu Görünümü Testi
+  await sayfa.evaluate(() => {
+    const sel = document.getElementById('ayar-kagit-oc-gorunum');
+    sel.value = 'ikisi_birden';
+    sel.dispatchEvent(new Event('change'));
+  });
+  await new Promise((r) => setTimeout(r, 150));
+
+  const ocUyariDurumu = await sayfa.evaluate(() => ({
+    modalAcik: document.getElementById('modal-yeni-ders').style.display === 'flex',
+    uyariGorunur: document.getElementById('uyari-oc-kayit-gerekli').style.display === 'block',
+    kutuSayisi: document.querySelectorAll('#kutu-yeni-ders-oc-maddeler [data-oc-madde-input]').length
+  }));
+  kontrol(
+    ocUyariDurumu.modalAcik && ocUyariDurumu.uyariGorunur && ocUyariDurumu.kutuSayisi === 4,
+    'UI Seçmeli Bologna ÖÇ: Dersin ÖÇ kaydı yokken sınav kağıdında ÖÇ seçildiğinde önce ÖÇ kayıt modalı ve uyarı notu otomatik açıldı'
+  );
+
+  // 5 Madde düğmesine basıp 5 ayrı ÖÇ maddesi gir ve aktif derse kaydet
+  await sayfa.click('#btn-oc-hazir-5');
+  await sayfa.evaluate(() => {
+    document.getElementById('yeni-ders-kod').value = 'BMG101';
+    document.getElementById('yeni-ders-ad').value = 'Bilgisayar Mühendisliğine Giriş';
+    const inp = document.querySelectorAll('#kutu-yeni-ders-oc-maddeler [data-oc-madde-input]');
+    inp[0].value = 'Ağ katmanlarını ve protokollerini açıklar';
+    inp[1].value = 'Kriptografik algoritmaları uygular';
+    inp[2].value = 'Güvenlik duvarı kurallarını yapılandırır';
+    inp[3].value = 'Güvenli yazılım geliştirme ilkelerini analiz eder';
+    inp[4].value = 'Bulut güvenliği ve sıfır güven mimarisini değerlendirir';
+  });
+  await sayfa.click('#btn-aktif-ders-oc-kaydet');
+  await new Promise((r) => setTimeout(r, 200));
+
+  const kagitOcRender = await sayfa.evaluate(() => ({
+    rozetMetin: document.getElementById('rozet-aktif-ders-oc-sayisi').textContent.trim(),
+    sayfaBasiOcVar: Boolean(document.querySelector('#a4-onizleme-sahne .kagit-sayfa-basi-oc-kutu')),
+    sayfaBasiMetin: (document.querySelector('#a4-onizleme-sahne .kagit-sayfa-basi-oc-kutu') || {}).textContent || '',
+    soruSonuOcSayisi: document.querySelectorAll('#a4-onizleme-sahne .soru-oc-etiket').length
+  }));
+  kontrol(
+    kagitOcRender.rozetMetin.includes('5 ÖÇ Kayıtlı') &&
+      kagitOcRender.sayfaBasiOcVar &&
+      kagitOcRender.sayfaBasiMetin.includes('ÖÇ-5:') &&
+      kagitOcRender.soruSonuOcSayisi > 0,
+    'UI Sınav Kağıdı ÖÇ Görünümü: 5 maddelik ÖÇ kaydedildi; A4 kağıtta hem sayfa başında ÖÇ listesi hem de soru sonunda [ÖÇ-X] etiketi görüntülendi'
   );
 
   await tarayici.close();
