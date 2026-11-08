@@ -1,0 +1,1211 @@
+/* ==========================================================================
+   EVRENSEL SINAV KAĞIDI STÜDYOSU & MOBİL OPTİK OKUYUCU (OMR) — ORTAK STİL
+   Sıcak Kağıt Tonlu Açık Tema (#faf9f5) & Yüksek Kontrastlı Koyu Tema
+   Milimetrik 1 A4 (Önlü-Arkalı 2 Sayfa) Baskı & Parametrik Optik Form Motoru
+   ========================================================================== */
+
+:root {
+  --bg: #faf9f5;
+  --bg-kart: #ffffff;
+  --bg-ikincil: #f2efe9;
+  --bg-vurgu: #eef4ff;
+  --metin: #1c1e21;
+  --metin-ikincil: #4e5560;
+  --metin-soluk: #767e89;
+  --kenar: #dcd7cc;
+  --kenar-koyu: #b8b1a3;
+  --birincil: #1d4ed8;
+  --birincil-koyu: #1e3a8a;
+  --birincil-acik: #dbeafe;
+  --basari: #15803d;
+  --basari-acik: #dcfce7;
+  --uyari: #b45309;
+  --uyari-acik: #fef3c7;
+  --tehlike: #b91c1c;
+  --tehlike-acik: #fee2e2;
+  --mor: #6d28d9;
+  --mor-acik: #ede9fe;
+  --golge: 0 2px 8px rgba(28, 30, 33, 0.06);
+  --golge-buyuk: 0 8px 24px rgba(28, 30, 33, 0.12);
+  --radius: 10px;
+  --radius-kucuk: 6px;
+  --font-ana: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  --font-mono: Consolas, 'Courier New', monospace;
+
+  /* A4 Sınav Kağıdı Dinamik Ölçekleme Değişkenleri */
+  --kagit-font: 9.5pt;
+  --kagit-satir: 1.28;
+  --kagit-soru-bosluk: 6px;
+  --kagit-sutun-sayisi: 2;
+  --kagit-klasik-yukseklik: 68px;
+}
+
+[data-tema="koyu"] {
+  --bg: #111318;
+  --bg-kart: #1a1d24;
+  --bg-ikincil: #232730;
+  --bg-vurgu: #1e293b;
+  --metin: #f1f5f9;
+  --metin-ikincil: #cbd5e1;
+  --metin-soluk: #94a3b8;
+  --kenar: #333947;
+  --kenar-koyu: #475569;
+  --birincil: #3b82f6;
+  --birincil-koyu: #60a5fa;
+  --birincil-acik: #1e3a8a;
+  --basari: #22c55e;
+  --basari-acik: #14532d;
+  --uyari: #f59e0b;
+  --uyari-acik: #78350f;
+  --tehlike: #ef4444;
+  --tehlike-acik: #7f1d1d;
+  --mor: #a78bfa;
+  --mor-acik: #4c1d95;
+  --golge: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --golge-buyuk: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--metin);
+  font-family: var(--font-ana);
+  line-height: 1.5;
+  font-size: 15px;
+  min-height: 100vh;
+}
+
+code, pre, .mono {
+  font-family: var(--font-mono);
+}
+
+/* Üst Komuta Çubuğu */
+.ust-cubuk {
+  background: var(--bg-kart);
+  border-bottom: 1px solid var(--kenar);
+  padding: 0.65rem 1.25rem;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: var(--golge);
+}
+
+.ust-cubuk-ic {
+  max-width: 1480px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.marka-blok {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.marka-ikon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--birincil), var(--mor));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.3);
+}
+
+.marka-baslik {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--metin);
+  letter-spacing: -0.01em;
+}
+
+.marka-alt {
+  font-size: 0.78rem;
+  color: var(--metin-ikincil);
+}
+
+.ust-aksiyonlar {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+/* 6 Sekmeli Komuta Navigasyonu */
+.sekme-cubuk {
+  background: var(--bg-ikincil);
+  border-bottom: 1px solid var(--kenar);
+  padding: 0.45rem 1.25rem;
+}
+
+.sekme-cubuk-ic {
+  max-width: 1480px;
+  margin: 0 auto;
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.sekme-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--metin-ikincil);
+  padding: 0.55rem 0.95rem;
+  border-radius: var(--radius-kucuk);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: all 0.15s ease;
+}
+
+.sekme-btn:hover {
+  background: var(--bg-kart);
+  color: var(--metin);
+}
+
+.sekme-btn.aktif {
+  background: var(--bg-kart);
+  color: var(--birincil);
+  border-color: var(--kenar);
+  box-shadow: var(--golge);
+}
+
+.sekme-rozet {
+  background: var(--birincil-acik);
+  color: var(--birincil);
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+/* Ana Kapsayıcı ve Grid */
+.ana-kapsayici {
+  max-width: 1480px;
+  margin: 1.25rem auto;
+  padding: 0 1.25rem 3rem;
+}
+
+.sekme-panel {
+  display: none;
+}
+
+.sekme-panel.aktif {
+  display: block;
+}
+
+.iki-sutun-duzen {
+  display: grid;
+  grid-template-columns: 430px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 1120px) {
+  .iki-sutun-duzen {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Kartlar ve Form Elemanları */
+.kart {
+  background: var(--bg-kart);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius);
+  padding: 1.15rem;
+  box-shadow: var(--golge);
+  margin-bottom: 1rem;
+}
+
+.kart-baslik {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--metin);
+  margin-bottom: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--kenar);
+}
+
+.form-grup {
+  margin-bottom: 0.75rem;
+}
+
+.form-satir {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+label.etiket {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--metin-ikincil);
+  margin-bottom: 0.28rem;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="datetime-local"],
+select,
+textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--kenar-koyu);
+  border-radius: var(--radius-kucuk);
+  background: var(--bg);
+  color: var(--metin);
+  font-family: inherit;
+  font-size: 0.88rem;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--birincil);
+  border-color: var(--birincil);
+}
+
+/* Butonlar */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-kucuk);
+  border: 1px solid var(--kenar-koyu);
+  background: var(--bg-kart);
+  color: var(--metin);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--bg-ikincil);
+}
+
+.btn-birincil {
+  background: var(--birincil);
+  color: #ffffff;
+  border-color: var(--birincil);
+}
+
+.btn-birincil:hover {
+  background: var(--birincil-koyu);
+}
+
+.btn-basari {
+  background: var(--basari);
+  color: #ffffff;
+  border-color: var(--basari);
+}
+
+.btn-basari:hover {
+  filter: brightness(1.08);
+}
+
+.btn-uyari {
+  background: var(--uyari);
+  color: #ffffff;
+  border-color: var(--uyari);
+}
+
+.btn-tehlike {
+  background: var(--tehlike);
+  color: #ffffff;
+  border-color: var(--tehlike);
+}
+
+.btn-mor {
+  background: var(--mor);
+  color: #ffffff;
+  border-color: var(--mor);
+}
+
+.btn-kucuk {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+/* Rozetler ve Durum Çubukları */
+.rozet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.rozet-mavi { background: var(--birincil-acik); color: var(--birincil); }
+.rozet-yesil { background: var(--basari-acik); color: var(--basari); }
+.rozet-sari { background: var(--uyari-acik); color: var(--uyari); }
+.rozet-kirmizi { background: var(--tehlike-acik); color: var(--tehlike); }
+.rozet-mor { background: var(--mor-acik); color: var(--mor); }
+
+/* Doluluk Barı */
+.doluluk-kapsayici {
+  background: var(--bg-ikincil);
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius-kucuk);
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.doluluk-cubuk-dis {
+  height: 10px;
+  background: var(--kenar);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.35rem;
+}
+
+.doluluk-cubuk-ic {
+  height: 100%;
+  background: var(--basari);
+  transition: width 0.25s ease, background-color 0.25s ease;
+}
+
+/* Tablo Stilleri */
+.tablo-sarmal {
+  overflow-x: auto;
+  border: 1px solid var(--kenar);
+  border-radius: var(--radius-kucuk);
+}
+
+table.veri-tablo {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+table.veri-tablo th,
+table.veri-tablo td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--kenar);
+  text-align: left;
+}
+
+table.veri-tablo th {
+  background: var(--bg-ikincil);
+  font-weight: 700;
+  color: var(--metin-ikincil);
+}
+
+table.veri-tablo tr:hover td {
+  background: var(--bg-vurgu);
+}
+
+/* ==========================================================================
+   MİLİMETRİK GERÇEK A4 SINAV KAĞIDI & KANONİK OPTİK FORM ÖNİZLEME STİLLERİ
+   ========================================================================== */
+
+.a4-sahne {
+  background: #525659;
+  padding: 1.25rem;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.a4-sayfa {
+  width: 210mm;
+  min-height: 297mm;
+  max-height: 297mm;
+  background: #ffffff !important;
+  color: #000000 !important;
+  padding: 8mm 9mm;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: var(--kagit-font);
+  line-height: var(--kagit-satir);
+}
+
+.a4-sayfa-etiket {
+  position: absolute;
+  top: 2mm;
+  right: 9mm;
+  font-size: 7.5pt;
+  font-weight: 700;
+  color: #444 !important;
+  font-family: var(--font-mono);
+}
+
+/* Kurumsal Sınav Anteti */
+.kagit-antet {
+  border: 1.5px solid #000;
+  padding: 4px 8px;
+  margin-bottom: 5px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  background: #fff !important;
+}
+
+.kagit-antet-sol h2 {
+  font-size: 10.5pt;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 1.15;
+  color: #000 !important;
+}
+
+.kagit-antet-sol p {
+  font-size: 8.5pt;
+  margin: 1px 0 0;
+  font-weight: 600;
+  color: #111 !important;
+}
+
+.kagit-antet-sag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kitapcik-rozet-kutu {
+  border: 2px solid #000;
+  padding: 2px 8px;
+  text-align: center;
+  min-width: 58px;
+}
+
+.kitapcik-rozet-kutu .grup-etiket {
+  font-size: 6.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  display: block;
+}
+
+.kitapcik-rozet-kutu .grup-harf {
+  font-size: 16pt;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.ogrenci-kimlik-serit {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.8fr;
+  gap: 6px;
+  border-top: 1px solid #000;
+  margin-top: 3px;
+  padding-top: 3px;
+  font-size: 8pt;
+  grid-column: 1 / -1;
+}
+
+.ogrenci-kimlik-hucre {
+  border-bottom: 1px dotted #555;
+  padding-bottom: 1px;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   KAMERA DOSTU 4 KÖŞE REFERANS KARELİ (FIDUCIAL) KANONİK OPTİK KUTU
+   ========================================================================== */
+
+.optik-cerceve {
+  border: 1.5px solid #000;
+  padding: 9px 11px;
+  margin-bottom: 6px;
+  position: relative;
+  background: #ffffff !important;
+  page-break-inside: avoid;
+}
+
+/* 4 Köşe Fiducial Siyah Referans Kareleri (7mm x 7mm) */
+.fiducial-kare {
+  width: 18px;
+  height: 18px;
+  background: #000000 !important;
+  position: absolute;
+  z-index: 2;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.fiducial-kare::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 8px;
+  height: 8px;
+  background: #ffffff !important;
+}
+
+.fiducial-kare::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 4px;
+  height: 4px;
+  background: #000000 !important;
+  z-index: 3;
+}
+
+.fiducial-tl { top: 3px; left: 3px; }
+.fiducial-tr { top: 3px; right: 3px; }
+.fiducial-bl { bottom: 3px; left: 3px; }
+.fiducial-br { bottom: 3px; right: 3px; }
+
+.optik-ic-izgara {
+  margin: 4px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.optik-blok {
+  border: 1px solid #333;
+  padding: 3px 5px;
+  border-radius: 3px;
+  background: #fff !important;
+}
+
+.optik-blok-baslik {
+  font-size: 6.8pt;
+  font-weight: 800;
+  text-transform: uppercase;
+  text-align: center;
+  background: #eee !important;
+  border-bottom: 1px solid #444;
+  margin: -3px -5px 3px -5px;
+  padding: 1.5px 4px;
+  color: #000 !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.balon-satir {
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+  margin-bottom: 2px;
+  font-size: 7pt;
+  line-height: 1;
+}
+
+.balon-satir:last-child {
+  margin-bottom: 0;
+}
+
+.balon-etiket {
+  font-weight: 700;
+  min-width: 15px;
+  text-align: right;
+  padding-right: 2px;
+  font-family: var(--font-mono);
+  font-size: 6.8pt;
+}
+
+.optik-balon {
+  width: 12.5px;
+  height: 12.5px;
+  border-radius: 50%;
+  border: 1.25px solid #000;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 6.2pt;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #000 !important;
+  background: #fff !important;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.optik-balon.dolu {
+  background: #000000 !important;
+  color: #ffffff !important;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.optik-cok-sutun {
+  display: flex;
+  gap: 8px;
+}
+
+/* Sorular Bölümü — ÖSYM Tipi Çift Sütun ve Kompakt Dizgi */
+.sorular-govde {
+  flex: 1;
+  column-count: var(--kagit-sutun-sayisi);
+  column-gap: 5.5mm;
+  column-rule: 0.75px solid #aaa;
+  text-align: justify;
+}
+
+.bolum-baslik-serit {
+  background: #f0f0f0 !important;
+  border: 1px solid #000;
+  padding: 2px 6px;
+  font-size: 8pt;
+  font-weight: 800;
+  margin: 3px 0 4px 0;
+  break-inside: avoid;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.soru-kutu {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: var(--kagit-soru-bosluk);
+  padding-bottom: 3px;
+  border-bottom: 0.5px dashed #ccc;
+}
+
+.soru-kok {
+  font-weight: 600;
+  margin-bottom: 2.5px;
+}
+
+.soru-no {
+  font-weight: 800;
+}
+
+.soru-puan-etiket {
+  font-size: 7.2pt;
+  font-weight: 700;
+  color: #333 !important;
+}
+
+/* Akıllı Şık Düzenleri: Tek Satır (Yan Yana), 2x2 Izgara veya Alt Alta */
+.siklar-yan-yana {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 92%;
+}
+
+.siklar-iki-sutun {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  font-size: 93%;
+}
+
+.siklar-alt-alta {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5px;
+  font-size: 94%;
+}
+
+.sik-oge {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.sik-harf {
+  font-weight: 700;
+}
+
+/* Doğru / Yanlış Kompakt Satır */
+.dy-soru-satir {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 0;
+  border-bottom: 0.5px dotted #bbb;
+  break-inside: avoid;
+}
+
+.dy-kutu-etiket {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 85%;
+  white-space: nowrap;
+  border: 1px solid #333;
+  padding: 0 3px;
+  border-radius: 2px;
+}
+
+/* Klasik Soru Cevap Kutusu */
+.klasik-cevap-alan {
+  border: 1px solid #444;
+  border-radius: 3px;
+  height: var(--kagit-klasik-yukseklik);
+  margin-top: 3px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 15px,
+    #dcdcdc 15px,
+    #dcdcdc 16px
+  ) !important;
+  position: relative;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.klasik-hoca-mini-not {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 6.5pt;
+  color: #555 !important;
+  background: rgba(255,255,255,0.9);
+  padding: 0 3px;
+  border: 0.5px solid #888;
+}
+
+/* Ayrı Optik Cevap Kağıdı Çoklu (1, 2 veya 4'lü) Kesilebilir Düzen */
+.ayri-optik-izgara-2 {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  gap: 6mm;
+}
+
+.ayri-optik-izgara-4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 4mm;
+  height: 100%;
+}
+
+.ayri-optik-izgara-4 .optik-cerceve {
+  zoom: 0.76;
+}
+
+/* Ayrı Optik Formda Dikey Öğrenci Numarası Kodlama Izgarası */
+.dikey-no-izgara {
+  display: flex;
+  gap: 2.5px;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.dikey-no-sutun {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5px;
+}
+
+.dikey-no-kutu {
+  width: 13px;
+  height: 13px;
+  border: 1px solid #000;
+  font-size: 6.5pt;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1px;
+  background: #f8f8f8 !important;
+}
+
+/* Mini Geometri Şema QR Kutusu (12mm x 12mm) */
+.optik-mini-qr-kutu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #222;
+  padding: 2px;
+  border-radius: 3px;
+  background: #fff !important;
+}
+
+.optik-mini-qr-etiket {
+  font-size: 5.4pt;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  margin-top: 1px;
+  text-align: center;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   TÜRKİYE STANDART KALİTE FORMLARI (ISO 9001 / YÖKAK / MÜDEK / MEB TKY)
+   ========================================================================== */
+
+.kalite-iso-tablo {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1.5px solid #000;
+  margin-bottom: 4px;
+  background: #fff !important;
+  color: #000 !important;
+}
+
+.kalite-iso-tablo td {
+  border: 1px solid #000;
+  padding: 2px 5px;
+  font-size: 7.4pt;
+  vertical-align: middle;
+}
+
+.kalite-logo-hucre {
+  width: 24mm;
+  text-align: center;
+  font-weight: 800;
+}
+
+.kalite-logo-hucre img {
+  max-width: 20mm;
+  max-height: 14mm;
+  object-fit: contain;
+}
+
+.kalite-baslik-hucre {
+  text-align: center;
+}
+
+.kalite-baslik-hucre h2 {
+  font-size: 9.8pt;
+  font-weight: 800;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.kalite-baslik-hucre p {
+  font-size: 7.8pt;
+  font-weight: 700;
+  margin: 1px 0 0;
+}
+
+.kalite-kunye-hucre {
+  width: 48mm;
+  padding: 0 !important;
+}
+
+.kalite-kunye-ic-tablo {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kalite-kunye-ic-tablo td {
+  border: none;
+  border-bottom: 0.75px solid #000;
+  padding: 1.5px 4px;
+  font-size: 6.6pt;
+  font-family: var(--font-mono);
+}
+
+.kalite-kunye-ic-tablo tr:last-child td {
+  border-bottom: none;
+}
+
+/* MÜDEK / Bologna Öğrenme Çıktısı (ÖÇ) ve Bölüm Puan Tablosu */
+.mudek-puan-tablo {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #000;
+  margin-bottom: 4px;
+  font-size: 6.8pt;
+  text-align: center;
+}
+
+.mudek-puan-tablo th,
+.mudek-puan-tablo td {
+  border: 1px solid #000;
+  padding: 1.5px 4px;
+}
+
+.mudek-puan-tablo th {
+  background: #eee !important;
+  font-weight: 800;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* MEB TKY / Zümre / Okul Müdürü Sayfa Sonu Onay Bloğu */
+.kalite-alt-onay-serit {
+  border-top: 1.2px solid #000;
+  margin-top: 4px;
+  padding-top: 3px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  text-align: center;
+  font-size: 7pt;
+  gap: 6px;
+}
+
+/* Sayısal Ders Soru Altı İşlem Boşluğu */
+.soru-islem-boslugu {
+  height: var(--kagit-islem-bosluk, 0px);
+}
+
+.kesim-cizgisi {
+  border-top: 1.5px dashed #444;
+  text-align: center;
+  font-size: 7pt;
+  color: #444 !important;
+  margin: 2mm 0;
+}
+
+/* Kiosk / Karantina Sınav Modu Tam Ekran Katmanı */
+body.kiosk-aktif .ust-cubuk,
+body.kiosk-aktif .sekme-cubuk,
+body.kiosk-aktif .kiosk-gizle {
+  display: none !important;
+}
+
+.kiosk-ekran {
+  max-width: 820px;
+  margin: 1.5rem auto;
+  padding: 1.5rem;
+}
+
+/* A4 Önizleme Üzerinde Soru Değiştirme / Sabitleme / Sıra Kaydırma / Hızlı Düzenleme Araç Çubuğu (Baskıda Gizlenir) */
+.soru-ekran-araclari {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  position: absolute;
+  top: -3px;
+  right: 0;
+  z-index: 5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  background: #f1f5f9 !important;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 6.4pt;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  line-height: 1.1;
+  user-select: none;
+}
+
+.soru-ekran-etiket {
+  font-weight: 700;
+  color: #1e40af !important;
+  padding-right: 2px;
+}
+
+.soru-ekran-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 6.2pt;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.1;
+}
+
+.soru-ekran-btn:hover {
+  background: #dbeafe !important;
+  border-color: #2563eb;
+}
+
+.soru-ekran-btn.aktif-sabit {
+  background: #dcfce7 !important;
+  border-color: #16a34a;
+  color: #15803d !important;
+}
+
+/* ==========================================================================
+   YAZDIRMA (@media print) MİLİMETRİK A4 KURALLARI
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .ust-cubuk,
+  .sekme-cubuk,
+  .yazdir-gizle,
+  .soru-ekran-araclari {
+    display: none !important;
+  }
+
+  .ana-kapsayici,
+  .iki-sutun-duzen,
+  .a4-sahne {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    display: block !important;
+    max-width: none !important;
+  }
+
+  .a4-sayfa {
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 !important;
+    padding: 8mm 9mm !important;
+    box-shadow: none !important;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .a4-sayfa:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}
+
+/* ==========================================================================
+   SADELEŞTİRME: Çıktı Merkezi mini önizleme, katlanabilir kartlar, "Daha fazla" menüsü
+   ========================================================================== */
+.mini-onizleme-seridi {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding: 0.3rem 0.1rem 0.5rem;
+  min-height: 60px;
+}
+.mini-sayfa-kutu {
+  position: relative;
+  flex: 0 0 auto;
+  width: 135px;
+  height: 191px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--kenar-koyu);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+}
+.mini-sayfa-ic {
+  width: 794px;
+  transform: scale(0.17);
+  transform-origin: top left;
+  pointer-events: none;
+}
+.mini-sayfa-ic .a4-sayfa {
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+.mini-sayfa-no {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.75);
+  color: #fff;
+  padding: 0 5px;
+  border-radius: 8px;
+}
+.kart.katlandi > :not(.kart-baslik) {
+  display: none !important;
+}
+.kart.katlandi > .kart-baslik {
+  margin-bottom: 0;
+}
+.kart-katla-btn {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.kart > .kart-baslik {
+  gap: 0.5rem;
+}
+.daha-fazla-menu {
+  position: relative;
+}
+.daha-fazla-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.daha-fazla-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.daha-fazla-icerik {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 60;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 170px;
+  padding: 0.5rem;
+  background: var(--bg-kart);
+  border: 1px solid var(--kenar);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+}
+@media print {
+  .mini-onizleme-seridi,
+  .daha-fazla-menu {
+    display: none !important;
+  }
+}
+
+/* Araç çubuğu akıştan çıkarıldı: soru metni/şıklarla iç içe geçmez, yalnız üzerine gelince görünür */
+.soru-kutu,
+.dy-soru-satir { position: relative; }
+.soru-kutu:hover .soru-ekran-araclari,
+.dy-soru-satir:hover .soru-ekran-araclari,
+.soru-ekran-araclari:focus-within { opacity: 1; pointer-events: auto; }
+.soru-ekran-araclari .soru-ekran-etiket { white-space: nowrap; }
+
+/* ===== Sekme çubuğu v2: 6 eşit sütun, iki satırlı (başlık + alt açıklama), rozet köşede, yatay kaydırma yok, yazı üst üste binmez ===== */
+.sekme-cubuk-ic { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.4rem; overflow: visible; }
+.sekme-btn { position: relative; flex-direction: row; justify-content: flex-start; align-items: center; white-space: normal; min-width: 0; text-align: left; padding: 0.45rem 0.7rem; gap: 0.5rem; line-height: 1.2; }
+.sekme-ikon { font-size: 1.25rem; flex: 0 0 auto; }
+.sekme-metin { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.sekme-baslik { font-size: 0.86rem; font-weight: 700; overflow-wrap: anywhere; }
+.sekme-alt { font-size: 0.7rem; font-weight: 500; color: var(--metin-ikincil); opacity: 0.9; overflow-wrap: anywhere; }
+.sekme-btn .sekme-rozet { position: absolute; top: -6px; right: -4px; font-size: 0.68rem; padding: 0.05rem 0.4rem; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
+.sekme-btn.aktif { border-bottom: 3px solid var(--birincil); }
+@media (max-width: 1100px) { .sekme-cubuk-ic { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .sekme-cubuk-ic { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sekme-alt { display: none; } }
+
+/* Basılan optik form: okuma haritasıyla aynı yerleşimden üretilen SVG (tek kaynak) */
+.optik-cerceve.optik-kanonik { padding: 0; border: none; margin-bottom: 6px; background: #fff !important; line-height: 0; }
+.optik-cerceve.optik-kanonik svg { display: block; width: 100%; height: auto; }
+@media print { .optik-cerceve.optik-kanonik { page-break-inside: avoid; break-inside: avoid; } }

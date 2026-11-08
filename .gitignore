@@ -1,0 +1,10 @@
+node_modules/
+test-artifacts/
+backups/
+.cache/
+ornek-dosyalar/
+scratch-*
+dump-*.png
+*.log
+.DS_Store
+Thumbs.db

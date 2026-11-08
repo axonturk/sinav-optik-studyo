@@ -1,0 +1,23 @@
+{
+  "name": "sinav-optik-studyo",
+  "version": "1.0.0",
+  "description": "Öğretmen ve Öğretim Elemanları İçin Bağımsız A4 Sınav Kağıdı Hazırlama Stüdyosu, Cep Telefonu Kamerasıyla Optik Okuyucu (Mobil OMR - Test, Doğru/Yanlış, Klasik Puan Barı) ve Akademik Madde Analizi Platformu",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test-suite.js && node e2e-test.js && node dogru-sik-test.js && node omr-gercek-form-test.js && node pwa-test.js && node online-liste-test.js",
+    "test:birim": "node test-suite.js",
+    "test:e2e": "node e2e-test.js",
+    "test:dogru-sik": "node dogru-sik-test.js",
+    "test:omr": "node omr-gercek-form-test.js",
+    "test:pwa": "node pwa-test.js",
+    "test:online": "node online-liste-test.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.16.0",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="tr" data-tema="acik">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
+  <link rel="stylesheet" href="ortak.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#1d4ed8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Optik Okuyucu" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <script>
+    /* PWA: yalnız HTTPS veya localhost'ta servis işçisi kaydedilir (kamera ve kurulum için de bu gerekir) */
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    }
+    var __pwaIstek = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      __pwaIstek = e;
+      var b = document.getElementById('btn-pwa-yukle');
+      if (b) b.hidden = false;
+    });
+    window.addEventListener('DOMContentLoaded', function () {
+      var b = document.getElementById('btn-pwa-yukle');
+      if (!b) return;
+      if (__pwaIstek) b.hidden = false;
+      b.addEventListener('click', function () {
+        if (!__pwaIstek) return;
+        __pwaIstek.prompt();
+        __pwaIstek.userChoice.finally(function () { __pwaIstek = null; b.hidden = true; });
+      });
+    });
+  </script>
+</head>
+<body>
+
+  <!-- ÜST KOMUTA ÇUBUĞU -->
+  <header class="ust-cubuk yazdir-gizle">
+    <div class="ust-cubuk-ic">
+      <div class="marka-blok">
+        <div class="marka-ikon" aria-hidden="true">🎯</div>
+        <div>
+          <div class="marka-baslik">Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</div>
+          <div class="marka-alt">Öğretmen &amp; Öğretim Elemanları İçin 1 A4 (Önlü-Arkalı) Hibrit Sınav, Cep Tarayıcı ve Madde Analizi Platformu</div>
+        </div>
+      </div>
+
+      <div class="ust-aksiyonlar">
+        <div style="display:flex; align-items:center; gap:0.4rem;">
+          <label for="aktif-ders-sec" style="font-size:0.78rem; font-weight:700; color:var(--metin-ikincil);">📚 Aktif Ders:</label>
+          <select id="aktif-ders-sec" style="width:auto; min-width:230px; font-weight:600;"></select>
+          <button type="button" class="btn btn-kucuk" id="btn-yeni-ders-modal" title="Yeni Ders Ekle veya Arşivden Soru Dahil Et">➕ Yeni Ders / Arşiv</button>
+          <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-aktif-dersi-sil" title="Seçili dersi sil (Sorular silinmez, Soru Arşivine aktarılır)">🗑️ Dersi Sil</button>
+        </div>
+
+        <a href="optik-mobil.html" class="btn btn-mor btn-kucuk" id="link-mobil-okuyucu">📱 Cep Okuyucu</a>
+        <button type="button" class="btn btn-birincil btn-kucuk" id="btn-hoca-giris-ac" title="Öğretmen / Öğretim Elemanı Kullanıcı Adı ve Şifre Doğrulama Paneli">
+          👨‍🏫 Hoca Girişi (<span id="etiket-aktif-hoca-kullanici">hoca</span>)
+        </button>
+        <button type="button" class="btn btn-kucuk" id="btn-kiosk-ogrenci-modu">🎓 Öğrenci Online Sınav Girişi</button>
+        <details class="daha-fazla-menu">
+          <summary class="btn btn-kucuk" title="Yedekleme ve görünüm">⋯ Daha fazla</summary>
+          <div class="daha-fazla-icerik">
+            <button type="button" class="btn btn-kucuk" id="btn-yedek-indir" title="Tüm soru bankası ve sonuçları JSON olarak indir">💾 Yedek İndir</button>
+            <label class="btn btn-kucuk" style="cursor:pointer; margin:0;">
+              📂 Yedek Yükle
+              <input type="file" id="input-yedek-yukle" accept=".json" style="display:none;" />
+            </label>
+            <button type="button" class="btn btn-kucuk" id="btn-tema-degistir">🌙 Koyu Tema</button>
+          </div>
+        </details>
+      </div>
+    </div>
+  </header>
+
+  <!-- 6 SEKMELİ KOMUTA MERKEZİ NAVİGASYONU -->
+  <nav class="sekme-cubuk yazdir-gizle" aria-label="Ana Modüller">
+    <div class="sekme-cubuk-ic">
+      <button type="button" class="sekme-btn aktif" data-sekme="sekme-stüdyo" title="A4 Sınav & Optik Form Stüdyosu (kağıt kurgusu, hafta kapsamı ve çıktı merkezi)">
+        <span class="sekme-ikon" aria-hidden="true">📄</span>
+        <span class="sekme-metin"><span class="sekme-baslik">1. Sınav Stüdyosu</span><span class="sekme-alt">A4 kağıt · optik form</span></span> <span class="sekme-rozet" id="rozet-secili-soru">22 Soru</span>
+      </button>
+      <button type="button" class="sekme-btn" data-sekme="sekme-banka" title="Soru Bankası & Word İthalat">
+        <span class="sekme-ikon" aria-hidden="true">📚</span>
+        <span class="sekme-metin"><span class="sekme-baslik">2. Soru Bankası</span><span class="sekme-alt">Word / metin ithalat</span></span> <span class="sekme-rozet" id="rozet-banka-toplam">31</span>
+      </button>
+      <button type="button" class="sekme-btn" data-sekme="sekme-omr" title="Mobil Optik Okuma (OMR) & Kamera">
+        <span class="sekme-ikon" aria-hidden="true">📱</span>
+        <span class="sekme-metin"><span class="sekme-baslik">3. Optik Okuma</span><span class="sekme-alt">OMR · kamera</span></span> <span class="sekme-rozet" id="rozet-okunan-kagit">0</span>
+      </button>
+      <button type="button" class="sekme-btn" data-sekme="sekme-analiz" title="Değerlendirme & Madde Analizi (pj / rjx)">
+        <span class="sekme-ikon" aria-hidden="true">📊</span>
+        <span class="sekme-metin"><span class="sekme-baslik">4. Madde Analizi</span><span class="sekme-alt">değerlendirme · <span class="mono">pj / rjx</span></span></span>
+      </button>
+      <button type="button" class="sekme-btn" data-sekme="sekme-ogrenciler" title="Sınıf & Öğrenci Listesi · Salonlar">
+        <span class="sekme-ikon" aria-hidden="true">👨‍🎓</span>
+        <span class="sekme-metin"><span class="sekme-baslik">5. Sınıf & Salonlar</span><span class="sekme-alt">öğrenci listesi</span></span> <span class="sekme-rozet" id="rozet-ogrenci-sayisi">15</span>
+      </button>
+      <button type="button" class="sekme-btn" data-sekme="sekme-online" title="Online Sınav & Kiosk Kilidi">
+        <span class="sekme-ikon" aria-hidden="true">🌐</span>
+        <span class="sekme-metin"><span class="sekme-baslik">6. Online Sınav</span><span class="sekme-alt">kiosk kilidi</span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ANA İÇERİK KAPSAYICISI -->
+  <main class="ana-kapsayici" id="ana-icerik-alani">
+
+    <!-- ====================================================================
+         SEKME 1: A4 SINAV & OPTİK FORM STÜDYOSU (VARSAYILAN AÇIK SEKME)
+         ==================================================================== -->
+    <section class="sekme-panel aktif" id="sekme-stüdyo">
+      <div class="iki-sutun-duzen">
+
+        <!-- SOL PANEL: SINAV, SORU KOMBİNASYONU VE OPTİK FORM AYARLARI -->
+        <aside class="yazdir-gizle">
+
+          <!-- 2 Sayfa A4 Doluluk ve Ölçekleme Göstergesi -->
+          <div class="doluluk-kapsayici" id="a4-doluluk-kutu">
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; font-weight:700;">
+              <span>📏 1 A4 Yaprak (2 Sayfa Önlü-Arkalı) Doluluk:</span>
+              <span id="etiket-doluluk-yuzde" class="rozet rozet-yesil">%78 (Tam Sığıyor)</span>
+            </div>
+            <div class="doluluk-cubuk-dis">
+              <div class="doluluk-cubuk-ic" id="cubuk-doluluk-ic" style="width:78%;"></div>
+            </div>
+            <div id="etiket-olcek-bilgi" style="font-size:0.75rem; color:var(--metin-ikincil); margin-top:0.35rem;" class="mono">
+              Otomatik Ölçek: 9.4pt · 2 Sütun · Yan Yana Kısa Şık Aktif
+            </div>
+          </div>
+
+          <!-- Kart 1: Dinamik Soru Kombinasyonu & Toplam 100 Puan Dağılım Motoru -->
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>🎯 1. Soru Kombinasyonu &amp; Puan Dağılımı (Toplam 100)</span>
+              <span class="rozet rozet-yesil" id="rozet-toplam-puan">🟢 Toplam: 100 / 100 Puan</span>
+            </div>
+
+            <!-- Doğru / Yanlış Bölümü: Soru Sayısı + Bölüm Toplam Puanı (Otomatik Soru Sayısına Bölünür) -->
+            <div style="padding:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; margin-bottom:0.55rem;">
+              <div class="form-satir" style="margin-bottom:0.25rem;">
+                <div>
+                  <label class="etiket" for="ayar-dy-sayisi">✔️ Doğru/Yanlış Soru Sayısı</label>
+                  <input type="number" id="ayar-dy-sayisi" min="0" max="25" value="10" />
+                </div>
+                <div>
+                  <label class="etiket" for="ayar-dy-toplam-puan">D/Y Bölümü Toplam Puanı</label>
+                  <input type="number" id="ayar-dy-toplam-puan" min="0" max="100" step="1" value="20" />
+                </div>
+              </div>
+              <div style="font-size:0.75rem; font-weight:700; color:var(--birincil);" class="mono" id="etiket-dy-birim-puan">
+                ➗ Otomatik Dağılım: 20 Toplam Puan ÷ 10 Soru = Soru Başı 2 Puan
+              </div>
+            </div>
+
+            <!-- Çoktan Seçmeli Test Bölümü: Soru Sayısı + Bölüm Toplam Puanı (Otomatik Soru Sayısına Bölünür) + Şık Sayısı -->
+            <div style="padding:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; margin-bottom:0.55rem;">
+              <div class="form-satir" style="margin-bottom:0.25rem;">
+                <div>
+                  <label class="etiket" for="ayar-test-sayisi">🔘 Çoktan Seçmeli Test Sayısı</label>
+                  <input type="number" id="ayar-test-sayisi" min="0" max="35" value="10" />
+                </div>
+                <div>
+                  <label class="etiket" for="ayar-test-toplam-puan">Test Bölümü Toplam Puanı</label>
+                  <input type="number" id="ayar-test-toplam-puan" min="0" max="100" step="1" value="60" />
+                </div>
+                <div>
+                  <label class="etiket" for="ayar-sik-sayisi">Şık Sayısı</label>
+                  <select id="ayar-sik-sayisi">
+                    <option value="5" selected>5 Şık (A-E)</option>
+                    <option value="4">4 Şık (A-D)</option>
+                  </select>
+                </div>
+              </div>
+              <div style="font-size:0.75rem; font-weight:700; color:var(--birincil);" class="mono" id="etiket-test-birim-puan">
+                ➗ Otomatik Dağılım: 60 Toplam Puan ÷ 10 Soru = Soru Başı 6 Puan
+              </div>
+            </div>
+
+            <!-- Açık Uçlu (Klasik) Bölümü: Eşit Dağıt veya Tek Tek Puan Gir -->
+            <div style="padding:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; margin-bottom:0.55rem;">
+              <div class="form-satir" style="margin-bottom:0.35rem;">
+                <div>
+                  <label class="etiket" for="ayar-klasik-sayisi">✍️ Açık Uçlu (Klasik) Sayısı</label>
+                  <input type="number" id="ayar-klasik-sayisi" min="0" max="5" value="2" />
+                </div>
+                <div>
+                  <label class="etiket" for="ayar-klasik-puan-modu">Klasik Puanlama Seçeneği</label>
+                  <select id="ayar-klasik-puan-modu">
+                    <option value="esit" selected>⚖️ Eşit Dağıt (Toplamı Böl)</option>
+                    <option value="tek_tek">✍️ Tek Tek Puan Gir (Ayrı Puan)</option>
+                  </select>
+                </div>
+                <div id="grup-klasik-toplam-puan">
+                  <label class="etiket" for="ayar-klasik-toplam-puan">Klasik Toplam Puanı</label>
+                  <input type="number" id="ayar-klasik-toplam-puan" min="0" max="100" step="1" value="20" />
+                </div>
+              </div>
+
+              <!-- "Tek Tek Puan Gir" Seçildiğinde Her Klasik Soru İçin Açılan Dinamik Puan Kutuları -->
+              <div id="kutu-klasik-tek-tek-puanlar" style="display:none; margin-bottom:0.35rem; padding-top:0.35rem; border-top:1px dashed var(--kenar);"></div>
+
+              <div class="form-satir" style="margin-bottom:0.25rem;">
+                <div>
+                  <label class="etiket" for="ayar-klasik-optik-modu">Optik Formda Klasik Puanlama Barı Tipi</label>
+                  <select id="ayar-klasik-optik-modu">
+                    <option value="kademeli6" selected>🔘 6 Kademeli Hızlı Puan Barı (Örn: 0 · 2 · 4 · 6 · 8 · 10)</option>
+                    <option value="onlar_birler">🔢 1 Puan Hassasiyetli Onlar [0-2] + Birler [0-9] Barı (Ara Puanlar: 7, 9, 13...)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style="font-size:0.75rem; font-weight:700; color:var(--birincil);" class="mono" id="etiket-klasik-birim-puan">
+                ➗ Eşit Dağılım: 20 Toplam Puan ÷ 2 Klasik Soru = Soru Başı 10 Puan
+              </div>
+            </div>
+
+            <!-- Toplam 100 Puan Kontrol ve Dengeleme Uyarısı -->
+            <div id="uyari-toplam-100-kutu" style="display:none; padding:0.5rem; background:var(--uyari-acik); color:var(--uyari); border:1px solid var(--uyari); border-radius:6px; margin-bottom:0.55rem; font-size:0.78rem; font-weight:700; align-items:center; justify-content:space-between; gap:0.5rem; flex-wrap:wrap;">
+              <span id="uyari-toplam-100-metin">⚠️ Bölüm toplamları 100 puana eşit olmalıdır!</span>
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-puan-100-dengele">⚖️ Toplamı 100 Puana Tamamla</button>
+            </div>
+
+            <div class="form-grup">
+              <label class="etiket" for="ayar-zorluk-dagilimi">Soru Bankası Zorluk Dağılımı</label>
+              <select id="ayar-zorluk-dagilimi">
+                <option value="dengeli" selected>⚖️ Dengeli (%30 Kolay · %50 Orta · %20 Zor)</option>
+                <option value="kolay">🌱 Kolay Ağırlıklı</option>
+                <option value="orta">⚙️ Orta Ağırlıklı</option>
+                <option value="zor">🚀 Zor Ağırlıklı</option>
+                <option value="tumu">📋 Sırayla Tümü</option>
+              </select>
+            </div>
+
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.4rem;">
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-kombinasyon-uygula" style="flex:1;">
+                🔄 Seçilen Sayılara Göre Kağıdı &amp; Optiği Oluştur
+              </button>
+              <button type="button" class="btn btn-kucuk" id="btn-hazir-sablon-25" title="10 D/Y (25p) + 15 Test (75p) + 0 Klasik = 100 Puan">
+                ⚡ 10 D/Y + 15 Test (100p)
+              </button>
+            </div>
+          </div>
+
+          <!-- Kart 1B: Haftalık Konu Kapsamı, Hafta Başına Soru Kotası & Canlı Belirtke Tablosu -->
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>📅 1B. Haftalık Sınav Kapsamı &amp; Soru Değiştirme</span>
+              <span class="rozet rozet-mavi" id="rozet-aktif-hafta-sayisi">14 Hafta Aktif</span>
+            </div>
+
+            <!-- Hızlı Kapsam Seçicileri (Vize 1-7, Final 1-14, Son Yarı 8-14) -->
+            <div style="display:flex; gap:0.35rem; flex-wrap:wrap; margin-bottom:0.55rem;">
+              <button type="button" class="btn btn-kucuk" id="btn-hafta-vize" title="Vize Sınavı İçin Sadece 1–7. Haftaları Seç">
+                🟢 Vize (1–7. Hafta)
+              </button>
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-hafta-final" title="Final / Genel Sınav İçin 1–14. Haftaların Tümünü Seç">
+                🔵 Final (1–14. Hafta)
+              </button>
+              <button type="button" class="btn btn-kucuk" id="btn-hafta-son7" title="Sadece 8–14. Haftaları Seç">
+                🟣 Son Yarı (8–14. Hafta)
+              </button>
+              <button type="button" class="btn btn-kucuk" id="btn-hafta-tersle" title="Seçimi Tersine Çevir">
+                🔁 Seçimi Tersle
+              </button>
+            </div>
+
+            <div class="form-grup">
+              <label class="etiket" for="ayar-hafta-dagilim-modu">Haftalara Göre Soru Dağılım Yöntemi</label>
+              <select id="ayar-hafta-dagilim-modu">
+                <option value="otomatik_dengeli" selected>⚖️ Otomatik Dengeli Dağıtım (Seçili Haftalardan Eşit/Dönel Soru Seç)</option>
+                <option value="manuel_kota">🎯 Hafta Başına Soru Sayısı (Kota) Belirle (Hangi Haftadan Kaç Soru Çıksın?)</option>
+              </select>
+            </div>
+
+            <!-- 1-14 Hafta Onay Kutuları ve Manuel Kota Giriş Izgarası -->
+            <div id="kutu-hafta-secim-izgara" style="display:grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap:4px; margin-bottom:0.55rem;"></div>
+
+            <!-- Geçmiş Sınavda Sorulanları Hariç Tutma ve Kağıt Üzeri Soru Değiştirme Durumu -->
+            <div style="padding:0.45rem 0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; margin-bottom:0.55rem;">
+              <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.78rem; font-weight:700; cursor:pointer; margin-bottom:0.4rem;">
+                <input type="checkbox" id="ayar-haric-tut-sorulanlar" style="width:auto;" />
+                <span>🚫 Geçmiş sınavda <strong>"Soruldu"</strong> işaretlenen soruları hariç tut</span>
+              </label>
+              <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-kucuk" id="btn-sinav-soruldu-isaretle" title="Şu an kağıtta yer alan soruları geçmiş sınavda soruldu olarak işaretle">
+                  ✓ Bu Kağıttakileri "Soruldu" İşaretle
+                </button>
+                <button type="button" class="btn btn-kucuk" id="btn-kagit-degisim-sifirla" title="Kağıt üzerinde değiştirdiğiniz veya sabitlediğiniz soruları sıfırla">
+                  ♻️ Değişimleri / Sabitlemeleri Sıfırla
+                </button>
+              </div>
+              <div id="etiket-soru-degisim-durum" style="font-size:0.74rem; color:var(--birincil); font-weight:700; margin-top:0.35rem;">
+                💡 İpucu: Sağdaki A4 kağıt önizlemesinde herhangi bir sorunun üzerindeki <strong>"🔄 Değiştir"</strong> düğmesine basarak o soruyu kaldırıp yerine aynı hafta/zorluktan yeni soru atayabilirsiniz.
+              </div>
+            </div>
+
+            <!-- Canlı Sınav Belirtke Tablosu (Hafta × Tür × Zorluk × Puan) -->
+            <details open style="background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; padding:0.45rem 0.55rem;">
+              <summary style="font-size:0.78rem; font-weight:800; cursor:pointer; color:var(--birincil);">
+                📊 Canlı Sınav Belirtke Tablosu (Hafta × Soru Türü × Zorluk × Puan)
+              </summary>
+              <div id="kutu-canli-belirtke-tablosu" style="margin-top:0.4rem; font-size:0.74rem; overflow-x:auto;"></div>
+            </details>
+          </div>
+
+          <!-- Kart 2: Optik Form Yerleşimi & Öğrenci Numarası Kodlama Modu -->
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>⬛ 2. Optik Form Modu &amp; Öğrenci Kimlik Kodlama</span>
+            </div>
+
+            <div class="form-grup">
+              <label class="etiket" for="ayar-optik-yerlesim">Optik Form Kullanım Şekli</label>
+              <select id="ayar-optik-yerlesim">
+                <option value="birlesik" selected>📌 Sınav Kağıdında Birleşik (1. Sayfa Üstünde Gömülü)</option>
+                <option value="ayri">✂️ Ayrı Optik Cevap Kağıdı (Soru Kağıdından Bağımsız)</option>
+              </select>
+            </div>
+
+            <div class="form-grup" id="grup-ayri-optik-coklu" style="display:none;">
+              <label class="etiket" for="ayar-ayri-optik-adet">Ayrı Optik Form Kağıt Tasarrufu (1 A4'e Kaç Optik?)</label>
+              <select id="ayar-ayri-optik-adet">
+                <option value="2" selected>✂️ 1 A4'e 2 Adet (Yarım Sayfa A5 — Kesilebilir)</option>
+                <option value="4">✂️ 1 A4'e 4 Adet (Çeyrek Sayfa A6 — Kompakt)</option>
+                <option value="1">📄 1 A4'e 1 Tam Sayfa Geniş Optik Form</option>
+              </select>
+            </div>
+
+            <div class="form-grup">
+              <label class="etiket" for="ayar-kimlik-modu">Öğrenci Numarası (Kimlik) Kodlama Yöntemi</label>
+              <select id="ayar-kimlik-modu">
+                <option value="son2" selected>🔢 Öğrenci No Son 2 Hane (Onlar 0-9, Birler 0-9 Yatay — Önerilen)</option>
+                <option value="son3">🔢 Öğrenci No Son 3 Hane (Yüzler, Onlar, Birler Yatay Şerit)</option>
+                <option value="tam">🆔 Tam Öğrenci Numarası (Birleşikte Yatay, Ayrı Formda Dikey 4–12 Hane)</option>
+                <option value="qr">🏷️ İsme Özel QR Kodlu Kağıt (Sınıf Listesinden Ön-Baskılı)</option>
+              </select>
+            </div>
+
+            <div class="form-satir" id="grup-tam-no-hane" style="display:none;">
+              <div>
+                <label class="etiket" for="ayar-hane-sayisi">Öğrenci No Hane Sayısı</label>
+                <select id="ayar-hane-sayisi">
+                  <option value="4">4 Hane (Okul No)</option>
+                  <option value="6">6 Hane</option>
+                  <option value="8" selected>8 Hane</option>
+                  <option value="9">9 Hane</option>
+                  <option value="10">10 Hane (Üniversite No)</option>
+                  <option value="11">11 Hane</option>
+                  <option value="12">12 Hane</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="ayar-kitapcik-gruplar">Kitapçık Grupları</label>
+                <select id="ayar-kitapcik-gruplar">
+                  <option value="ABCD" selected>A, B, C, D (4 Grup)</option>
+                  <option value="AB">A ve B (2 Grup)</option>
+                  <option value="A">Tek Grup (A)</option>
+                </select>
+              </div>
+              <div>
+                <label class="etiket" for="ayar-onizleme-mod">Ekranda Önizlenen Kağıt</label>
+                <select id="ayar-onizleme-mod">
+                  <option value="kagit-A" selected>📄 Sınıf Sınav Kağıdı (A Grubu)</option>
+                  <option value="kagit-B">📄 Sınıf Sınav Kağıdı (B Grubu)</option>
+                  <option value="kagit-C">📄 Sınıf Sınav Kağıdı (C Grubu)</option>
+                  <option value="kagit-D">📄 Sınıf Sınav Kağıdı (D Grubu)</option>
+                  <option value="kagit-ABCD">📚 Sınıf Sınav Kağıdı (A+B+C+D Tüm Gruplar)</option>
+                  <option value="ogrenci-tek">👤 Öğrenciye Özel Soru Kağıdı (Seçili Öğrenci)</option>
+                  <option value="ogrenci-tum-sinif">🎓 Öğrenciye Özel Soru Kağıtları (Tüm Sınıf + Anahtar)</option>
+                  <option value="ayri-optik">✂️ Ayrı Optik Cevap Kağıdı</option>
+                  <option value="anahtar">🔑 A/B/C/D Simetrik Cevap Anahtarı</option>
+                  <option value="ogrenci-anahtar">🗝️ Öğrenciye Özel Cevap Anahtarı Çizelgesi</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Kart 3: Kurumsal Antet & Türkiye Kalite Formu Standardı (PDF Form Yükleme + ISO 9001 / YÖKAK / MÜDEK / MEB) -->
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>🏛️ 3. Standart Kalite Formu &amp; Hazır PDF Form Yükleme</span>
+              <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                <label class="btn btn-birincil btn-kucuk" style="cursor:pointer; margin:0;" title="Okulunuzun hazır standart PDF veya resim sınav formunu doğrudan yükleyin">
+                  📄 Hazır PDF / Form Yükle (.pdf / .png)
+                  <input type="file" id="input-kalite-gorsel" accept=".pdf,.docx,.doc,.xls,.xlsx,image/*" style="display:none;" />
+                </label>
+                <button type="button" class="btn btn-kucuk" id="btn-kalite-pano-yapistir" title="Word veya PDF ekranından Win+Shift+S ile kestiğiniz anteti Ctrl+V ile yapıştırın">
+                  📋 Pano (Ctrl+V)
+                </button>
+              </div>
+            </div>
+
+            <!-- 3 Katmanlı Akıllı PDF / Form Kesit Ayarı (Üst Antet + Beyaz Orta Alan + Alt İmza) -->
+            <div id="kutu-pdf-kesit-ayar" style="display:none; padding:0.55rem; background:var(--mavi-acik); border:1px solid var(--birincil); border-radius:6px; margin-bottom:0.55rem;">
+              <div style="font-size:0.76rem; font-weight:700; color:var(--birincil); margin-bottom:0.35rem;" id="etiket-pdf-kesit-durum">
+                ✂️ 3 Katmanlı Akıllı Kalite Formu Kesici Aktif (Orta Alandaki Eski Yazılar Otomatik Temizlendi)
+              </div>
+              <div class="form-satir" style="margin-bottom:0;">
+                <div>
+                  <label class="etiket" for="ayar-pdf-ust-mm">1. Sayfa Üst Antet Kesiti (<span id="deger-pdf-ust-mm">42</span> mm)</label>
+                  <input type="range" id="ayar-pdf-ust-mm" min="20" max="65" step="1" value="42" />
+                </div>
+                <div>
+                  <label class="etiket" for="ayar-pdf-alt-mm">2. Sayfa Alt İmza Kesiti (<span id="deger-pdf-alt-mm">18</span> mm)</label>
+                  <input type="range" id="ayar-pdf-alt-mm" min="0" max="35" step="1" value="18" />
+                </div>
+              </div>
+            </div>
+
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="kalite-form-tipi">Kurumsal Kalite Formu Standardı</label>
+                <select id="kalite-form-tipi">
+                  <option value="iso9001" selected>🏛️ ISO 9001 / YÖKAK Üniversite Kalite Formu (Doküman/Revizyon Künyeli)</option>
+                  <option value="mudek">🎓 MÜDEK / Bologna Akreditasyon Formu (Kalite Künyesi + ÖÇ Puan Tablolu)</option>
+                  <option value="meb">🏫 MEB TKY / OKYS Standart Yazılı Formu (Not Kutulu + Zümre/Müdür Onaylı)</option>
+                  <option value="standart">⚡ Kompakt Akademik Antet (Maksimum Soru Alanı)</option>
+                  <option value="ozel-banner">📄 Yüklenen Hazır Okul PDF / Form Anteti (Mükerrer Başlıklar Gizlenir)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- ISO 9001 / YÖKAK / MEB Kalite Künyesi Alanları -->
+            <div id="alan-kalite-kunye" class="form-satir">
+              <div>
+                <label class="etiket" for="kalite-dokuman-no">Doküman No</label>
+                <input type="text" id="kalite-dokuman-no" value="BLM-FRM-004" />
+              </div>
+              <div>
+                <label class="etiket" for="kalite-yayin-tarihi">İlk Yayın Tarihi</label>
+                <input type="text" id="kalite-yayin-tarihi" value="15.09.2022" />
+              </div>
+              <div>
+                <label class="etiket" for="kalite-revizyon">Revizyon No / Tarihi</label>
+                <input type="text" id="kalite-revizyon" value="Rev.02 / 01.09.2026" />
+              </div>
+            </div>
+
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="ayar-mukerrer-gizle">Sıfır Mükerrer Bilgi Kuralı (Alan Tasarrufu)</label>
+                <select id="ayar-mukerrer-gizle">
+                  <option value="evet" selected>✅ Aktif: Üst Formda Ad-Soyad/Ders Varsa Optik Kutuda Tekrarlama</option>
+                  <option value="tam-gizle">📄 Okul PDF Formunda İsim Satırı Var (Sistemin İsim Satırını da Kaldır)</option>
+                </select>
+              </div>
+              <div>
+                <label class="etiket" for="ayar-islem-boslugu">Sayısal / Sözel İşlem Boşluğu</label>
+                <select id="ayar-islem-boslugu">
+                  <option value="0" selected>Sözel Kompakt (0px)</option>
+                  <option value="12">Orta İşlem Boşluğu (12px)</option>
+                  <option value="24">Sayısal Geniş Boşluk (24px)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grup">
+              <label class="etiket" for="antet-kurum">Üniversite / Okul / Kurum Adı</label>
+              <input type="text" id="antet-kurum" value="T.C. TEKNOLOJİ ÜNİVERSİTESİ — MÜHENDİSLİK FAKÜLTESİ" />
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="antet-sinav-ad">Sınav Türü ve Dönemi</label>
+                <input type="text" id="antet-sinav-ad" value="2026-2027 GÜZ DÖNEMİ ARA SINAVI (VİZE)" />
+              </div>
+              <div>
+                <label class="etiket" for="antet-sure">Sınav Süresi</label>
+                <input type="text" id="antet-sure" value="60 Dakika" />
+              </div>
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="antet-tarih">Sınav Tarihi</label>
+                <input type="text" id="antet-tarih" value="07.11.2026" />
+              </div>
+              <div>
+                <label class="etiket" for="antet-hoca">Öğretim Elemanı / Öğretmen</label>
+                <input type="text" id="antet-hoca" value="Doç. Dr. Öğretim Üyesi" />
+              </div>
+            </div>
+          </div>
+
+        </aside>
+
+        <!-- SAĞ PANEL: GERÇEK A4 (SAYFA 1/2 VE SAYFA 2/2) CANLI ÖNİZLEME VE BASKI (SINIF & ÖĞRENCİYE ÖZEL PDF / WORD) -->
+        <div>
+          <!-- ÇIKTI MERKEZİ: Sınav kağıdı + sınav günü evrakları (tutanak / yoklama) tek kartta -->
+          <div class="kart yazdir-gizle" id="kart-cikti-merkezi" style="margin-bottom:0.85rem;">
+            <div class="kart-baslik" style="margin-bottom:0.55rem;">
+              <span>🖨️ Çıktı Merkezi</span>
+              <span style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                <span class="rozet rozet-mavi" id="rozet-tutanak-ders">—</span>
+                <span class="rozet rozet-yesil" id="rozet-aktif-baski-modu">Sınıf Kağıdı</span>
+              </span>
+            </div>
+
+            <!-- 1) Ne çıkacak, hangi derste, hangi formatta -->
+            <div class="form-satir" style="margin-bottom:0.5rem;">
+              <div>
+                <label class="etiket" for="tut-ders-sec">Ders</label>
+                <select id="tut-ders-sec"></select>
+              </div>
+              <div>
+                <label class="etiket" for="baski-kapsam-sec">Ne çıkacak?</label>
+                <select id="baski-kapsam-sec">
+                  <optgroup label="Sınav kağıdı">
+                    <option value="sinif-aktif" selected>📄 Sınıf kağıdı (aktif grup)</option>
+                    <option value="sinif-tum-gruplar">📚 Sınıf kağıdı — tüm gruplar (A+B+C+D)</option>
+                    <option value="ogrenci-tek">👤 Öğrenciye özel kağıt (seçili öğrenci)</option>
+                    <option value="ogrenci-tum-sinif">🎓 Öğrenciye özel kağıtlar (tüm sınıf + anahtar)</option>
+                    <option value="ayri-optik">✂️ Ayrı optik cevap kağıdı</option>
+                    <option value="anahtar">🔑 Cevap anahtarı</option>
+                  </optgroup>
+                  <optgroup label="Sınav günü evrakları (salon bazlı)">
+                    <option value="tutanak">📝 Sınav durum tutanağı</option>
+                    <option value="yoklama">✍️ Sınav yoklama evrakı</option>
+                    <option value="tutanak-yoklama">📚 Tutanak + yoklama evrakı</option>
+                  </optgroup>
+                </select>
+              </div>
+              <div>
+                <label class="etiket" for="baski-format-sec">Format</label>
+                <select id="baski-format-sec">
+                  <option value="pdf-indir" selected>📕 PDF (.pdf)</option>
+                  <option value="word-indir">📘 Word (.doc)</option>
+                  <option value="yazdir">🖨️ Yazıcıdan bastır</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 2) Yalnız öğrenciye özel kağıt seçilince görünür -->
+            <div id="panel-ogrenci-ozel" class="form-satir" style="display:none; margin-bottom:0.5rem;">
+              <div>
+                <label class="etiket" for="baski-ogrenci-sec">Öğrenci</label>
+                <select id="baski-ogrenci-sec"></select>
+              </div>
+              <div>
+                <label class="etiket" for="baski-ogrenci-soru-modu">Soru / şık kurgusu</label>
+                <select id="baski-ogrenci-soru-modu">
+                  <option value="kisiye_ozel_havuz" selected>🎲 Her öğrenciye farklı soru &amp; şık sırası</option>
+                  <option value="abcd_dagitim">🔤 A/B/C/D kitapçık dağıtımlı (isme ön-baskılı optik)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 3) Yalnız tutanak / yoklama seçilince görünür -->
+            <div id="panel-tutanak" style="display:none; margin-bottom:0.5rem; padding:0.6rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:var(--radius-kucuk);">
+              <div class="form-satir" style="margin-bottom:0.4rem;">
+                <div>
+                  <label class="etiket" for="tut-sinav-turu">Sınav türü</label>
+                  <select id="tut-sinav-turu">
+                    <option value="Vize (Ara Sınav)" selected>Vize (Ara Sınav)</option>
+                    <option value="Final">Final</option>
+                    <option value="Bütünleme (BÜT)">Bütünleme (BÜT)</option>
+                    <option value="Mazeret Sınavı">Mazeret Sınavı</option>
+                    <option value="Tek Ders Sınavı">Tek Ders Sınavı</option>
+                    <option value="Quiz / Kısa Sınav">Quiz / Kısa Sınav</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="etiket" for="tut-tarih">Tarih</label>
+                  <input type="date" id="tut-tarih" value="2026-11-07" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-saat">Saat</label>
+                  <input type="time" id="tut-saat" value="10:00" />
+                </div>
+                <div>
+                  <label class="etiket" for="tut-donem">Öğretim yılı / dönem</label>
+                  <input type="text" id="tut-donem" value="2026-2027 GÜZ" />
+                </div>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.4rem;">
+                <span class="rozet rozet-mor" id="etiket-salon-ozet">—</span>
+                <button type="button" class="btn btn-kucuk" id="btn-salon-duzenle">🏫 Salon &amp; kontenjanları düzenle</button>
+              </div>
+              <details>
+                <summary style="cursor:pointer; font-size:0.8rem; font-weight:700;">Diğer ayarlar (gözetmen, durum, fakülte, kalite künyesi)</summary>
+                <div class="form-satir" style="margin-top:0.4rem;">
+                  <div>
+                    <label class="etiket" for="tut-gozetmen1">Gözetmen 1 (salonda tanımlı değilse)</label>
+                    <input type="text" id="tut-gozetmen1" placeholder="Ad Soyad" />
+                  </div>
+                  <div>
+                    <label class="etiket" for="tut-gozetmen2">Gözetmen 2</label>
+                    <input type="text" id="tut-gozetmen2" placeholder="Ad Soyad" />
+                  </div>
+                  <div>
+                    <label class="etiket" for="tut-uygunluk">Sınav durumu</label>
+                    <select id="tut-uygunluk">
+                      <option value="uygun" selected>☒ Kurallara uygun bir sınav gerçekleşmiştir</option>
+                      <option value="uygunDegil">☒ Kurallara uygun bir sınav gerçekleşmemiştir</option>
+                      <option value="bos">☐ Boş bırak (elle işaretlenecek)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="etiket" for="tut-fakulte">Fakülte / Yüksekokul</label>
+                    <input type="text" id="tut-fakulte" value="MÜHENDİSLİK FAKÜLTESİ" />
+                  </div>
+                </div>
+                <div class="form-satir">
+                  <div>
+                    <label class="etiket" for="tut-dokuman-no-durum">Tutanak doküman no</label>
+                    <input type="text" id="tut-dokuman-no-durum" value="FRM-046" />
+                  </div>
+                  <div>
+                    <label class="etiket" for="tut-dokuman-no-yoklama">Yoklama doküman no</label>
+                    <input type="text" id="tut-dokuman-no-yoklama" value="FRM-059" />
+                  </div>
+                  <div>
+                    <label class="etiket" for="tut-yayin-tarihi">İlk yayın tarihi</label>
+                    <input type="text" id="tut-yayin-tarihi" value="30.01.2023" />
+                  </div>
+                  <div>
+                    <label class="etiket" for="tut-rev-no">Revizyon</label>
+                    <input type="text" id="tut-rev-no" value="-" />
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <!-- 4) Tek birincil eylem + ikincil kısayollar -->
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; padding-top:0.5rem; border-top:1px dashed var(--kenar);">
+              <button type="button" class="btn btn-birincil" id="btn-secili-baski-calistir" title="Seçtiğiniz belgeyi seçtiğiniz formatta indirir veya yazdırır">🚀 Çıktıyı Al</button>
+              <button type="button" class="btn btn-uyari btn-kucuk" id="btn-telefon-qr-goster">📲 Telefon QR</button>
+              <details style="margin-left:auto;">
+                <summary style="cursor:pointer; font-size:0.78rem; font-weight:700;">Kısayollar</summary>
+                <div style="display:flex; gap:0.35rem; flex-wrap:wrap; margin-top:0.4rem;">
+                  <button type="button" class="btn btn-birincil btn-kucuk" id="btn-yazdir-kagit">📕 Sınıf PDF</button>
+                  <button type="button" class="btn btn-kucuk" id="btn-word-indir">📘 Sınıf Word</button>
+                  <button type="button" class="btn btn-mor btn-kucuk" id="btn-ogrenci-ozel-pdf">🎓 Öğrenciye özel PDF</button>
+                  <button type="button" class="btn btn-mor btn-kucuk" id="btn-ogrenci-ozel-word">📝 Öğrenciye özel Word</button>
+                  <button type="button" class="btn btn-kucuk" id="btn-yazdir-ayri-optik">✂️ Ayrı optik</button>
+                  <button type="button" class="btn btn-basari btn-kucuk" id="btn-yazdir-anahtar">🔑 Cevap anahtarı</button>
+                </div>
+              </details>
+            </div>
+
+            <!-- 5) Çıktı önizlemesi: seçili belgenin ilk sayfaları -->
+            <div style="margin-top:0.6rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+                <strong style="font-size:0.78rem;">👁️ Çıktı önizlemesi</strong>
+                <span id="etiket-baski-ozet" style="font-size:0.76rem; color:var(--metin-ikincil);"></span>
+              </div>
+              <div id="baski-mini-onizleme" class="mini-onizleme-seridi" aria-label="Seçili belgenin ilk sayfaları"></div>
+            </div>
+
+
+            <!-- Telefon Kurulum QR Açılır Kutusu -->
+            <div id="kutu-telefon-qr" style="display:none; margin-top:0.85rem; padding:0.85rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:var(--radius-kucuk);">
+              <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+                <div id="alan-setup-qr-svg" style="background:#fff; padding:8px; border:1px solid #000; border-radius:6px;"></div>
+                <div style="flex:1; min-width:240px;">
+                  <h4 style="margin-bottom:0.3rem;">📲 Cep Telefonu Optik Okuyucu Sıfır-Ayar Kurulumu</h4>
+                  <p style="font-size:0.83rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">
+                    Bu sınavın <strong>A/B/C/D cevap anahtarları</strong>, <strong>Doğru/Yanlış + Test + Klasik soru sayıları</strong> ve <strong>Öğrenci No eşleşme tablosu</strong> aşağıdaki bağlantıda mühürlenmiştir. Telefonunuzdan açtığınızda internet olmasa bile anında okuma yapar:
+                  </p>
+                  <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <a href="optik-mobil.html" target="_blank" class="btn btn-birincil btn-kucuk" id="link-qr-dogrudan-ac">
+                      🚀 Kurulumlu Mobil Okuyucuyu Aç
+                    </a>
+                    <button type="button" class="btn btn-kucuk" id="btn-setup-kod-kopyala">
+                      📋 Kurulum Bağlantısını Kopyala
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- A4 SAHNESİ (SAYFA 1/2 VE SAYFA 2/2 BURADA ÜRETİLİR) -->
+          <div class="a4-sahne" id="a4-onizleme-sahne"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         SEKME 2: SORU BANKASI & AKILLI WORD / METİN SORU İTHALATI
+         ==================================================================== -->
+    <section class="sekme-panel" id="sekme-banka">
+      <div class="iki-sutun-duzen">
+
+        <!-- Sol: Yeni Soru Ekleme ve Word'den Toplu Yapıştırma -->
+        <div>
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>➕ Tek Soru Ekle (Test / Doğru-Yanlış / Klasik)</span>
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="yeni-soru-tur">Soru Türü</label>
+                <select id="yeni-soru-tur">
+                  <option value="test" selected>🔘 Çoktan Seçmeli Test</option>
+                  <option value="dy">✔️ Doğru / Yanlış (D/Y)</option>
+                  <option value="klasik">✍️ Açık Uçlu / Klasik</option>
+                </select>
+              </div>
+              <div>
+                <label class="etiket" for="yeni-soru-hafta">Ders Haftası (1–14)</label>
+                <select id="yeni-soru-hafta">
+                  <option value="1" selected>📅 1. Hafta</option>
+                  <option value="2">📅 2. Hafta</option>
+                  <option value="3">📅 3. Hafta</option>
+                  <option value="4">📅 4. Hafta</option>
+                  <option value="5">📅 5. Hafta</option>
+                  <option value="6">📅 6. Hafta</option>
+                  <option value="7">📅 7. Hafta</option>
+                  <option value="8">📅 8. Hafta</option>
+                  <option value="9">📅 9. Hafta</option>
+                  <option value="10">📅 10. Hafta</option>
+                  <option value="11">📅 11. Hafta</option>
+                  <option value="12">📅 12. Hafta</option>
+                  <option value="13">📅 13. Hafta</option>
+                  <option value="14">📅 14. Hafta</option>
+                </select>
+              </div>
+              <div>
+                <label class="etiket" for="yeni-soru-zorluk">Zorluk Seviyesi</label>
+                <select id="yeni-soru-zorluk">
+                  <option value="Kolay">🌱 Kolay</option>
+                  <option value="Orta" selected>⚙️ Orta</option>
+                  <option value="Zor">🚀 Zor</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grup">
+              <label class="etiket" for="yeni-soru-metin">Soru Kökü / İfadesi</label>
+              <textarea id="yeni-soru-metin" rows="3" placeholder="Sorunuzu buraya yazınız..."></textarea>
+            </div>
+
+            <!-- Opsiyonel Kod/Formül Kutusu, Öğrenme Çıktısı (ÖÇ) ve Şekil/Diyagram Görseli -->
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="yeni-soru-kazanim">Konu / Öğrenme Çıktısı (ÖÇ)</label>
+                <input type="text" id="yeni-soru-kazanim" placeholder="Örn: ÖÇ-1: Ağ Katmanları" />
+              </div>
+              <div>
+                <label class="etiket" for="yeni-soru-kod">Kod / Formül / Öncül Satırı (İsteğe Bağlı)</label>
+                <input type="text" id="yeni-soru-kod" placeholder="Örn: SELECT * FROM users WHERE id = 1;" />
+              </div>
+            </div>
+            <div class="form-grup">
+              <label class="etiket" for="input-soru-gorsel">🖼️ Soruya Şekil / Diyagram / Devre Görseli Ekle (İsteğe Bağlı)</label>
+              <input type="file" id="input-soru-gorsel" accept="image/*" />
+            </div>
+
+            <!-- Test Şıkları Alanı -->
+            <div id="alan-yeni-test-siklar">
+              <div class="form-grup">
+                <label class="etiket">Şıklar (A, B, C, D, E) ve Doğru Cevap</label>
+                <div style="display:grid; gap:0.4rem;">
+                  <input type="text" id="sik-a" placeholder="A şıkkı..." />
+                  <input type="text" id="sik-b" placeholder="B şıkkı..." />
+                  <input type="text" id="sik-c" placeholder="C şıkkı..." />
+                  <input type="text" id="sik-d" placeholder="D şıkkı..." />
+                  <input type="text" id="sik-e" placeholder="E şıkkı (4 şıklı sınavlarda boş bırakılabilir)..." />
+                </div>
+              </div>
+              <div class="form-grup">
+                <label class="etiket" for="yeni-soru-dogru-harf">Doğru Şık</label>
+                <select id="yeni-soru-dogru-harf">
+                  <option value="A">A Şıkkı</option>
+                  <option value="B">B Şıkkı</option>
+                  <option value="C">C Şıkkı</option>
+                  <option value="D">D Şıkkı</option>
+                  <option value="E">E Şıkkı</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Doğru / Yanlış Alanı -->
+            <div id="alan-yeni-dy" style="display:none;">
+              <div class="form-grup">
+                <label class="etiket" for="yeni-soru-dogru-dy">Doğru / Yanlış Cevabı</label>
+                <select id="yeni-soru-dogru-dy">
+                  <option value="D">Doğru (D)</option>
+                  <option value="Y">Yanlış (Y)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Klasik Rubrik Alanı -->
+            <div id="alan-yeni-klasik" style="display:none;">
+              <div class="form-grup">
+                <label class="etiket" for="yeni-soru-rubrik">Öğretmen Değerlendirme Anahtarı (Rubrik)</label>
+                <input type="text" id="yeni-soru-rubrik" placeholder="Örn: Tanım + Mimari örnek + Güvenlik gerekçesi" />
+              </div>
+            </div>
+
+            <button type="button" class="btn btn-birincil" id="btn-soru-ekle" style="width:100%;">
+              💾 Soruyu Bankaya Kaydet (Puan Sınav Tanımlarken Verilir)
+            </button>
+          </div>
+
+          <!-- Boş CSV Şablon İndirme (Test / D-Y / Klasik Ayrı Şablonlar + Zorluk Derecesi — Puan Sütunsuz) & Yükleme -->
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>📥 Excel / CSV Boş Soru Şablonları (Zorluk Derecesi Dahil)</span>
+              <span class="rozet rozet-yesil">Puan Sütunsuz · Kolay/Orta/Zor</span>
+            </div>
+            <p style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.55rem;">
+              Her soru türü için kendi sütun yapısına uygun <strong>boş CSV şablonunu</strong> indirip Excel'de doldurun. Soru bankasında sabit puan sütunu yoktur; puanlar <strong>Sınav Tanımlarken (Toplam 100 Puan üzerinden)</strong> otomatik bölünür veya klasikte tek tek verilir:
+            </p>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.4rem; margin-bottom:0.5rem;">
+              <button type="button" class="btn btn-kucuk" id="btn-bos-test-csv-indir">
+                🔘 Boş Test CSV İndir
+              </button>
+              <button type="button" class="btn btn-kucuk" id="btn-bos-dy-csv-indir">
+                ✔️ Boş Doğru/Yanlış CSV İndir
+              </button>
+              <button type="button" class="btn btn-kucuk" id="btn-bos-klasik-csv-indir">
+                ✍️ Boş Klasik Soru CSV İndir
+              </button>
+              <button type="button" class="btn btn-kucuk" id="btn-bos-soru-csv-indir">
+                📦 Karma (Tümü) CSV İndir
+              </button>
+            </div>
+            <div style="margin-bottom:0.85rem;">
+              <label class="btn btn-basari btn-kucuk" style="cursor:pointer; margin:0; width:100%;">
+                📂 Doldurulmuş CSV / Excel (.xlsx .xls) Dosyasını Yükle (Test / D-Y / Klasik Otomatik Tanır)
+                <input type="file" id="input-soru-csv-yukle" accept=".csv,.txt,.xlsx,.xls" style="display:none;" />
+              </label>
+              <div id="etiket-soru-yukleme-durum" style="font-size:0.78rem; margin-top:0.3rem;"></div>
+            </div>
+
+            <div class="kart-baslik" style="border-top:1px solid var(--kenar); padding-top:0.65rem;">
+              <span>📋 Word / PDF Metninden Toplu Soru Yapıştır</span>
+              <button type="button" class="btn btn-kucuk" id="btn-ornek-metin-doldur">✨ Örnek Metin Doldur</button>
+            </div>
+            <p style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">
+              Word belgenizdeki soruları kopyalayıp aşağıya yapıştırın. Sistem <code>[DY] ... (D)</code>, <code>A) ... B) ... Cevap: C</code> ve <code>[KLASİK] ...</code> yapılarını otomatik tanır:
+            </p>
+            <textarea id="toplu-soru-metin" rows="6" placeholder="1. [DY] TCP bağlantı yönelimli bir protokoldür. (D)&#10;2. HTTP varsayılan olarak hangi portu kullanır?&#10;A) 21  B) 22  C) 80  D) 443  E) 3306&#10;Cevap: C"></textarea>
+            <button type="button" class="btn btn-basari" id="btn-toplu-soru-aktar" style="width:100%; margin-top:0.5rem;">
+              🚀 Metindeki Soruları Ayrıştır ve Bankaya Ekle
+            </button>
+          </div>
+        </div>
+
+        <!-- Sağ: Soru Bankası Listesi -->
+        <div class="kart">
+          <div class="kart-baslik">
+            <span>📚 Aktif Dersin Soru Bankası</span>
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <select id="filtre-soru-kaynak" style="width:auto; font-weight:700;" title="Aktif dersin soruları veya silinen derslerin soru arşivi">
+                <option value="aktif" selected>📚 Aktif Dersin Soruları</option>
+                <option value="arsiv">📦 Soru Arşivi (Silinen Dersler)</option>
+              </select>
+              <select id="filtre-soru-hafta" style="width:auto;">
+                <option value="TUMU">Tüm Haftalar (1–14)</option>
+                <option value="1">1. Hafta</option>
+                <option value="2">2. Hafta</option>
+                <option value="3">3. Hafta</option>
+                <option value="4">4. Hafta</option>
+                <option value="5">5. Hafta</option>
+                <option value="6">6. Hafta</option>
+                <option value="7">7. Hafta</option>
+                <option value="8">8. Hafta</option>
+                <option value="9">9. Hafta</option>
+                <option value="10">10. Hafta</option>
+                <option value="11">11. Hafta</option>
+                <option value="12">12. Hafta</option>
+                <option value="13">13. Hafta</option>
+                <option value="14">14. Hafta</option>
+              </select>
+              <select id="filtre-soru-tur" style="width:auto;">
+                <option value="TUMU">Tüm Türler</option>
+                <option value="dy">✔️ Doğru / Yanlış</option>
+                <option value="test">🔘 Çoktan Seçmeli Test</option>
+                <option value="klasik">✍️ Açık Uçlu / Klasik</option>
+              </select>
+            </div>
+          </div>
+          <div id="kutu-banka-arsiv-cubuk" style="display:none; padding:0.55rem 0.65rem; margin-bottom:0.55rem; background:var(--uyari-acik); border:1px solid var(--uyari); border-radius:6px; font-size:0.8rem;"></div>
+          <div class="tablo-sarmal">
+            <table class="veri-tablo">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Hafta</th>
+                  <th>Tür</th>
+                  <th>Soru Metni &amp; Şıklar</th>
+                  <th>Doğru Cevap</th>
+                  <th>Zorluk</th>
+                  <th>İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="tablo-soru-bankasi"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         SEKME 3: MOBİL OPTİK OKUMA (OMR), KAMERA VE SİMÜLASYON LABORATUVARI
+         ==================================================================== -->
+    <section class="sekme-panel" id="sekme-omr">
+      <div class="iki-sutun-duzen">
+
+        <!-- Sol: Kamera, Fotoğraf Yükleme ve Sentetik OMR Simülasyon Testi -->
+        <div>
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>📸 1. Canlı Kamera veya Kağıt Fotoğrafı ile Oku</span>
+              <a href="optik-mobil.html" class="btn btn-mor btn-kucuk">📲 Mobil Arayüzü Aç</a>
+            </div>
+            <p style="font-size:0.83rem; color:var(--metin-ikincil); margin-bottom:0.75rem;">
+              Cep telefonunuzdan veya bilgisayar kamerasından optik formu doğrudan okutabilir ya da çekilmiş sınav kağıdı fotoğrafını yükleyebilirsiniz:
+            </p>
+            <div style="margin-bottom:0.75rem; padding:0.6rem; border:1px dashed var(--kenar-koyu); border-radius:8px;">
+              <label class="etiket" for="omr-form-turu">📄 Okunacak form türü</label>
+              <select id="omr-form-turu">
+                <option value="uygulama">Bu uygulamanın optik formu (4 köşe işaretli)</option>
+                <option value="standart">Standart / hazır baskı optik form (A-B-C-D-E balonlu)</option>
+              </select>
+              <div id="omr-standart-ayar" hidden style="margin-top:0.5rem;">
+                <div class="form-satir">
+                  <div><label class="etiket" for="omr-std-soru">Soru sayısı</label><input type="number" id="omr-std-soru" min="1" max="200" value="40" /></div>
+                  <div><label class="etiket" for="omr-std-sik">Şık sayısı</label><select id="omr-std-sik"><option value="5">5 (A-E)</option><option value="4">4 (A-D)</option></select></div>
+                  <div><label class="etiket" for="omr-std-siralama">Soru sırası</label><select id="omr-std-siralama"><option value="sutun">Sütun sütun (1-25 | 26-50)</option><option value="satir">Satır satır</option></select></div>
+                </div>
+                <div class="form-satir">
+                  <div style="grid-column: 1 / -1;"><label class="etiket" for="omr-std-anahtar">Cevap anahtarı (örn. ABCDEABCDE…)</label><input type="text" id="omr-std-anahtar" placeholder="ABCDABCD…" autocomplete="off" /></div>
+                </div>
+                <div class="form-satir">
+                  <div><label class="etiket" for="omr-std-ogrno">Öğrenci no (elle)</label><input type="text" id="omr-std-ogrno" inputmode="numeric" placeholder="boş bırakılabilir" /></div>
+                  <div><label class="etiket" for="omr-std-goturme">Yanlış götürme</label><select id="omr-std-goturme"><option value="0">Yok</option><option value="3">3 yanlış = 1 doğru</option><option value="4">4 yanlış = 1 doğru</option></select></div>
+                </div>
+                <p style="font-size:0.78rem; color:var(--metin-ikincil); margin:0.3rem 0 0;">Köşe işareti gerekmez: balonlar otomatik bulunur, eğim ve 90° dönüklük düzeltilir.</p>
+              </div>
+            </div>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+              <button type="button" class="btn btn-birincil" id="btn-studyo-kamera-ac">
+                📷 Kamerayı Başlat
+              </button>
+              <button type="button" class="btn btn-tehlike" id="btn-studyo-kamera-kapat" style="display:none;">
+                ⏹️ Kamerayı Durdur
+              </button>
+              <label class="btn" style="cursor:pointer; margin:0;">
+                🖼️ Fotoğraf Dosyası Yükle
+                <input type="file" id="input-omr-foto" accept="image/*" style="display:none;" />
+              </label>
+            </div>
+
+            <!-- Canlı Kamera Video Alanı -->
+            <div id="kutu-studyo-video" style="display:none; margin-bottom:0.75rem; position:relative; background:#000; border-radius:8px; overflow:hidden;">
+              <video id="video-studyo-omr" autoplay playsinline muted style="width:100%; display:block;"></video>
+              <div style="padding:0.5rem; text-align:center; background:rgba(0,0,0,0.7);">
+                <button type="button" class="btn btn-basari" id="btn-video-kare-tara">📸 Bu Kareyi Yakala ve OMR ile Oku</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Etkileşimli OMR Simülatörü (Kamerasız Test & Kalibrasyon) -->
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>🧪 2. Etkileşimli OMR Görüntü İşleme Test &amp; Kalibrasyon</span>
+              <span class="rozet rozet-yesil">7 Adımlı CV Hattı</span>
+            </div>
+            <p style="font-size:0.82rem; color:var(--metin-ikincil); margin-bottom:0.65rem;">
+              Seçtiğiniz sınav yapısına (<strong id="etiket-omr-aktif-yapi">10 D/Y + 10 Test + 2 Klasik</strong>) uygun gerçekçi işaretlenmiş sınav kağıdı görüntüsü üretip <strong>Adaptif Eşikleme + Homografi + Balon Kontrast</strong> motorunu canlı test edin:
+            </p>
+
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="sim-ogrenci-sec">Simüle Edilecek Öğrenci</label>
+                <select id="sim-ogrenci-sec"></select>
+              </div>
+              <div>
+                <label class="etiket" for="sim-kitapcik-sec">Kitapçık Grubu</label>
+                <select id="sim-kitapcik-sec">
+                  <option value="A">A Kitapçığı</option>
+                  <option value="B">B Kitapçığı</option>
+                  <option value="C">C Kitapçığı</option>
+                  <option value="D">D Kitapçığı</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="sim-senaryo-sec">Görüntü &amp; İşaretleme Senaryosu</label>
+                <select id="sim-senaryo-sec">
+                  <option value="basarili" selected>✅ Başarılı Öğrenci + Telefon Gölgesi (%85–95 Puan)</option>
+                  <option value="orta">⚙️ Orta Seviye Öğrenci + Hafif Gölge (%60–75 Puan)</option>
+                  <option value="silinti">⚠️ 3. Test Sorusunda Silinti İzi Olan Kağıt (İnceleme Kuyruğu)</option>
+                  <option value="zayif">🌱 Düşük Puanlı Kağıt (%30–45 Puan)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+              <button type="button" class="btn btn-birincil" id="btn-sim-tek-tara" style="flex:1;">
+                ▶ Optik Görüntü Üret ve Tara
+              </button>
+              <button type="button" class="btn btn-basari" id="btn-sim-tum-sinif-tara" style="flex:1;">
+                🚀 Tüm Sınıfı (15 Kağıt) Hızlı Tara
+              </button>
+            </div>
+          </div>
+
+          <!-- Öğretmen İnceleme Kuyruğu (Düşük Güvenilirlik / Silinti) -->
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>⚠️ 3. Öğretmen İnceleme Kuyruğu (Silinti / Çakışma)</span>
+              <span class="rozet rozet-sari" id="rozet-inceleme-sayisi">0 Bekleyen</span>
+            </div>
+            <div id="liste-inceleme-kuyrugu" style="font-size:0.84rem; color:var(--metin-ikincil);">
+              Şu anda düşük güvenilirlikli veya silintili okuma bulunmuyor.
+            </div>
+          </div>
+        </div>
+
+        <!-- Sağ: Canlı Görüntü İşleme Röntgeni ve Son Okunan Kağıt Fişi -->
+        <div>
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>🔬 Canlı OMR Görüntü İşleme Hattı (Adaptif Eşikleme &amp; Balon Tespiti)</span>
+              <span class="rozet rozet-mavi" id="rozet-son-okuma-guven">Hazır</span>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; margin-bottom:0.85rem;">
+              <div>
+                <div style="font-size:0.78rem; font-weight:700; margin-bottom:0.25rem; color:var(--metin-ikincil);">
+                  1. Kamera / Gölgeli Optik Form Girdisi (800×420)
+                </div>
+                <canvas id="canvas-omr-girdi" width="800" height="420" style="width:100%; border:1px solid var(--kenar-koyu); border-radius:6px; background:#fff;"></canvas>
+              <div id="omr-uyari-kutu" role="alert" hidden style="margin-top:0.4rem; padding:0.5rem 0.7rem; border-radius:6px; background:#fef3c7; color:#92400e; font-weight:700; font-size:0.85rem;"></div>
+              </div>
+              <div>
+                <div style="font-size:0.78rem; font-weight:700; margin-bottom:0.25rem; color:var(--metin-ikincil);">
+                  2. Bradley-Roth Adaptif Eşikleme &amp; Okunan Balonlar (Yeşil=Doğru, Kırmızı=Yanlış)
+                </div>
+                <canvas id="canvas-omr-islenmis" width="800" height="420" style="width:100%; border:1px solid var(--kenar-koyu); border-radius:6px; background:#fff;"></canvas>
+              </div>
+            </div>
+
+            <!-- Son Okunan Kağıdın Detaylı Sonuç Fişi -->
+            <div id="kutu-son-okunan-detay" style="padding:0.85rem; background:var(--bg-ikincil); border-radius:var(--radius-kucuk); border:1px solid var(--kenar);">
+              Henüz bir sınav kağıdı okutulmadı. Soldaki <strong>"▶ Optik Görüntü Üret ve Tara"</strong> veya <strong>"🚀 Tüm Sınıfı Hızlı Tara"</strong> düğmesine tıklayarak 7 adımlı OMR motorunu hemen deneyebilirsiniz.
+            </div>
+          </div>
+
+          <!-- Okunan Kağıtlar Tablosu -->
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>📋 Okunan Sınav Kağıtları Listesi</span>
+              <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-okumalari-temizle">🗑️ Listeyi Sıfırla</button>
+            </div>
+            <div class="tablo-sarmal">
+              <table class="veri-tablo">
+                <thead>
+                  <tr>
+                    <th>Öğrenci No</th>
+                    <th>Ad Soyad</th>
+                    <th>Grup</th>
+                    <th>D/Y (D/Y/B)</th>
+                    <th>Test (D/Y/B)</th>
+                    <th>Klasik Puan</th>
+                    <th>Toplam Puan</th>
+                    <th>Güven</th>
+                  </tr>
+                </thead>
+                <tbody id="tablo-omr-okunanlar"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         SEKME 4: AKADEMİK DEĞERLENDİRME, MADDE ANALİZİ (pj, rjx) & NOT ÇİZELGESİ
+         ==================================================================== -->
+    <section class="sekme-panel" id="sekme-analiz">
+      <div class="kart yazdir-gizle">
+        <div class="kart-baslik">
+          <span>⚙️ Puanlama Kuralları (Yanlışın Doğruyu Götürme Oranı, Soru İptali &amp; Çift Şık Doğru Kabulü)</span>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button type="button" class="btn btn-mor btn-kucuk" id="btn-ogrenci-karne-yazdir" title="Her öğrenci için 1 A4'e 4 adet kesilebilir Bireysel Sınav Sonuç ve Kazanım Karnesi yazdırır">
+              🎓 Bireysel Öğrenci Karneleri (1 A4'e 4 Fiş)
+            </button>
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-obs-resmi-csv-indir" title="Sınava girmeyenleri GR olarak işaretleyen ve Harf Notu (AA..FF) hesaplayan tam sınıf çizelgesi">
+              🏛️ OBS / e-Okul Resmi Not Çizelgesi (GR + Harf Notu)
+            </button>
+            <button type="button" class="btn btn-basari btn-kucuk" id="btn-csv-indir">📊 Okunan Kağıtlar (.csv) İndir</button>
+          </div>
+        </div>
+
+        <div class="form-satir">
+          <div>
+            <label class="etiket" for="kural-test-goturme">Çoktan Seçmeli Test Yanlış Götürme</label>
+            <select id="kural-test-goturme">
+              <option value="0" selected>Yanlış Doğruyu Götürmesin (0)</option>
+              <option value="4">4 Yanlış 1 Doğruyu Götürür</option>
+              <option value="3">3 Yanlış 1 Doğruyu Götürür</option>
+            </select>
+          </div>
+          <div>
+            <label class="etiket" for="kural-dy-goturme">Doğru/Yanlış Bölümü Yanlış Götürme</label>
+            <select id="kural-dy-goturme">
+              <option value="0" selected>Yanlış Doğruyu Götürmesin (0)</option>
+              <option value="2">2 Yanlış 1 Doğruyu Götürür</option>
+            </select>
+          </div>
+          <div>
+            <label class="etiket" for="kural-iptal-soru">İptal Edilen (Herkese Tam Puan) Soru</label>
+            <input type="text" id="kural-iptal-soru" placeholder="Örn: TEST-4, DY-2" />
+          </div>
+          <div>
+            <label class="etiket" for="kural-cift-sik-dogru">Çift Şık Doğru / Anahtar Değiştir (A Grubu)</label>
+            <div style="display:flex; gap:0.4rem;">
+              <input type="text" id="kural-cift-sik-dogru" placeholder="Örn: TEST-3:B|D, TEST-5:C" />
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-yeniden-puanla">Hesapla</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sınıf İstatistik Özeti Kartları (KR-20 / Cronbach Alpha ve Standart Hata Dahil) -->
+      <div class="yazdir-gizle" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap:0.75rem; margin-bottom:1rem;">
+        <div class="kart" style="margin:0; text-align:center;">
+          <div style="font-size:0.74rem; color:var(--metin-ikincil); font-weight:700;">OKUNAN KAĞIT</div>
+          <div style="font-size:1.55rem; font-weight:800; color:var(--birincil);" id="ist-ogrenci-sayisi">0</div>
+        </div>
+        <div class="kart" style="margin:0; text-align:center;">
+          <div style="font-size:0.74rem; color:var(--metin-ikincil); font-weight:700;">SINIF ORTALAMASI</div>
+          <div style="font-size:1.55rem; font-weight:800; color:var(--basari);" id="ist-ortalama">0.0</div>
+        </div>
+        <div class="kart" style="margin:0; text-align:center;">
+          <div style="font-size:0.74rem; color:var(--metin-ikincil); font-weight:700;">STANDART SAPMA</div>
+          <div style="font-size:1.55rem; font-weight:800; color:var(--mor);" id="ist-sapma">0.0</div>
+        </div>
+        <div class="kart" style="margin:0; text-align:center;">
+          <div style="font-size:0.74rem; color:var(--metin-ikincil); font-weight:700;">MEDYAN (ORTANCA)</div>
+          <div style="font-size:1.55rem; font-weight:800;" id="ist-medyan">0.0</div>
+        </div>
+        <div class="kart" style="margin:0; text-align:center;">
+          <div style="font-size:0.74rem; color:var(--metin-ikincil); font-weight:700;">EN YÜKSEK / DÜŞÜK</div>
+          <div style="font-size:1.35rem; font-weight:800; color:var(--uyari);" id="ist-min-max">0 / 0</div>
+        </div>
+        <div class="kart" style="margin:0; text-align:center;">
+          <div style="font-size:0.74rem; color:var(--metin-ikincil); font-weight:700;">KR-20 / CRONBACH α</div>
+          <div style="font-size:1.35rem; font-weight:800; color:var(--birincil);" id="ist-kr20">0.00</div>
+          <div style="font-size:0.68rem; color:var(--metin-ikincil);" id="ist-guvenirlik-yorum">Güvenirlik</div>
+        </div>
+        <div class="kart" style="margin:0; text-align:center;">
+          <div style="font-size:0.74rem; color:var(--metin-ikincil); font-weight:700;">ÖLÇME STD. HATASI (SE)</div>
+          <div style="font-size:1.35rem; font-weight:800; color:var(--tehlike);" id="ist-se">±0.0</div>
+        </div>
+      </div>
+
+      <!-- Akademik Madde Analizi Tablosu -->
+      <div class="kart yazdir-gizle">
+        <div class="kart-baslik">
+          <span>🔬 Soru Bazlı Akademik Madde Analizi (Madde Güçlük İndeksi <code class="mono">pj</code> &amp; Ayırt Edicilik <code class="mono">rjx</code>)</span>
+          <span class="rozet rozet-mavi">Üst/Alt %27 Grup Yöntemi</span>
+        </div>
+        <div class="tablo-sarmal">
+          <table class="veri-tablo">
+            <thead>
+              <tr>
+                <th>Soru Kodu</th>
+                <th>Tür</th>
+                <th>Doğru Cevap (A Grubu)</th>
+                <th>Güçlük (<code class="mono">pj</code>)</th>
+                <th>Zorluk Yorumu</th>
+                <th>Ayırt Edicilik (<code class="mono">rjx</code>)</th>
+                <th>Kalite Teşhisi</th>
+                <th>Şık / Çeldirici Dağılımı</th>
+              </tr>
+            </thead>
+            <tbody id="tablo-madde-analizi"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Öğrenme Çıktısı (ÖÇ) / Kazanım Başarı Tablosu ve İstatistiksel Kopya Benzerlik Dedektörü -->
+      <div class="iki-sutun-duzen yazdir-gizle" style="grid-template-columns: 1fr 1fr;">
+        <div class="kart">
+          <div class="kart-baslik">
+            <span>🎯 Öğrenme Çıktısı (ÖÇ) / Konu Kazanım Başarı Analizi (MÜDEK / YÖKAK)</span>
+            <span class="rozet rozet-yesil">Akreditasyon Raporu</span>
+          </div>
+          <div class="tablo-sarmal">
+            <table class="veri-tablo">
+              <thead>
+                <tr>
+                  <th>Kazanım / Öğrenme Çıktısı (ÖÇ)</th>
+                  <th>Soru Sayısı</th>
+                  <th>Toplam Puan</th>
+                  <th>Sınıf Başarı %</th>
+                  <th>Durum</th>
+                </tr>
+              </thead>
+              <tbody id="tablo-kazanim-analizi"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="kart">
+          <div class="kart-baslik">
+            <span>🕵️ İstatistiksel Kopya &amp; Ortak Yanlış Şık Benzerlik Dedektörü</span>
+            <span class="rozet rozet-sari">Harpp-Hogan İndeksi</span>
+          </div>
+          <p style="font-size:0.78rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">
+            Aynı kitapçık grubunda veya yan yana oturan öğrenciler arasında <strong>birebir aynı yanlış şıkları (Örn: 6 soruda aynı hatalı C ve E şıkkını)</strong> işaretleyen şüpheli çiftleri tespit eder:
+          </p>
+          <div class="tablo-sarmal">
+            <table class="veri-tablo">
+              <thead>
+                <tr>
+                  <th>Öğrenci Çifti</th>
+                  <th>Grup</th>
+                  <th>Ortak Yanlış</th>
+                  <th>Ortak Doğru</th>
+                  <th>Benzerlik</th>
+                  <th>Teşhis</th>
+                </tr>
+              </thead>
+              <tbody id="tablo-kopya-benzerlik"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bireysel Öğrenci Sonuç Karneleri Önizleme & Baskı Alanı (1 A4'e 4 Kesilebilir Karne Fişi) -->
+      <div class="kart" id="kart-bireysel-karneler" style="display:none;">
+        <div class="kart-baslik yazdir-gizle">
+          <span>🎓 Bireysel Öğrenci Sınav Sonuç ve Kazanım Karneleri (1 A4 = 4 Kesilebilir Fiş)</span>
+          <button type="button" class="btn btn-kucuk" id="btn-karne-kapat">✖ Kapat</button>
+        </div>
+        <div id="kutu-bireysel-karneler"></div>
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         SEKME 5: SINIF & ÖĞRENCİ LİSTESİ YÖNETİMİ
+         ==================================================================== -->
+    <section class="sekme-panel" id="sekme-ogrenciler">
+      <div class="iki-sutun-duzen">
+        <div>
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>➕ Öğrenci Ekle veya OBS / e-Okul Listesi Yapıştır</span>
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="ogr-ekle-no">Öğrenci No</label>
+                <input type="text" id="ogr-ekle-no" placeholder="Örn: 2023104055" />
+              </div>
+              <div>
+                <label class="etiket" for="ogr-ekle-ad">Ad Soyad</label>
+                <input type="text" id="ogr-ekle-ad" placeholder="Örn: Sinan Kaya" />
+              </div>
+            </div>
+            <button type="button" class="btn btn-birincil" id="btn-tek-ogrenci-ekle" style="width:100%; margin-bottom:0.85rem;">
+              ➕ Öğrenciyi Listeye Ekle
+            </button>
+
+            <label class="etiket" for="toplu-ogrenci-metin">Toplu Öğrenci Listesi Yapıştır veya Boş CSV Şablonu Kullan</label>
+            <div style="display:flex; gap:0.45rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-bos-ogrenci-csv-indir" style="flex:1;">
+                📥 Boş Öğrenci CSV Şablonu İndir
+              </button>
+              <label class="btn btn-basari btn-kucuk" style="cursor:pointer; margin:0; flex:1;">
+                📂 Öğrenci CSV Dosyası Yükle
+                <input type="file" id="input-ogrenci-csv-yukle" accept=".csv,.txt,.xlsx,.xls" style="display:none;" />
+              </label>
+            </div>
+            <textarea id="toplu-ogrenci-metin" rows="5" placeholder="2023104011 Ahmet Yılmaz&#10;2023104015 Zeynep Kaya"></textarea>
+            <div style="display:flex; gap:0.45rem; flex-wrap:wrap; margin-top:0.5rem;">
+              <button type="button" class="btn btn-basari" id="btn-toplu-ogrenci-ekle" style="flex:1;">
+                📋 Metindeki Listeyi Aktar
+              </button>
+              <button type="button" class="btn btn-mor" id="btn-ogrenci-telefona-aktar" style="flex:1;">
+                📲 Öğrenci Listesini Telefona Aktar
+              </button>
+            </div>
+          </div>
+
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>🔍 Son 2 Hane Çakışma Analizörü</span>
+            </div>
+            <div id="kutu-son2-cakisma-rapor" style="font-size:0.84rem;"></div>
+          </div>
+        </div>
+
+        <div>
+        <div class="kart">
+          <div class="kart-baslik">
+            <span>🏫 Salonlar &amp; Kontenjan</span>
+            <span class="rozet rozet-mavi" id="rozet-salon-ozet">—</span>
+          </div>
+          <p style="font-size:0.78rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">
+            Seçili dersin öğrencileri salon kontenjanlarına göre dağıtılır. Kontenjan yetmezse "Ek Salon" otomatik açılır.
+            Yoklama evrakı ve sınav tutanağı her salon için ayrı üretilir.
+          </p>
+          <div id="kutu-salon-listesi" style="display:grid; gap:0.35rem; margin-bottom:0.5rem;"></div>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:end; margin-bottom:0.5rem;">
+            <button type="button" class="btn btn-kucuk" id="btn-salon-ekle">➕ Salon Ekle</button>
+            <div style="flex:1; min-width:180px;">
+              <label class="etiket" for="ayar-dagitim-modu">Dağıtım Şekli</label>
+              <select id="ayar-dagitim-modu">
+                <option value="sirali" selected>Numara sırasıyla doldur (1. salon dolunca 2.)</option>
+                <option value="dengeli">Salonlara dengeli dağıt</option>
+              </select>
+            </div>
+          </div>
+          <div id="kutu-salon-yerlesim" style="font-size:0.8rem;"></div>
+        </div>
+
+        <div class="kart">
+          <div class="kart-baslik">
+            <span>👨‍🎓 Kayıtlı Sınıf Listesi</span>
+            <button type="button" class="btn btn-kucuk" id="btn-yoklama-cizelgesi-yazdir">🖨️ İmzalı Yoklama Çizelgesi Yazdır</button>
+          </div>
+          <div class="tablo-sarmal">
+            <table class="veri-tablo">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Öğrenci Numarası</th>
+                  <th>Son 2 Hane</th>
+                  <th>Adı Soyadı</th>
+                  <th>Bölüm / Sınıf</th>
+                  <th>Salon</th>
+                  <th>İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="tablo-ogrenci-listesi"></tbody>
+            </table>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         SEKME 6: ONLINE SINAV & SÜRELİ KARANTİNA (KİOSK) YÖNETİMİ
+         ==================================================================== -->
+    <section class="sekme-panel" id="sekme-online">
+      <div class="iki-sutun-duzen">
+        <!-- Sol Sütun: Kapsamlı Online Sınav Tanımlama Formu -->
+        <div class="kart">
+          <div class="kart-baslik">
+            <span>🌐 Online Sınav Tanımlama &amp; Karantina (Kiosk) Kurgu Masası</span>
+            <span class="rozet rozet-yesil" id="rozet-online-durum">Hazır</span>
+          </div>
+          <p style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.65rem;">
+            Sınavın dersini, türünü, tarih/saat aralığını, soru sayılarını ve güvenlik kurallarını tanımlayıp kaydedin. Aktif sınav süresince öğrenci ekranında <strong>Tam Karantina (Kiosk) Kilidi</strong> devreye girer.
+          </p>
+
+          <div class="form-satir">
+            <div>
+              <label class="etiket" for="online-ders-sec">Ders</label>
+              <select id="online-ders-sec"></select>
+            </div>
+            <div>
+              <label class="etiket" for="online-sinav-turu">Sınav Türü</label>
+              <select id="online-sinav-turu">
+                <option value="Vize (Ara Sınav)" selected>Vize (Ara Sınav)</option>
+                <option value="Final">Final</option>
+                <option value="Bütünleme (BÜT)">Bütünleme (BÜT)</option>
+                <option value="Mazeret Sınavı">Mazeret Sınavı</option>
+                <option value="Quiz / Kısa Sınav">Quiz / Kısa Sınav</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-satir">
+            <div>
+              <label class="etiket" for="online-sinav-baslik">Sınav Başlığı / Adı</label>
+              <input type="text" id="online-sinav-baslik" value="2026-2027 Güz Dönemi Vize Sınavı" placeholder="Örn: 2026-2027 Güz Vize Sınavı" />
+            </div>
+            <div>
+              <label class="etiket" for="online-sinav-kodu">Sınav Kodu</label>
+              <input type="text" id="online-sinav-kodu" value="SINAV-2026-VIZE" placeholder="Örn: SINAV-2026-VIZE" />
+            </div>
+          </div>
+
+          <div class="form-satir">
+            <div>
+              <label class="etiket" for="online-baslangic">Başlangıç Tarihi &amp; Saati</label>
+              <input type="datetime-local" id="online-baslangic" value="2026-11-07T09:00" />
+            </div>
+            <div>
+              <label class="etiket" for="online-bitis">Bitiş Tarihi &amp; Saati</label>
+              <input type="datetime-local" id="online-bitis" value="2026-11-07T18:00" />
+            </div>
+            <div>
+              <label class="etiket" for="online-sure-dk">Sınav Süresi (Dakika)</label>
+              <input type="number" id="online-sure-dk" min="5" max="240" value="40" />
+            </div>
+          </div>
+
+          <!-- Soru Sayısı & Hafta Kapsamı -->
+          <div style="padding:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; margin-bottom:0.55rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem; flex-wrap:wrap; gap:0.35rem;">
+              <strong style="font-size:0.78rem;">🎯 Soru Dağılımı &amp; Konu Kapsamı</strong>
+              <button type="button" class="btn btn-kucuk" id="btn-online-studyodan-al" title="A4 Stüdyodaki D/Y, Test ve Klasik soru sayılarını buraya kopyala">🔄 A4 Stüdyodaki Sayıları Al</button>
+            </div>
+            <div class="form-satir" style="margin-bottom:0.35rem;">
+              <div>
+                <label class="etiket" for="online-dy-sayisi">D/Y Soru Sayısı</label>
+                <input type="number" id="online-dy-sayisi" min="0" max="40" value="10" />
+              </div>
+              <div>
+                <label class="etiket" for="online-test-sayisi">Test Soru Sayısı</label>
+                <input type="number" id="online-test-sayisi" min="0" max="50" value="10" />
+              </div>
+              <div>
+                <label class="etiket" for="online-klasik-sayisi">Klasik Soru Sayısı</label>
+                <input type="number" id="online-klasik-sayisi" min="0" max="10" value="0" />
+              </div>
+              <div>
+                <label class="etiket" for="online-hafta-kapsam">Hafta Kapsamı</label>
+                <select id="online-hafta-kapsam">
+                  <option value="studyo" selected>📅 Stüdyodaki Seçili Haftalar</option>
+                  <option value="vize">🟢 Vize (1–7. Haftalar)</option>
+                  <option value="final">🔵 Final (1–14. Haftalar)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Güvenlik & Karantina Kuralları -->
+          <div style="padding:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; margin-bottom:0.65rem;">
+            <strong style="font-size:0.78rem; display:block; margin-bottom:0.4rem;">🛡️ Kiosk Güvenlik &amp; Karantina Kuralları</strong>
+            <div class="form-satir" style="margin-bottom:0.35rem;">
+              <div>
+                <label class="etiket" for="online-maks-ihlal">Sekme İhlali Sınırı</label>
+                <select id="online-maks-ihlal">
+                  <option value="0" selected>⚠️ Sadece Raporla (Otomatik Bitirme)</option>
+                  <option value="3">🚨 3 İhlalde Sınavı Otomatik Bitir</option>
+                  <option value="5">🚨 5 İhlalde Sınavı Otomatik Bitir</option>
+                </select>
+              </div>
+              <div>
+                <label class="etiket" for="online-erisim-kodu">Salon Giriş Kodu (İsteğe Bağlı)</label>
+                <input type="text" id="online-erisim-kodu" placeholder="Boş = Şifresiz (Örn: LAB2026)" />
+              </div>
+            </div>
+            <div style="display:flex; gap:1rem; flex-wrap:wrap; font-size:0.78rem;">
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                <input type="checkbox" id="online-kisiye-ozel" checked style="width:auto;" />
+                <span>🎲 Her öğrenciye farklı soru &amp; şık sırası</span>
+              </label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;">
+                <input type="checkbox" id="online-geri-donus-kilit" checked style="width:auto;" />
+                <span>🔒 Cevaplanan soruya geri dönüş kilidi</span>
+              </label>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+            <button type="button" class="btn btn-birincil" id="btn-online-tanimla-kaydet" style="flex:1;">
+              💾 Online Sınavı Tanımla / Kaydet
+            </button>
+            <button type="button" class="btn btn-basari" id="btn-online-baslat" style="flex:1;">
+              ▶️ Online Sınavı Şimdi Başlat
+            </button>
+            <button type="button" class="btn btn-tehlike" id="btn-online-durdur">
+              ⏹️ Online Sınavı Durdur
+            </button>
+            <button type="button" class="btn btn-mor" id="btn-online-kiosk-ac" title="Öğrenci Sınav Ekranını Aç">
+              🎓 Kiosk Ekranını Aç
+            </button>
+          </div>
+          <div id="etiket-online-tanim-bilgi" style="font-size:0.78rem; font-weight:700; color:var(--basari); margin-top:0.45rem;"></div>
+        </div>
+
+        <!-- Sağ Sütun: Tanımlı Online Sınavlar Listesi + Aktif Oturumlar -->
+        <div>
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>📋 Tanımlı Online Sınavlar Listesi</span>
+              <span class="rozet rozet-mavi" id="rozet-tanimli-online-sayisi">1 Sınav</span>
+            </div>
+            <div class="tablo-sarmal">
+              <table class="veri-tablo">
+                <thead>
+                  <tr>
+                    <th>Sınav Kodu &amp; Başlık</th>
+                    <th>Ders &amp; Tür</th>
+                    <th>Tarih / Süre</th>
+                    <th>Soru</th>
+                    <th>Durum</th>
+                    <th>İşlem</th>
+                  </tr>
+                </thead>
+                <tbody id="tablo-tanimli-online-sinavlar"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>🛡️ Sınav Oturumları &amp; Sekme İhlal Raporu (Zero-Trust Sunucu Kaydı)</span>
+              <button type="button" class="btn btn-kucuk" id="btn-online-sonuc-aktar" title="Tamamlanan online sınav oturumlarını 4. Sekmedeki Değerlendirme ve Madde Analizi tablosuna aktar">📊 Değerlendirme Masasına Aktar</button>
+            </div>
+            <div class="tablo-sarmal">
+              <table class="veri-tablo">
+                <thead>
+                  <tr>
+                    <th>Öğrenci No</th>
+                    <th>Ad Soyad</th>
+                    <th>Sınav</th>
+                    <th>Durum</th>
+                    <th>Sekme İhlali</th>
+                    <th>Puan</th>
+                  </tr>
+                </thead>
+                <tbody id="tablo-online-oturumlar">
+                  <tr>
+                    <td colspan="6" style="text-align:center; color:var(--metin-soluk);">Henüz aktif online sınav oturumu yok.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+  <!-- ÖĞRENCİ ONLİNE SINAV TAM KARANTİNA (KİOSK) EKRANI -->
+  <section id="kiosk-sinav-alani" class="kiosk-ekran" style="display:none;">
+    <div class="kart">
+      <div class="kart-baslik">
+        <span>🔒 Güvenli Online Sınav Kiosk Modu (Tam Karantina)</span>
+        <span class="rozet rozet-kirmizi mono" id="kiosk-kalan-sure">40:00</span>
+      </div>
+
+      <!-- Giriş ve İlk Kayıt (E-Posta, Telefon, Canlı Yeşil Kriterli Şifre Belirleme) Kutusu -->
+      <div id="kiosk-giris-formu">
+        <p style="font-size:0.86rem; color:var(--metin-ikincil); margin-bottom:0.75rem;">
+          Sisteme <strong>öğrenci numaranızla ilk girişinizde</strong> e-posta, cep telefonu ve güçlü şifrenizi belirlemeniz zorunludur. Sınav başladığında <strong>sorular ve şıklar size özel (havuzdan ayrı sorularla ve farklı sırayla)</strong> tek tek gelir.
+        </p>
+
+        <div class="form-satir">
+          <div>
+            <label class="etiket" for="kiosk-ogr-no">Öğrenci Numaranız (Zorunlu)</label>
+            <input type="text" id="kiosk-ogr-no" placeholder="Örn: 2023104011" value="2023104011" />
+          </div>
+          <div>
+            <label class="etiket" for="kiosk-ad-soyad">Adınız Soyadınız</label>
+            <input type="text" id="kiosk-ad-soyad" placeholder="Örn: Ahmet Yılmaz" value="Ahmet Yılmaz" />
+          </div>
+        </div>
+
+        <!-- İlk Giriş Zorunlu Profil ve Canlı Şifre Politikası Alanı -->
+        <div id="kiosk-ilk-kayit-alan" style="padding:0.85rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.75rem;">
+          <div style="font-weight:800; font-size:0.88rem; margin-bottom:0.55rem; color:var(--birincil);">
+            🔐 İlk Giriş Zorunlu İletişim &amp; Şifre Belirleme (Bir Defa Girilir)
+          </div>
+          <div class="form-satir">
+            <div>
+              <label class="etiket" for="kiosk-eposta">E-Posta Adresiniz (Zorunlu)</label>
+              <input type="text" id="kiosk-eposta" placeholder="ornek@ogrenci.edu.tr" />
+            </div>
+            <div>
+              <label class="etiket" for="kiosk-telefon">Cep Telefonunuz (Zorunlu)</label>
+              <input type="text" id="kiosk-telefon" placeholder="05XX XXX XX XX" />
+            </div>
+          </div>
+          <div class="form-satir">
+            <div>
+              <label class="etiket" for="kiosk-sifre">Yeni Şifreniz</label>
+              <input type="password" id="kiosk-sifre" placeholder="Şifrenizi yazınız..." />
+            </div>
+            <div>
+              <label class="etiket" for="kiosk-sifre-tekrar">Yeni Şifre (Tekrar)</label>
+              <input type="password" id="kiosk-sifre-tekrar" placeholder="Şifrenizi tekrar yazınız..." />
+            </div>
+          </div>
+
+          <!-- Şifre Girildikçe Yeşile Dönen Canlı Kriter Göstergeleri -->
+          <div style="margin-top:0.4rem;">
+            <div style="font-size:0.76rem; font-weight:700; color:var(--metin-ikincil); margin-bottom:0.35rem;">
+              Şifre Güvenlik Kriterleri (Yazdıkça sağlanan kriterler yeşil olur):
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:0.35rem;" id="kiosk-sifre-kriter-kutu">
+              <span class="rozet rozet-kirmizi" id="kr-uzunluk">⚪ En az 8 karakter</span>
+              <span class="rozet rozet-kirmizi" id="kr-buyuk">⚪ BÜYÜK harf (A-Z)</span>
+              <span class="rozet rozet-kirmizi" id="kr-kucuk">⚪ küçük harf (a-z)</span>
+              <span class="rozet rozet-kirmizi" id="kr-rakam">⚪ Sayı / Rakam (0-9)</span>
+              <span class="rozet rozet-kirmizi" id="kr-simge">⚪ Simge (!@#$%^&*.)</span>
+              <span class="rozet rozet-kirmizi" id="kr-eslesme">⚪ Şifre tekrarı eşleşiyor</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="kiosk-hata-kutu" hidden style="padding:0.6rem; background:var(--tehlike-acik); color:var(--tehlike); border-radius:6px; margin-bottom:0.65rem; font-weight:600;"></div>
+        <div style="display:flex; gap:0.5rem;">
+          <button type="button" class="btn btn-birincil" id="btn-kiosk-oturum-baslat">🔒 Bilgileri Kaydet ve Kişiye Özel Sınava Başla</button>
+          <button type="button" class="btn" id="btn-kiosk-cikis">↩️ Öğretmen Stüdyosuna Dön</button>
+        </div>
+      </div>
+
+      <!-- Tek Tek Soru Çözüm Alanı -->
+      <div id="kiosk-soru-sahne" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.65rem;">
+          <span class="rozet rozet-mavi" id="kiosk-soru-sayac">Soru 1 / 10</span>
+          <span class="rozet rozet-sari" id="kiosk-ihlal-sayac">Sekme İhlali: 0</span>
+        </div>
+        <div id="kiosk-soru-icerik" style="padding:1rem; background:var(--bg-ikincil); border-radius:8px; margin-bottom:0.85rem;"></div>
+        <button type="button" class="btn btn-basari" id="btn-kiosk-cevap-kilitle" style="width:100%;">
+          🔒 Cevabı Kilitle ve Sonraki Soruya Geç (Geri Dönülemez)
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- YENİ DERS EKLEME, DERS SİLME VE SORU ARŞİVİ DAHİL ETME MODALİ -->
+  <div id="modal-yeni-ders" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.58); z-index:999; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
+    <div class="kart" style="max-width:580px; width:100%; margin:0; max-height:92vh; overflow-y:auto;">
+      <div class="kart-baslik">
+        <span>📚 Ders Yönetimi, Yeni Ders Oluşturma &amp; Soru Arşivi</span>
+        <button type="button" class="btn btn-kucuk" id="btn-modal-ders-kapat">✕</button>
+      </div>
+
+      <div class="form-satir">
+        <div>
+          <label class="etiket" for="yeni-ders-kod">Ders Kodu</label>
+          <input type="text" id="yeni-ders-kod" placeholder="Örn: FİZ101 veya BİL304" />
+        </div>
+        <div>
+          <label class="etiket" for="yeni-ders-ad">Ders Adı</label>
+          <input type="text" id="yeni-ders-ad" placeholder="Örn: Genel Fizik I" />
+        </div>
+      </div>
+      <div class="form-satir">
+        <div>
+          <label class="etiket" for="yeni-ders-bolum">Fakülte / Okul / Bölüm</label>
+          <input type="text" id="yeni-ders-bolum" placeholder="Örn: Mühendislik Fakültesi" />
+        </div>
+        <div>
+          <label class="etiket" for="yeni-ders-hoca">Öğretim Elemanı / Öğretmen</label>
+          <input type="text" id="yeni-ders-hoca" placeholder="Örn: Doç. Dr. Öğretim Elemanı" />
+        </div>
+      </div>
+
+      <!-- Arşivdeki Soru Havuzlarını Yeni Derse veya Aktif Derse Dahil Etme Bölümü -->
+      <div style="padding:0.6rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; margin-bottom:0.65rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem; gap:0.4rem; flex-wrap:wrap;">
+          <strong style="font-size:0.8rem;">📦 Soru Arşivi (Silinen Derslerin Korunan Soruları)</strong>
+          <button type="button" class="btn btn-basari btn-kucuk" id="btn-arsiv-aktif-derse-aktar" title="Seçili arşiv soru havuzlarını şu anki aktif derse aktar">📥 Seçilileri Aktif Derse Dahil Et</button>
+        </div>
+        <p style="font-size:0.75rem; color:var(--metin-ikincil); margin:0 0 0.4rem;">
+          Silinen derslerin soruları asla silinmez, burada arşivlenir. Yeni ders oluştururken işaretlediğiniz arşivler <strong>yeni derse otomatik dahil edilir</strong>:
+        </p>
+        <div id="kutu-arsiv-havuz-listesi" style="display:grid; gap:0.35rem; font-size:0.78rem;"></div>
+      </div>
+
+      <button type="button" class="btn btn-birincil" id="btn-yeni-ders-kaydet" style="width:100%; margin-bottom:0.75rem;">
+        💾 Yeni Dersi Oluştur (Seçili Arşivleri Dahil Et) ve Seç
+      </button>
+
+      <!-- Mevcut Dersler Listesi ve Silme (Arşivleme) -->
+      <div style="border-top:1px solid var(--kenar); padding-top:0.6rem;">
+        <strong style="font-size:0.8rem; display:block; margin-bottom:0.35rem;">📋 Mevcut Dersler (Silinen Dersin Soruları Arşive Alınır)</strong>
+        <div id="kutu-mevcut-dersler-yonetim" style="display:grid; gap:0.35rem; font-size:0.78rem;"></div>
+      </div>
+    </div>
+  </div>
+  <!-- ÖĞRETMEN / HOCA KULLANICI ADI & ŞİFRE DOĞRULAMA VE HESAP GÜVENLİĞİ MODALİ -->
+  <div id="modal-hoca-giris" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.62); z-index:1000; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
+    <div class="kart" style="max-width:640px; width:100%; margin:0;">
+      <div class="kart-baslik">
+        <span>👨‍🏫 Öğretmen / Öğretim Elemanı Kimlik Doğrulama &amp; Şifre Yönetimi</span>
+        <div style="display:flex; gap:0.4rem; align-items:center;">
+          <span class="rozet rozet-yesil" id="rozet-hoca-oturum-durum">🟢 Oturum Açık</span>
+          <button type="button" class="btn btn-kucuk" id="btn-modal-hoca-kapat">✕</button>
+        </div>
+      </div>
+
+      <!-- Bölüm 1: Hoca Kullanıcı Adı ve Şifre Doğrulama (Giriş / Kilitleme) -->
+      <div style="padding:0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.85rem;">
+        <div style="font-weight:800; font-size:0.86rem; margin-bottom:0.45rem; color:var(--birincil);">
+          🔑 1. Öğretmen Giriş Doğrulaması (Varsayılan: <span class="mono">hoca</span> / <span class="mono">Demo!Hoca2026</span>)
+        </div>
+        <div class="form-satir">
+          <div>
+            <label class="etiket" for="hoca-giris-kullanici">Kullanıcı Adı veya E-Posta</label>
+            <input type="text" id="hoca-giris-kullanici" value="hoca" placeholder="hoca" />
+          </div>
+          <div>
+            <label class="etiket" for="hoca-giris-sifre">Şifre</label>
+            <input type="password" id="hoca-giris-sifre" value="Demo!Hoca2026" placeholder="Şifrenizi giriniz..." />
+          </div>
+        </div>
+        <div id="hoca-giris-hata" hidden style="padding:0.5rem; background:var(--tehlike-acik); color:var(--tehlike); border-radius:6px; margin-bottom:0.5rem; font-size:0.8rem; font-weight:700;"></div>
+        <div id="hoca-giris-bilgi" style="display:none; padding:0.5rem; background:var(--basari-acik); color:var(--basari); border-radius:6px; margin-bottom:0.5rem; font-size:0.8rem; font-weight:700;"></div>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button type="button" class="btn btn-birincil btn-kucuk" id="btn-hoca-giris-yap" style="flex:1;">
+            🔓 Kullanıcı Adı &amp; Şifreyi Doğrula (Giriş Yap)
+          </button>
+          <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-hoca-kilitle">
+            🔒 Stüdyoyu Kilitle (Çıkış)
+          </button>
+        </div>
+      </div>
+
+      <!-- Bölüm 2: Hoca Profil Bilgileri ve Canlı Yeşil Kriterli Yeni Şifre Belirleme -->
+      <div style="padding:0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px;">
+        <div style="font-weight:800; font-size:0.86rem; margin-bottom:0.45rem; color:var(--mor);">
+          🛡️ 2. Hoca Hesap Bilgileri &amp; Yeni Şifre Belirleme (Canlı Güvenlik Kontrolü)
+        </div>
+        <div class="form-satir">
+          <div>
+            <label class="etiket" for="hoca-kayit-kullanici">Yeni Kullanıcı Adı</label>
+            <input type="text" id="hoca-kayit-kullanici" value="hoca" />
+          </div>
+          <div>
+            <label class="etiket" for="hoca-kayit-ad">Unvan ve Ad Soyad</label>
+            <input type="text" id="hoca-kayit-ad" value="Öğretim Elemanı" />
+          </div>
+        </div>
+        <div class="form-satir">
+          <div>
+            <label class="etiket" for="hoca-kayit-eposta">Kurumsal E-Posta (Zorunlu)</label>
+            <input type="text" id="hoca-kayit-eposta" value="hoca@universite.edu.tr" />
+          </div>
+          <div>
+            <label class="etiket" for="hoca-kayit-telefon">Cep Telefonu (Zorunlu)</label>
+            <input type="text" id="hoca-kayit-telefon" value="05000000000" />
+          </div>
+        </div>
+        <div class="form-satir">
+          <div>
+            <label class="etiket" for="hoca-kayit-sifre">Yeni Şifre</label>
+            <input type="password" id="hoca-kayit-sifre" placeholder="Yeni güçlü şifreniz..." />
+          </div>
+          <div>
+            <label class="etiket" for="hoca-kayit-sifre-tekrar">Yeni Şifre (Tekrar)</label>
+            <input type="password" id="hoca-kayit-sifre-tekrar" placeholder="Yeni şifrenizi tekrar yazın..." />
+          </div>
+        </div>
+
+        <!-- Hoca Şifresi Yazıldıkça Yeşile Dönen Canlı Kriter Göstergeleri -->
+        <div style="margin-top:0.35rem; margin-bottom:0.65rem;">
+          <div style="font-size:0.75rem; font-weight:700; color:var(--metin-ikincil); margin-bottom:0.3rem;">
+            Şifre Güvenlik Kriterleri (Büyük/küçük harf, sayı ve simge girdikçe yeşil olur):
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:0.35rem;" id="hoca-sifre-kriter-kutu">
+            <span class="rozet rozet-kirmizi" id="hkr-uzunluk">⚪ En az 8 karakter</span>
+            <span class="rozet rozet-kirmizi" id="hkr-buyuk">⚪ BÜYÜK harf (A-Z)</span>
+            <span class="rozet rozet-kirmizi" id="hkr-kucuk">⚪ küçük harf (a-z)</span>
+            <span class="rozet rozet-kirmizi" id="hkr-rakam">⚪ Sayı / Rakam (0-9)</span>
+            <span class="rozet rozet-kirmizi" id="hkr-simge">⚪ Simge (!@#$%^&*.)</span>
+            <span class="rozet rozet-kirmizi" id="hkr-eslesme">⚪ Şifre tekrarı eşleşiyor</span>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-basari btn-kucuk" id="btn-hoca-kayit-kaydet" style="width:100%;">
+          💾 Hoca Kullanıcı Adı ve Yeni Şifreyi Güncelle
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- A4 KAĞIT ÜZERİNDE HIZLI SORU DÜZENLEME MODALI -->
+  <div id="modal-hizli-soru-duzenle" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:220; align-items:center; justify-content:center; padding:1rem;">
+    <div class="kart" style="width:100%; max-width:560px; margin:0;">
+      <div class="kart-baslik">
+        <span>✏️ Kağıt Üzerinde Hızlı Soru &amp; Şık Düzenle</span>
+        <button type="button" class="btn btn-kucuk" id="btn-modal-soru-duzenle-kapat">✕</button>
+      </div>
+      <input type="hidden" id="hizli-duzenle-id" />
+      <div class="form-satir">
+        <div>
+          <label class="etiket" for="hizli-duzenle-hafta">Hafta (1–14)</label>
+          <input type="number" id="hizli-duzenle-hafta" min="1" max="14" value="1" />
+        </div>
+        <div>
+          <label class="etiket" for="hizli-duzenle-zorluk">Zorluk</label>
+          <select id="hizli-duzenle-zorluk">
+            <option value="Kolay">Kolay</option>
+            <option value="Orta">Orta</option>
+            <option value="Zor">Zor</option>
+          </select>
+        </div>
+        <div>
+          <label class="etiket" for="hizli-duzenle-kazanim">Kazanım (ÖÇ)</label>
+          <input type="text" id="hizli-duzenle-kazanim" />
+        </div>
+      </div>
+      <div class="form-grup">
+        <label class="etiket" for="hizli-duzenle-metin">Soru Metni</label>
+        <textarea id="hizli-duzenle-metin" rows="3"></textarea>
+      </div>
+      <div id="hizli-duzenle-test-alan" style="display:none;">
+        <div class="form-grup">
+          <label class="etiket">Şıklar (A–E) ve Doğru Şık</label>
+          <div style="display:grid; gap:0.35rem;">
+            <input type="text" id="hizli-sik-a" placeholder="A şıkkı" />
+            <input type="text" id="hizli-sik-b" placeholder="B şıkkı" />
+            <input type="text" id="hizli-sik-c" placeholder="C şıkkı" />
+            <input type="text" id="hizli-sik-d" placeholder="D şıkkı" />
+            <input type="text" id="hizli-sik-e" placeholder="E şıkkı" />
+          </div>
+        </div>
+        <div class="form-grup">
+          <label class="etiket" for="hizli-duzenle-dogru-harf">Doğru Şık</label>
+          <select id="hizli-duzenle-dogru-harf">
+            <option value="A">A</option>
+            <option value="B">B</option>
+            <option value="C">C</option>
+            <option value="D">D</option>
+            <option value="E">E</option>
+          </select>
+        </div>
+      </div>
+      <div id="hizli-duzenle-dy-alan" style="display:none;">
+        <div class="form-grup">
+          <label class="etiket" for="hizli-duzenle-dogru-dy">Doğru / Yanlış Cevabı</label>
+          <select id="hizli-duzenle-dogru-dy">
+            <option value="D">Doğru (D)</option>
+            <option value="Y">Yanlış (Y)</option>
+          </select>
+        </div>
+      </div>
+      <div id="hizli-duzenle-klasik-alan" style="display:none;">
+        <div class="form-grup">
+          <label class="etiket" for="hizli-duzenle-rubrik">Klasik Değerlendirme Rubriği</label>
+          <input type="text" id="hizli-duzenle-rubrik" />
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+        <button type="button" class="btn btn-birincil btn-kucuk" id="btn-hizli-soru-kaydet">💾 Değişiklikleri Kaydet ve Kağıdı Güncelle</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ÖĞRENCİ LİSTESİNİ TELEFONA AKTARAN GERÇEK QR MODALI -->
+  <div id="modal-ogrenci-qr" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:230; align-items:center; justify-content:center; padding:1rem;">
+    <div class="kart" style="width:100%; max-width:440px; margin:0; text-align:center;">
+      <div class="kart-baslik">
+        <span>📲 Öğrenci Listesini Telefona Aktar (QR)</span>
+        <button type="button" class="btn btn-kucuk" id="btn-modal-ogrenci-qr-kapat">✕</button>
+      </div>
+      <div class="form-grup" style="text-align:left;">
+        <label class="etiket" for="ogrenci-qr-taban-adres">Telefonun erişeceği adres (aynı Wi-Fi'deki bilgisayar IP'si)</label>
+        <input type="text" id="ogrenci-qr-taban-adres" placeholder="http://192.168.1.20:3000" />
+      </div>
+      <div id="alan-ogrenci-qr-svg" style="background:#fff; padding:10px; border:1px solid #000; border-radius:6px; display:inline-block;"></div>
+      <div id="etiket-ogrenci-qr-bilgi" style="font-size:0.78rem; margin-top:0.5rem;"></div>
+    </div>
+  </div>
+
+  <script src="qrcode-generator.js"></script>
+  <script src="xlsx.full.min.js"></script>
+  <script src="guvenlik-ve-veri.js"></script>
+  <script src="studyo-uygulama.js"></script>
+</body>
+</html>
