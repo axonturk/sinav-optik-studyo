@@ -3573,7 +3573,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(kurtarmaVeri)
             });
-            if (!yanit.ok) {
+            if (!yanit.ok && yanit.status !== 404 && yanit.status !== 405) {
               const hVeri = await yanit.json().catch(() => ({}));
               hataKutu.textContent = hVeri.hata || 'Sunucu şifre sıfırlama doğrulaması başarısız.';
               hataKutu.hidden = false;
@@ -3633,7 +3633,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(adayBilgi)
             });
-            if (!yanit.ok) {
+            if (!yanit.ok && yanit.status !== 404 && yanit.status !== 405) {
               const hVeri = await yanit.json().catch(() => ({}));
               hataKutu.textContent = hVeri.hata || 'Öğretmen başvurusu sunucu tarafından reddedildi.';
               hataKutu.hidden = false;

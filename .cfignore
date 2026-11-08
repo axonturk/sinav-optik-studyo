@@ -1,0 +1,14 @@
+node_modules/
+.git/
+test-artifacts/
+ornek-dosyalar/
+*-test.js
+test-suite.js
+omr-geometri-denetim.js
+server.js
+baslat.bat
+package.json
+package-lock.json
+README.md
+.gitignore
+.nojekyll
