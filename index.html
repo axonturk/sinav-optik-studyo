@@ -1604,6 +1604,21 @@
           </div>
         </div>
 
+        <!-- Öğrenciye Tanımlı Online Sınavlar Listesi ve Seçimi -->
+        <div id="kiosk-tanimli-sinavlar-kutu" style="padding:0.85rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.75rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.55rem;">
+            <span style="font-weight:800; font-size:0.88rem; color:var(--birincil);">
+              📋 Size Tanımlı Online Sınavlar (Gireceğiniz Sınavı Seçin)
+            </span>
+            <span class="rozet rozet-mavi" id="rozet-kiosk-sinav-sayisi">1 Sınav</span>
+          </div>
+          <div id="kiosk-ogrenci-sinav-listesi" style="display:flex; flex-direction:column; gap:0.45rem;"></div>
+          <div id="kiosk-salon-kodu-satir" style="display:none; margin-top:0.55rem;">
+            <label class="etiket" for="kiosk-salon-kodu">🔑 Salon / Sınav Giriş Kodu (Gözetmenin Tahtaya Yazdığı Kod)</label>
+            <input type="text" id="kiosk-salon-kodu" placeholder="Örn: LAB2026" />
+          </div>
+        </div>
+
         <!-- İlk Giriş Zorunlu Profil ve Canlı Şifre Politikası Alanı -->
         <div id="kiosk-ilk-kayit-alan" style="padding:0.85rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.75rem;">
           <div style="font-weight:800; font-size:0.88rem; margin-bottom:0.55rem; color:var(--birincil);">
@@ -1644,6 +1659,25 @@
               <span class="rozet rozet-kirmizi" id="kr-eslesme">⚪ Şifre tekrarı eşleşiyor</span>
             </div>
           </div>
+        </div>
+
+        <!-- Sınav Öncesi Zorunlu Güvenlik, Karantina ve Delil Logu Uyarıları + Okudum/Anladım Onayı -->
+        <div id="kiosk-uyari-ve-onay-kutusu" style="padding:0.85rem; background:#fffbeb; border:1.5px solid #f59e0b; border-radius:8px; margin-bottom:0.75rem; color:#78350f;">
+          <div style="font-weight:800; font-size:0.88rem; color:#b45309; margin-bottom:0.45rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.4rem;">
+            <span>⚠️ SINAV ÖNCESİ ZORUNLU GÜVENLİK, KARANTİNA VE DELİL LOGU KURALLARI</span>
+            <span class="rozet rozet-kirmizi" id="kiosk-dinamik-ihlal-kurali">🛑 1 İhlalde Anında Sınav Bitirilir</span>
+          </div>
+          <ul style="margin:0 0 0.6rem 1.1rem; padding:0; font-size:0.79rem; line-height:1.48; color:#451a03;">
+            <li><strong>Sekme &amp; Uygulama Değiştirme Yasağı:</strong> Sınav süresince başka bir tarayıcı sekmesine, masaüstü penceresine veya telefonda başka bir uygulamaya (WhatsApp, Gemini, bildirim ekranı vb.) geçmek <strong>kesinlikle yasaktır</strong>. İhlal sınırı aşıldığında sınavınız otomatik olarak sonlandırılır.</li>
+            <li><strong>Zorunlu Tam Ekran &amp; Ekran Bölme Kilidi:</strong> Sınav tam ekran (Fullscreen) modunda yürütülür. Tam ekrandan çıkmak (<code>ESC</code>), ekranı ikiye bölmek (<code>Split-Screen</code>) veya yüzen pencere açmak ihlal sayılır ve soru ekranı karantina perdesiyle kapatılır.</li>
+            <li><strong>Kopyalama, Sağ Tık &amp; Ekran Görüntüsü Yasağı:</strong> Soru metinlerini seçmek, kopyalamak (<code>Ctrl+C</code>), sağ tıklamak ve ekran görüntüsü almak engellenmiştir; her deneme ihlal olarak kaydedilir.</li>
+            <li><strong>Kişiye Özel Soru Sırası &amp; Geri Dönüş Kilidi:</strong> Sorular ve şıklar her öğrenciye farklı sırada gelir. Cevaplayıp kilitlediğiniz soruya geri dönemezsiniz.</li>
+            <li><strong>Delil Niteliğinde Log Kaydı (FRM-046 Eki):</strong> Sınava giriş anınızdan itibaren tüm soru geçişleriniz, saniye bazlı yanıtlarınız, cihaz/ekran bilgileriniz ve kural ihlalleriniz <strong>kriptografik özet zinciri (Hash-Chain)</strong> ile resmi sınav tutanağına delil olarak kaydedilmektedir.</li>
+          </ul>
+          <label for="kiosk-okudum-onay" style="display:flex; align-items:flex-start; gap:0.55rem; padding:0.6rem 0.7rem; background:#ffffff; border:1.5px solid #d97706; border-radius:6px; cursor:pointer; font-weight:700; font-size:0.82rem; color:#0f172a;">
+            <input type="checkbox" id="kiosk-okudum-onay" style="width:18px; height:18px; margin-top:2px; accent-color:#16a34a; flex-shrink:0;" />
+            <span>Yukarıdaki sınav güvenlik ve karantina kurallarını, başka sekmeye/uygulamaya geçmemem gerektiğini ve tüm sınav hareketlerimin delil niteliğinde loglandığını <u>OKUDUM, ANLADIM, KABUL EDİYORUM</u>.</span>
+          </label>
         </div>
 
         <div id="kiosk-hata-kutu" hidden style="padding:0.6rem; background:var(--tehlike-acik); color:var(--tehlike); border-radius:6px; margin-bottom:0.65rem; font-weight:600;"></div>

@@ -342,6 +342,13 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   await sayfa.click('#btn-online-kiosk-ac');
   await new Promise((r) => setTimeout(r, 150));
 
+  // Öğrenciye tanımlı sınavların Kiosk ekranında listelendiğini doğrula
+  const tanimliSinavMetni = await sayfa.$eval('#kiosk-ogrenci-sinav-listesi', (el) => el.textContent);
+  kontrol(
+    tanimliSinavMetni.includes('SINAV-2026-VIZE') && tanimliSinavMetni.includes('Aktif'),
+    'UI Kiosk: Öğrenci ekranında öğrenciye tanımlı sınavlar ve aktiflik durumu listelendi'
+  );
+
   await sayfa.evaluate(() => {
     document.getElementById('kiosk-ogr-no').value = '2023104011';
     document.getElementById('kiosk-ad-soyad').value = 'Ahmet Yılmaz';
@@ -349,7 +356,17 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
     document.getElementById('kiosk-telefon').value = '05321112233';
     document.getElementById('kiosk-sifre').value = 'Ahmet!2026';
     document.getElementById('kiosk-sifre-tekrar').value = 'Ahmet!2026';
+    document.getElementById('kiosk-okudum-onay').checked = false;
   });
+
+  // Okudum/Anladım kutucuğu işaretlenmeden başlatma denemesi -> engellenmeli
+  await sayfa.click('#btn-kiosk-oturum-baslat');
+  await new Promise((r) => setTimeout(r, 150));
+  const okudumHataGorundu = await sayfa.$eval('#kiosk-hata-kutu', (el) => !el.hidden && el.textContent.includes('Okudum, Anladım'));
+  kontrol(okudumHataGorundu, 'UI Kiosk: "Okudum, Anladım, Kabul Ediyorum" onaylanmadan sınava başlama engellendi');
+
+  // Okudum/Anladım kutucuğunu işaretle ve sınava başla
+  await sayfa.click('#kiosk-okudum-onay');
   await sayfa.click('#btn-kiosk-oturum-baslat');
   await new Promise((r) => setTimeout(r, 300));
 
@@ -405,13 +422,14 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
     };
   });
   kontrol(
-    delilPanelBilgi.canliMetin.includes('OTURUM_BASLADI') &&
+    delilPanelBilgi.canliMetin.includes('KURALLAR_ONAYLANDI') &&
+      delilPanelBilgi.canliMetin.includes('OTURUM_BASLADI') &&
       delilPanelBilgi.canliMetin.includes('CEVAP_KILITLENDI') &&
       delilPanelBilgi.canliMetin.includes('IHLAL_KOPYALA_SAG_TIK') &&
       delilPanelBilgi.canliMetin.includes('IHLAL_EKRAN_BOLME') &&
       delilPanelBilgi.canliMetin.includes('OTURUM_BITTI') &&
       delilPanelBilgi.oturumTablo.includes('📜 Delil İndir'),
-    'UI Delil Log Paneli: Sınav bazlı tüm adımlar, ihlaller ve mühür kodları canlı denetim kutusunda ve öğrenci tablosunda listelendi'
+    'UI Delil Log Paneli: KURALLAR_ONAYLANDI dahil sınav bazlı tüm adımlar, ihlaller ve mühür kodları listelendi'
   );
 
   await tarayici.close();

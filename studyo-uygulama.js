@@ -2236,6 +2236,106 @@
     ayarlaRozet('kr-eslesme', k.eslesmeOk, 'Şifre tekrarı eşleşiyor');
   }
 
+  function guncelleKioskOgrenciSinavListesiUI() {
+    const ogrNoEl = document.getElementById('kiosk-ogr-no');
+    const adSoyadEl = document.getElementById('kiosk-ad-soyad');
+    const listeKutu = document.getElementById('kiosk-ogrenci-sinav-listesi');
+    const rozetSayi = document.getElementById('rozet-kiosk-sinav-sayisi');
+    const salonSatir = document.getElementById('kiosk-salon-kodu-satir');
+    const dinamikKuralRozet = document.getElementById('kiosk-dinamik-ihlal-kurali');
+    if (!listeKutu) return;
+
+    const ogrNo = ogrNoEl ? String(ogrNoEl.value || '').trim() : '';
+    const kayitliOgr = (durum.ogrenciKayitlari || durum.ogrenciler || []).find((o) => String(o.ogrNo) === ogrNo);
+    if (kayitliOgr && adSoyadEl && (!adSoyadEl.dataset.elleDegisti || !adSoyadEl.value.trim())) {
+      adSoyadEl.value = kayitliOgr.adSoyad;
+    }
+
+    const tumSinavlar = Array.isArray(durum.onlineSinavListesi) && durum.onlineSinavListesi.length > 0
+      ? durum.onlineSinavListesi
+      : (durum.onlineSinav && durum.onlineSinav.sinavId ? [durum.onlineSinav] : []);
+
+    // Öğrenci belirli derslere kayıtlıysa önce o derslerin sınavlarını filtrele (hiç eşleşme yoksa tüm tanımlı sınavları göster)
+    let ogrenciSinavlari = tumSinavlar;
+    if (kayitliOgr && Array.isArray(kayitliOgr.dersIdler) && kayitliOgr.dersIdler.length > 0) {
+      const dersEslesen = tumSinavlar.filter((s) => !s.dersId || kayitliOgr.dersIdler.includes(s.dersId));
+      if (dersEslesen.length > 0) ogrenciSinavlari = dersEslesen;
+    }
+
+    if (rozetSayi) {
+      rozetSayi.textContent = `${ogrenciSinavlari.length} Sınav`;
+    }
+
+    if (ogrenciSinavlari.length === 0) {
+      listeKutu.innerHTML = '<div style="padding:0.55rem; color:var(--metin-soluk); font-size:0.82rem;">Henüz size tanımlanmış bir online sınav bulunmuyor.</div>';
+      if (salonSatir) salonSatir.style.display = 'none';
+      return;
+    }
+
+    const mevcutSeciliInput = listeKutu.querySelector('input[name="kiosk-secili-sinav"]:checked');
+    const mevcutSeciliId = mevcutSeciliInput ? mevcutSeciliInput.value : '';
+    const varsayilanSecili =
+      ogrenciSinavlari.find((s) => s.sinavId === mevcutSeciliId) ||
+      ogrenciSinavlari.find((s) => s.aktif && durum.onlineSinav && durum.onlineSinav.sinavId === s.sinavId) ||
+      ogrenciSinavlari.find((s) => s.aktif) ||
+      ogrenciSinavlari[0];
+
+    listeKutu.innerHTML = ogrenciSinavlari
+      .map((s) => {
+        const ders = durum.dersler.find((d) => d.id === s.dersId) || { kod: 'GENEL', ad: 'Genel Ders' };
+        const aktifMi = Boolean(s.aktif && (!durum.onlineSinav || durum.onlineSinav.sinavId === s.sinavId ? durum.onlineSinav.aktif : s.aktif));
+        const topSoru = (Number(s.dySayisi) || 0) + (Number(s.testSayisi) || 0) + (Number(s.klasikSayisi) || 0);
+        const tamamlananOturum = Array.isArray(s.oturumlar)
+          ? s.oturumlar.find((ot) => String(ot.ogrNo) === ogrNo)
+          : null;
+        const seciliMi = varsayilanSecili && varsayilanSecili.sinavId === s.sinavId;
+
+        let durumRozetHtml = `<span class="rozet ${aktifMi ? 'rozet-yesil' : 'rozet-sari'}">${aktifMi ? '🟢 Aktif — Sınava Girilebilir' : '⏳ Planlandı'}</span>`;
+        if (tamamlananOturum) {
+          durumRozetHtml = `<span class="rozet rozet-mavi">✅ Tamamlandı (Puan: ${tamamlananOturum.puan})</span>`;
+        }
+
+        return `
+          <label style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem; padding:0.6rem 0.75rem; background:#ffffff; border:${seciliMi ? '2px solid var(--birincil)' : '1px solid var(--kenar)'}; border-radius:7px; cursor:pointer;">
+            <div style="display:flex; align-items:flex-start; gap:0.55rem;">
+              <input type="radio" name="kiosk-secili-sinav" value="${C.kacisHTML(s.sinavId)}" ${seciliMi ? 'checked' : ''} style="width:17px; height:17px; margin-top:3px; accent-color:var(--birincil); flex-shrink:0;" />
+              <div>
+                <div style="font-weight:800; font-size:0.85rem; color:var(--metin);">
+                  ${C.kacisHTML(ders.kod)} — ${C.kacisHTML(ders.ad)} · <span style="color:var(--birincil);">${C.kacisHTML(s.baslik || s.sinavId)}</span>
+                </div>
+                <div class="mono" style="font-size:0.74rem; color:var(--metin-ikincil); margin-top:2px;">
+                  Kod: <strong>${C.kacisHTML(s.sinavId)}</strong> · Tür: ${C.kacisHTML(s.sinavTuru || 'Vize')} · Süre: <strong>${s.sureDk || 40} dk</strong> · Soru: <strong>${topSoru}</strong> (${s.dySayisi || 0} DY, ${s.testSayisi || 0} Test${s.klasikSayisi ? `, ${s.klasikSayisi} Kl.` : ''})
+                </div>
+              </div>
+            </div>
+            <div style="flex-shrink:0;">
+              ${durumRozetHtml}
+            </div>
+          </label>
+        `;
+      })
+      .join('');
+
+    if (varsayilanSecili) {
+      const kalanSureRozet = document.getElementById('kiosk-kalan-sure');
+      if (kalanSureRozet && !durum.kioskOturum) {
+        kalanSureRozet.textContent = `${String(varsayilanSecili.sureDk || 40).padStart(2, '0')}:00`;
+      }
+      if (salonSatir) {
+        salonSatir.style.display = varsayilanSecili.erisimKodu ? 'block' : 'none';
+      }
+      if (dinamikKuralRozet) {
+        const maksIhlalSecEl = document.getElementById('online-maks-ihlal');
+        const mIhlal = varsayilanSecili.maksIhlal !== undefined && varsayilanSecili.maksIhlal !== null
+          ? Number(varsayilanSecili.maksIhlal)
+          : (maksIhlalSecEl ? (parseInt(maksIhlalSecEl.value, 10) || 0) : 1);
+        dinamikKuralRozet.textContent = mIhlal === 1
+          ? '🛑 1 İhlalde Anında Sınav Bitirilir (Sıfır Tolerans)'
+          : (mIhlal > 1 ? `🚨 ${mIhlal} İhlalde Sınav Otomatik Bitirilir` : '⚠️ Tüm İhlaller Delil Loguna Raporlanır');
+      }
+    }
+  }
+
   async function baslatKioskOgrenciOturumu() {
     const ogrNo = (document.getElementById('kiosk-ogr-no').value || '').trim();
     const adSoyad = (document.getElementById('kiosk-ad-soyad').value || '').trim();
@@ -2243,11 +2343,18 @@
     const telefon = (document.getElementById('kiosk-telefon').value || '').trim();
     const sifre = document.getElementById('kiosk-sifre').value || '';
     const sifreTekrar = document.getElementById('kiosk-sifre-tekrar').value || '';
+    const okudumOnayEl = document.getElementById('kiosk-okudum-onay');
     const hataKutu = document.getElementById('kiosk-hata-kutu');
     hataKutu.hidden = true;
 
     if (!ogrNo || !adSoyad) {
       hataKutu.textContent = 'Lütfen öğrenci numaranızı ve ad-soyadınızı eksiksiz giriniz.';
+      hataKutu.hidden = false;
+      return;
+    }
+
+    if (okudumOnayEl && !okudumOnayEl.checked) {
+      hataKutu.textContent = '⚠️ Sınava başlayabilmek için sınav güvenlik kurallarını ve delil log aydınlatma metnini "Okudum, Anladım, Kabul Ediyorum" kutucuğunu işaretleyerek onaylamanız zorunludur.';
       hataKutu.hidden = false;
       return;
     }
@@ -2278,8 +2385,25 @@
       verileriKaydet();
     }
 
+    const seciliSinavRadio = document.querySelector('input[name="kiosk-secili-sinav"]:checked');
+    const seciliSinavId = seciliSinavRadio ? seciliSinavRadio.value : '';
+    const seciliListeSinavi = seciliSinavId && Array.isArray(durum.onlineSinavListesi)
+      ? durum.onlineSinavListesi.find((x) => x.sinavId === seciliSinavId)
+      : null;
+    if (seciliListeSinavi) {
+      durum.onlineSinav = { ...seciliListeSinavi };
+    }
+
     const yapi = okuAktifSinavYapisi();
     const onl = durum.onlineSinav || {};
+    if (onl.erisimKodu) {
+      const girilenSalonKodu = ((document.getElementById('kiosk-salon-kodu') && document.getElementById('kiosk-salon-kodu').value) || '').trim();
+      if (girilenSalonKodu !== String(onl.erisimKodu).trim()) {
+        hataKutu.textContent = '🔑 Girdiğiniz Salon / Sınav Giriş Kodu hatalı. Lütfen gözetmenin paylaştığı kodu kontrol ediniz.';
+        hataKutu.hidden = false;
+        return;
+      }
+    }
     const hedefDersId = onl.dersId || yapi.ders.id;
     let dersHavuzSorulari = durum.sorular.filter((s) => !s.arsivde && (s.dersId === hedefDersId || s.dersId === 'genel'));
     if (onl.haftaKapsam === 'vize') {
@@ -2393,6 +2517,11 @@
         bc.close();
       }
     } catch (_) {}
+
+    ekleKioskDelilLog(
+      'KURALLAR_ONAYLANDI',
+      `Öğrenci (${ogrNo} - ${adSoyad}) sınav öncesi güvenlik/karantina kurallarını ve delil log aydınlatma metnini "Okudum, Anladım, Kabul Ediyorum" kutucuğu ile onayladı.`
+    );
 
     ekleKioskDelilLog(
       'OTURUM_BASLADI',
@@ -2576,6 +2705,7 @@
     durum.kioskOturum = null;
     guncelleOnlineOturumTablosu();
     guncelleDelilLogPaneliUI();
+    guncelleKioskOgrenciSinavListesiUI();
   }
 
   function guncelleDelilLogPaneliUI() {
@@ -2734,6 +2864,7 @@
     }
     guncelleOnlineOturumTablosu();
     guncelleDelilLogPaneliUI();
+    guncelleKioskOgrenciSinavListesiUI();
   }
 
   /* Tüm sınavlar silindiğinde formun dayanacağı boş tanım */
@@ -5534,6 +5665,7 @@
     const btnOnlineKioskAc = document.getElementById('btn-online-kiosk-ac');
     if (btnOnlineKioskAc) {
       btnOnlineKioskAc.addEventListener('click', () => {
+        guncelleKioskOgrenciSinavListesiUI();
         document.getElementById('ana-icerik-alani').style.display = 'none';
         document.getElementById('kiosk-sinav-alani').style.display = 'block';
       });
@@ -5628,9 +5760,23 @@
     }
 
     document.getElementById('btn-kiosk-ogrenci-modu').addEventListener('click', () => {
+      guncelleKioskOgrenciSinavListesiUI();
       document.getElementById('ana-icerik-alani').style.display = 'none';
       document.getElementById('kiosk-sinav-alani').style.display = 'block';
     });
+
+    const kioskOgrNoInput = document.getElementById('kiosk-ogr-no');
+    if (kioskOgrNoInput) {
+      kioskOgrNoInput.addEventListener('input', () => {
+        guncelleKioskOgrenciSinavListesiUI();
+      });
+    }
+    const kioskSinavListesiEl = document.getElementById('kiosk-ogrenci-sinav-listesi');
+    if (kioskSinavListesiEl) {
+      kioskSinavListesiEl.addEventListener('change', () => {
+        guncelleKioskOgrenciSinavListesiUI();
+      });
+    }
 
     document.getElementById('btn-kiosk-cikis').addEventListener('click', () => {
       C.temizleGuvenliInterval('kiosk-sayac');
