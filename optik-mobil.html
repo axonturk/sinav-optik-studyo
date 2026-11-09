@@ -612,7 +612,7 @@
           });
           const v = await y.json();
           if (y.ok && v && v.basarili) {
-            if (bilgi) bilgi.textContent = `✅ ${v.adet} öğrenci "${v.oturumKodu}" oturumuyla bilgisayara gönderildi!`;
+            if (bilgi) bilgi.textContent = `✅ ${v.adet || v.aktarilanSayi || mobilDurum.ogrenciler.length} öğrenci "${v.oturumKodu}" oturumuyla bilgisayara gönderildi!`;
             bipCal(true);
             return;
           }
@@ -1235,6 +1235,12 @@
           a.href = url;
           a.download = `OBS_Resmi_Not_Cizelgesi_${Date.now()}.csv`;
           a.click();
+        });
+
+        window.addEventListener('hashchange', () => {
+          yukleBaslangicVerisi();
+          cizDokunmatikAnahtarEditoru();
+          cizMobilOgrenciQrBilgisayara();
         });
       });
     })();

@@ -1067,8 +1067,22 @@ body.kiosk-aktif .kiosk-gizle {
   .ust-cubuk,
   .sekme-cubuk,
   .yazdir-gizle,
-  .soru-ekran-araclari {
+  .soru-ekran-araclari,
+  #sekme-banka,
+  #sekme-omr,
+  #sekme-ogrenciler,
+  #sekme-online,
+  #sekme-analiz > :not(#kart-bireysel-karneler),
+  #modal-hoca-giris,
+  #modal-yeni-ders,
+  #modal-ogrenci-qr,
+  #modal-hizli-soru-duzenle,
+  #kiosk-sinav-alani {
     display: none !important;
+  }
+
+  #sekme-stüdyo {
+    display: block !important;
   }
 
   .ana-kapsayici,

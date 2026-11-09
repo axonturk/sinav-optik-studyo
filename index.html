@@ -407,10 +407,10 @@
             </div>
           </div>
 
-          <!-- Kart 3: Kurumsal Antet & Türkiye Kalite Formu Standardı (PDF Form Yükleme + ISO 9001 / YÖKAK / MÜDEK / MEB) -->
+          <!-- Kart 3: Sınav Kağıdı Başlığı, Süresi, Kurumsal Antet & Seçmeli Kalite Formu -->
           <div class="kart">
             <div class="kart-baslik">
-              <span>🏛️ 3. Standart Kalite Formu &amp; Hazır PDF Form Yükleme</span>
+              <span>📝 3. Sınav Kağıdı Başlığı, Süresi &amp; Kalite Formu</span>
               <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
                 <label class="btn btn-birincil btn-kucuk" style="cursor:pointer; margin:0;" title="Okulunuzun hazır standart PDF veya resim sınav formunu doğrudan yükleyin">
                   📄 Hazır PDF / Form Yükle (.pdf / .png)
@@ -419,6 +419,41 @@
                 <button type="button" class="btn btn-kucuk" id="btn-kalite-pano-yapistir" title="Word veya PDF ekranından Win+Shift+S ile kestiğiniz anteti Ctrl+V ile yapıştırın">
                   📋 Pano (Ctrl+V)
                 </button>
+              </div>
+            </div>
+
+            <div class="form-grup">
+              <label class="etiket" for="antet-kurum">🏛️ Üniversite / Yüksekokul / Okul Adı (Üst Başlık)</label>
+              <input type="text" id="antet-kurum" value="KIRIKHAN MESLEK YÜKSEKOKULU" placeholder="Örn: Hatay Mustafa Kemal Üniversitesi — Kırıkhan Meslek Yüksekokulu" />
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="antet-sinav-ad">📝 Sınav Türü ve Dönemi</label>
+                <input type="text" id="antet-sinav-ad" value="2026-2027 GÜZ DÖNEMİ ARA SINAVI (VİZE)" />
+              </div>
+              <div>
+                <label class="etiket" for="antet-sure" style="color:var(--birincil); font-weight:800;">⏱️ Sınav Süresi (Kağıt Üstü)</label>
+                <input type="text" id="antet-sure" list="liste-hazir-sinav-sureleri" value="60 Dakika" placeholder="Örn: 60 Dakika" />
+                <datalist id="liste-hazir-sinav-sureleri">
+                  <option value="30 Dakika"></option>
+                  <option value="40 Dakika"></option>
+                  <option value="45 Dakika"></option>
+                  <option value="50 Dakika"></option>
+                  <option value="60 Dakika"></option>
+                  <option value="75 Dakika"></option>
+                  <option value="90 Dakika"></option>
+                  <option value="120 Dakika"></option>
+                </datalist>
+              </div>
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="antet-tarih">📅 Sınav Tarihi</label>
+                <input type="text" id="antet-tarih" value="07.11.2026" />
+              </div>
+              <div>
+                <label class="etiket" for="antet-hoca">👨‍🏫 Öğretim Elemanı / Öğretmen</label>
+                <input type="text" id="antet-hoca" value="Öğr. Gör. Fatih Akman ÇAKMAK" />
               </div>
             </div>
 
@@ -441,9 +476,9 @@
 
             <div class="form-satir">
               <div>
-                <label class="etiket" for="kalite-form-tipi">Kurumsal Antet &amp; Seçmeli Kalite Künyesi Yapısı</label>
+                <label class="etiket" for="kalite-form-tipi">Kurumsal Antet &amp; Seçmeli Kalite Künyesi Yapısı (Üst &amp; Alt Belge No)</label>
                 <select id="kalite-form-tipi">
-                  <option value="standart" selected>⚡ Sade Kurumsal Antet (Belge No / Kalite Künyesi Yok — Varsayılan)</option>
+                  <option value="standart" selected>⚡ Sade Kurumsal Antet (Üstte ve Altta Belge No / Künye Yok — Varsayılan)</option>
                   <option value="iso9001">🏛️ ISO 9001 / YÖKAK Kalite Künyeli Form (Seçmeli: Doküman No &amp; Revizyon Kutulu)</option>
                   <option value="mudek">🎓 MÜDEK / Bologna Akreditasyon Formu (Kalite Künyesi + ÖÇ Puan Tablolu)</option>
                   <option value="meb">🏫 MEB TKY / OKYS Standart Yazılı Formu (Not Kutulu + Zümre/Müdür Onaylı)</option>
@@ -486,33 +521,9 @@
               </div>
             </div>
 
-            <div class="form-grup">
-              <label class="etiket" for="antet-kurum">Üniversite / Yüksekokul / Okul Adı (Üst Başlık)</label>
-              <input type="text" id="antet-kurum" value="KIRIKHAN MESLEK YÜKSEKOKULU" placeholder="Örn: Hatay Mustafa Kemal Üniversitesi — Kırıkhan Meslek Yüksekokulu" />
-            </div>
-            <div class="form-satir">
-              <div>
-                <label class="etiket" for="antet-sinav-ad">Sınav Türü ve Dönemi</label>
-                <input type="text" id="antet-sinav-ad" value="2026-2027 GÜZ DÖNEMİ ARA SINAVI (VİZE)" />
-              </div>
-              <div>
-                <label class="etiket" for="antet-sure">Sınav Süresi</label>
-                <input type="text" id="antet-sure" value="60 Dakika" />
-              </div>
-            </div>
-            <div class="form-satir">
-              <div>
-                <label class="etiket" for="antet-tarih">Sınav Tarihi</label>
-                <input type="text" id="antet-tarih" value="07.11.2026" />
-              </div>
-              <div>
-                <label class="etiket" for="antet-hoca">Öğretim Elemanı / Öğretmen</label>
-                <input type="text" id="antet-hoca" value="Öğr. Gör. Fatih Akman ÇAKMAK" />
-              </div>
-            </div>
             <div style="margin-top:0.45rem; display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
               <button type="button" class="btn btn-basari btn-kucuk" id="btn-antet-sablon-kaydet" style="width:100%;">
-                💾 Okul &amp; Şablon Yapısını Varsayılan Olarak Kaydet (Her Seferinde Bilgi Girmeyin)
+                💾 Okul, Süre &amp; Şablon Yapısını Varsayılan Olarak Kaydet (Her Seferinde Bilgi Girmeyin)
               </button>
             </div>
           </div>
@@ -562,6 +573,63 @@
                   <option value="word-indir">📘 Word (.doc)</option>
                   <option value="yazdir">🖨️ Yazıcıdan bastır</option>
                 </select>
+              </div>
+            </div>
+
+            <!-- 1B) Sınav Kağıdı SeçiliOlduğunda Görünen Hızlı Başlık, Sınav Süresi, Tarih ve Seçmeli Künye Çubuğu -->
+            <div id="panel-kagit-bilgi" style="margin-bottom:0.5rem; padding:0.6rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:var(--radius-kucuk);">
+              <div class="form-satir" style="margin-bottom:0.4rem;">
+                <div>
+                  <label class="etiket" for="kagit-hizli-sure" style="color:var(--birincil); font-weight:800;">⏱️ Sınav Süresi</label>
+                  <input type="text" id="kagit-hizli-sure" list="liste-hazir-sinav-sureleri" value="60 Dakika" placeholder="Örn: 60 Dakika" />
+                </div>
+                <div>
+                  <label class="etiket" for="kagit-hizli-tarih">📅 Sınav Tarihi</label>
+                  <input type="text" id="kagit-hizli-tarih" value="07.11.2026" placeholder="Örn: 09.11.2026" />
+                </div>
+                <div>
+                  <label class="etiket" for="kagit-hizli-sinav-ad">📝 Sınav Türü / Başlığı</label>
+                  <input type="text" id="kagit-hizli-sinav-ad" value="2026-2027 GÜZ DÖNEMİ ARA SINAVI (VİZE)" placeholder="Örn: 2026-2027 GÜZ ARA SINAVI" />
+                </div>
+                <div>
+                  <label class="etiket" for="kagit-hizli-kurum">🏛️ Okul / Fakülte / MYO (Üst Başlık)</label>
+                  <input type="text" id="kagit-hizli-kurum" value="KIRIKHAN MESLEK YÜKSEKOKULU" placeholder="Örn: KIRIKHAN MESLEK YÜKSEKOKULU" />
+                </div>
+              </div>
+              <div class="form-satir" style="margin-bottom:0; align-items:end;">
+                <div>
+                  <label class="etiket" for="kagit-hizli-hoca">👨‍🏫 Öğretim Elemanı</label>
+                  <input type="text" id="kagit-hizli-hoca" value="Öğr. Gör. Fatih Akman ÇAKMAK" placeholder="Örn: Öğr. Gör. Fatih Akman ÇAKMAK" />
+                </div>
+                <div>
+                  <label class="etiket" for="kagit-hizli-kunye-modu">🏷️ Belge No / Kalite Künyesi (Üst &amp; Alt)</label>
+                  <select id="kagit-hizli-kunye-modu">
+                    <option value="standart" selected>⚡ Künye Yok (Üstte ve Altta Belge No Gösterme)</option>
+                    <option value="iso9001">🏛️ Belge No / Kalite Künyesi Göster (Düzenlenebilir)</option>
+                    <option value="mudek">🎓 MÜDEK / Bologna ÖÇ Puan Tablolu Künye</option>
+                    <option value="meb">🏫 MEB TKY Standart Yazılı Formu</option>
+                  </select>
+                </div>
+                <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                  <button type="button" class="btn btn-basari btn-kucuk" id="btn-kagit-sablon-kaydet" title="Okul, Süre, Tarih ve Şablon yapısını varsayılan olarak kaydeder">
+                    💾 Şablon Yapısını Kaydet
+                  </button>
+                  <span id="etiket-kagit-sablon-durum" style="font-size:0.74rem; color:var(--basari); font-weight:700;"></span>
+                </div>
+              </div>
+              <div id="alan-kagit-hizli-kunye-detay" class="form-satir" style="display:none; margin-top:0.4rem; margin-bottom:0; padding:0.45rem; background:var(--bg-kart); border:1px dashed var(--birincil); border-radius:6px;">
+                <div>
+                  <label class="etiket" for="kagit-hizli-dokuman-no">Sınav Kağıdı Doküman / Belge No</label>
+                  <input type="text" id="kagit-hizli-dokuman-no" value="" placeholder="Örn: FRM-004" />
+                </div>
+                <div>
+                  <label class="etiket" for="kagit-hizli-yayin-tarihi">İlk Yayın Tarihi</label>
+                  <input type="text" id="kagit-hizli-yayin-tarihi" value="" placeholder="Örn: 15.09.2026" />
+                </div>
+                <div>
+                  <label class="etiket" for="kagit-hizli-revizyon">Revizyon No / Tarihi</label>
+                  <input type="text" id="kagit-hizli-revizyon" value="" placeholder="Örn: Rev.01" />
+                </div>
               </div>
             </div>
 
@@ -1453,7 +1521,10 @@
         <div class="kart">
           <div class="kart-baslik">
             <span>👨‍🎓 Kayıtlı Sınıf Listesi</span>
-            <button type="button" class="btn btn-kucuk" id="btn-yoklama-cizelgesi-yazdir">🖨️ İmzalı Yoklama Çizelgesi Yazdır</button>
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-yoklama-cizelgesi-pdf" title="Sınav Yoklama Evrakını (İmza Çizelgesi) A4 PDF olarak indir">📥 Yoklama PDF İndir</button>
+              <button type="button" class="btn btn-kucuk" id="btn-yoklama-cizelgesi-yazdir" title="Sınav Yoklama Evrakını (İmza Çizelgesi) A4 olarak yazdır">🖨️ İmzalı Yoklama Çizelgesi Yazdır</button>
+            </div>
           </div>
           <div class="tablo-sarmal">
             <table class="veri-tablo">

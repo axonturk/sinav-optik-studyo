@@ -12,13 +12,16 @@
     "test:omr": "node omr-gercek-form-test.js",
     "test:pwa": "node pwa-test.js",
     "test:online": "node online-liste-test.js",
-    "test:hoca-onay": "node hoca-onay-test.js"
+    "test:hoca-onay": "node hoca-onay-test.js",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "devDependencies": {
     "puppeteer-core": "^25.16.0",
+    "wrangler": "^4.158.0",
     "xlsx": "^0.18.5"
   }
 }

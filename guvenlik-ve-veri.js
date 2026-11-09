@@ -4195,7 +4195,11 @@
       }));
 
     const tabanAdres = String(secenekler.tabanAdres || '').trim().replace(/\/+$/, '');
-    const parcaBoyutu = Math.max(10, Math.min(60, parseInt(secenekler.parcaBoyutu, 10) || 30));
+    const hedefSayfa = String(secenekler.hedefSayfa || 'optik-mobil.html').trim() || 'optik-mobil.html';
+    const parcaBoyutu = Math.max(
+      10,
+      Math.min(60, parseInt(secenekler.parcaBoyutu || secenekler.maksDilimBoyutu, 10) || 25)
+    );
 
     const satirKodla = (liste) =>
       liste
@@ -4206,6 +4210,11 @@
     const tamB64 = utf8ToBase64Guvenli(tamMetin);
     const kodlanmisB64 = encodeURIComponent(tamB64);
 
+    const urlBilgisayar = `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${kodlanmisB64}`;
+    const urlTelefon = `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${kodlanmisB64}`;
+    const tekUrl = `${tabanAdres ? tabanAdres + '/' + hedefSayfa : hedefSayfa}#ogr=${kodlanmisB64}`;
+    const tamPaketKodu = `OGR-QR|1/1|${tamB64}`;
+
     const parcalar = [];
     const toplamParca = Math.max(1, Math.ceil(temizListe.length / parcaBoyutu));
     for (let i = 0; i < toplamParca; i++) {
@@ -4215,24 +4224,36 @@
       const dilimKodlanmis = encodeURIComponent(dilimB64);
       const parcaNo = i + 1;
       const paketKodu = `OGR-QR|${parcaNo}/${toplamParca}|${dilimB64}`;
+      const dilimUrlBilgisayar = `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${dilimKodlanmis}`;
+      const dilimUrlTelefon = `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${dilimKodlanmis}`;
+      const dilimUrl = `${tabanAdres ? tabanAdres + '/' + hedefSayfa : hedefSayfa}#ogr=${dilimKodlanmis}`;
       parcalar.push({
         parcaNo,
         toplamParca,
         ogrenciSayisi: dilim.length,
+        adet: dilim.length,
         b64: dilimB64,
         paketKodu,
-        urlBilgisayar: `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${dilimKodlanmis}`,
-        urlTelefon: `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${dilimKodlanmis}`
+        kod: paketKodu,
+        url: dilimUrl,
+        urlBilgisayar: dilimUrlBilgisayar,
+        urlTelefon: dilimUrlTelefon
       });
     }
 
     return {
       ogrenciSayisi: temizListe.length,
+      toplamOgrenci: temizListe.length,
       b64: tamB64,
-      paketKodu: `OGR-QR|1/1|${tamB64}`,
+      tekBase64: tamB64,
+      kodlanmisB64,
+      paketKodu: tamPaketKodu,
+      kod: tamPaketKodu,
       hashParam: `#ogr=${kodlanmisB64}`,
-      urlBilgisayar: `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${kodlanmisB64}`,
-      urlTelefon: `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${kodlanmisB64}`,
+      url: tekUrl,
+      tekUrl,
+      urlBilgisayar,
+      urlTelefon,
       toplamParca,
       parcalar
     };

@@ -659,6 +659,92 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
     'UI Öğrenci Listesini QR ile Bilgisayara Aktar: Eşleştirme QR üretildi ve QR öğrenci paketi bilgisayardaki derse başarıyla aktarıldı'
   );
 
+  // 10. Bilgisayardan Telefona Öğrenci QR Aktarımı (#btn-qr-mod-telefona) — Boş Beyaz Kutu Olmadığını Doğrulama
+  await sayfa.click('#btn-qr-mod-telefona');
+  await new Promise((r) => setTimeout(r, 200));
+
+  const telefonaQrBilgi = await sayfa.evaluate(() => {
+    const svg = document.querySelector('#alan-ogrenci-qr-svg svg');
+    const path = document.querySelector('#alan-ogrenci-qr-svg svg path');
+    const bilgiMetin = (document.getElementById('etiket-ogrenci-qr-bilgi') || {}).textContent || '';
+    const linkHref = (document.getElementById('link-ogrenci-qr-dogrudan-ac') || {}).getAttribute('href') || '';
+    return {
+      svgVar: Boolean(svg),
+      pathVar: Boolean(path && (path.getAttribute('d') || '').length > 50),
+      bilgiMetin,
+      linkHref
+    };
+  });
+  kontrol(
+    telefonaQrBilgi.svgVar &&
+      telefonaQrBilgi.pathVar &&
+      telefonaQrBilgi.bilgiMetin.includes('öğrenci QR koduna işlendi') &&
+      telefonaQrBilgi.linkHref.includes('optik-mobil.html#ogr='),
+    'UI Bilgisayardan Telefona Öğrenci QR: #alan-ogrenci-qr-svg içinde gerçek QR SVG/path çizildi (boş beyaz kutu hatası giderildi)'
+  );
+  await sayfa.click('#btn-modal-ogrenci-qr-kapat');
+
+  // 11. Sınav Kağıdı Sayfa 2/2 Alt Künye Temizliği (BLM-FRM-004 yok) ve Çıktı Merkezi Sınav Süresi (#kagit-hizli-sure) Testi
+  await sayfa.evaluate(() => {
+    const kapsam = document.getElementById('baski-kapsam-sec');
+    kapsam.value = 'sinif-aktif';
+    kapsam.dispatchEvent(new Event('change'));
+  });
+  await new Promise((r) => setTimeout(r, 200));
+
+  await sayfa.evaluate(() => {
+    const sureInp = document.getElementById('kagit-hizli-sure');
+    sureInp.value = '75 Dakika';
+    sureInp.dispatchEvent(new Event('input'));
+  });
+  await sayfa.click('#btn-kagit-sablon-kaydet');
+  await new Promise((r) => setTimeout(r, 250));
+
+  const kagitAltVeSureKontrol = await sayfa.evaluate(() => {
+    const sahneMetin = document.getElementById('a4-onizleme-sahne').textContent || '';
+    const kagitPanelGorunur = document.getElementById('panel-kagit-bilgi').style.display !== 'none';
+    const antetSureDeger = document.getElementById('antet-sure').value;
+    return {
+      kagitPanelGorunur,
+      antetSureDeger,
+      blmFrmVarMi: sahneMetin.includes('BLM-FRM-004') || sahneMetin.includes('Rev.02 / 01.09.2026'),
+      sure75VarMi: sahneMetin.includes('75 Dakika')
+    };
+  });
+  kontrol(
+    kagitAltVeSureKontrol.kagitPanelGorunur &&
+      kagitAltVeSureKontrol.antetSureDeger === '75 Dakika' &&
+      !kagitAltVeSureKontrol.blmFrmVarMi &&
+      kagitAltVeSureKontrol.sure75VarMi,
+    'UI Sınav Kağıdı Süresi & Alt Künye: Sayfa 2/2 altındaki sabit BLM-FRM-004 kaldırıldı; Çıktı Merkezinden girilen "75 Dakika" sınav kağıdına işlendi'
+  );
+
+  // 12. 5. Sınıf & Salonlar Sekmesindeki "🖨️ İmzalı Yoklama Çizelgesi Yazdır" Düğmesi Testi
+  await sayfa.click('[data-sekme="sekme-ogrenciler"]');
+  await new Promise((r) => setTimeout(r, 150));
+  await sayfa.evaluate(() => {
+    window.__yazdirCagrildi = false;
+    window.print = () => { window.__yazdirCagrildi = true; };
+  });
+  await sayfa.click('#btn-yoklama-cizelgesi-yazdir');
+  await new Promise((r) => setTimeout(r, 200));
+
+  const yoklamaYazdirKontrol = await sayfa.evaluate(() => {
+    const kapsam = document.getElementById('baski-kapsam-sec').value;
+    const sahneMetin = document.getElementById('a4-onizleme-sahne').textContent || '';
+    return {
+      kapsam,
+      yoklamaEvrakiMi: sahneMetin.includes('SINAV YOKLAMA EVRAKI') && sahneMetin.includes('İMZA'),
+      yazdirCagrildi: Boolean(window.__yazdirCagrildi)
+    };
+  });
+  kontrol(
+    yoklamaYazdirKontrol.kapsam === 'yoklama' &&
+      yoklamaYazdirKontrol.yoklamaEvrakiMi &&
+      yoklamaYazdirKontrol.yazdirCagrildi,
+    'UI İmzalı Yoklama Çizelgesi Yazdır: 5. Sınıf & Salonlar sekmesinden tıklandığında web arayüzü yerine A4 SINAV YOKLAMA EVRAKI (İmza Çizelgesi) hazırlandı ve yazdırıldı'
+  );
+
   await tarayici.close();
   sunucu.close();
   console.log(`\n🎉 TÜM HOCA DAVET KODU, YÖNETİCİ ONAY, SERT KİOSK VE DELİL LOG TESTLERİ GEÇTİ (${gecen}/${gecen})`);

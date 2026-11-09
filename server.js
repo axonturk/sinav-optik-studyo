@@ -200,22 +200,25 @@ function istekIsleyici(req, res) {
           return gonderJson(res, 200, {
             basarili: true,
             oturumKodu,
-            aktarilanSayi: ogrenciler.length
+            aktarilanSayi: ogrenciler.length,
+            adet: ogrenciler.length
           });
         })
         .catch((err) => gonderJson(res, 400, { hata: err.message }));
       return;
     }
     if (req.method === 'GET') {
-      const oturumKodu = String(urlNesne.searchParams.get('oturum') || 'GENEL').trim().toUpperCase() || 'GENEL';
+      const oturumKodu = String(urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || 'GENEL').trim().toUpperCase() || 'GENEL';
       const tuket = urlNesne.searchParams.get('tuket') === '1';
       const kayit = sunucuDurumu.ogrenciQrKuyrugu.get(oturumKodu) || sunucuDurumu.ogrenciQrKuyrugu.get('GENEL') || null;
       if (kayit && tuket) {
         sunucuDurumu.ogrenciQrKuyrugu.delete(oturumKodu);
         if (oturumKodu !== 'GENEL') sunucuDurumu.ogrenciQrKuyrugu.delete('GENEL');
       }
+      const varMi = Boolean(kayit && Array.isArray(kayit.ogrenciler) && kayit.ogrenciler.length > 0);
       return gonderJson(res, 200, {
-        varMi: Boolean(kayit && Array.isArray(kayit.ogrenciler) && kayit.ogrenciler.length > 0),
+        varMi,
+        bulundu: varMi,
         oturumKodu,
         ogrenciler: kayit ? kayit.ogrenciler : [],
         zamanMs: kayit ? kayit.zamanMs : 0
