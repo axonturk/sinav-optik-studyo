@@ -275,8 +275,9 @@
 
   /* Şık Karıştırma ve Doğru Şık Değerini Koruma Motoru:
      Şık A'dan D'ye geçtiğinde doğru şık değerini (metnini) yeni harfine taşır;
-     4 şıklı sınavlarda doğru şık E'de olsa bile asla silinmez, korunarak A-D içine taşınır. */
-  function karistirSoruSiklariVeKoru(soru, tohumAnahtari, sikSayisi = 5, sikKaristir = true) {
+     4 şıklı sınavlarda doğru şık E'de olsa bile asla silinmez, korunarak A-D içine taşınır.
+     hedefDogruHarf ('A'..'E') verildiğinde doğru şık tam olarak o harf konumuna yerleştirilir. */
+  function karistirSoruSiklariVeKoru(soru, tohumAnahtari, sikSayisi = 5, sikKaristir = true, hedefDogruHarf = null) {
     const harfler = ['A', 'B', 'C', 'D', 'E'];
     const hedefSikSayisi = Number(sikSayisi) === 4 ? 4 : 5;
     const mevcutSiklar = (soru.siklar || []).slice();
@@ -286,7 +287,8 @@
         siklar: [],
         orijinalDogruHarf: soru.dogruHarf || 'A',
         dogruHarf: soru.dogruHarf || 'A',
-        dogruSikDegeri: soru.dogruSikDegeri || ''
+        dogruSikDegeri: soru.dogruSikDegeri || '',
+        secenekHaritasi: {}
       };
     }
 
@@ -324,76 +326,247 @@
       }
     }
 
-    const sonSiklar = sikKaristir
-      ? diziKaristirDeterministik(aktifSiklar, tohumAnahtari)
-      : aktifSiklar;
+    const aktifHarfKumesi = harfler.slice(0, aktifSiklar.length);
+    const hedefHarfTemiz = hedefDogruHarf ? String(hedefDogruHarf).toUpperCase().trim() : '';
+    const hedefPoz = aktifHarfKumesi.indexOf(hedefHarfTemiz);
+
+    let sonSiklar;
+    if (sikKaristir && hedefPoz >= 0) {
+      const dogruNesne = aktifSiklar.find((x) => x.dogruMu) || aktifSiklar[0];
+      const celdiriciler = diziKaristirDeterministik(
+        aktifSiklar.filter((x) => x !== dogruNesne),
+        tohumAnahtari
+      );
+      sonSiklar = [];
+      let cPtr = 0;
+      for (let pos = 0; pos < aktifSiklar.length; pos++) {
+        if (pos === hedefPoz) sonSiklar.push(dogruNesne);
+        else sonSiklar.push(celdiriciler[cPtr++]);
+      }
+    } else if (sikKaristir) {
+      sonSiklar = diziKaristirDeterministik(aktifSiklar, tohumAnahtari);
+    } else {
+      sonSiklar = aktifSiklar;
+    }
 
     const yeniDogruIdx = Math.max(0, sonSiklar.findIndex((x) => x.dogruMu));
     const yeniDogruHarf = harfler[yeniDogruIdx] || 'A';
     const dogruMetin = sonSiklar[yeniDogruIdx] ? sonSiklar[yeniDogruIdx].metin : '';
+    const secenekHaritasi = {};
+    sonSiklar.forEach((x, idx) => {
+      secenekHaritasi[harfler[idx] || 'A'] = x.orijinalHarf || harfler[idx] || 'A';
+    });
 
     return {
       ...soru,
       siklar: sonSiklar.map((x) => x.metin),
       orijinalDogruHarf: harfler[dogruIndeks] || 'A',
       dogruHarf: yeniDogruHarf,
-      dogruSikDegeri: dogruMetin
+      dogruSikDegeri: dogruMetin,
+      secenekHaritasi
     };
   }
 
-  /* A/B/C/D Kitapçık Üretici ve Simetrik Cevap Anahtarı Hesaplayıcı */
+  /* Çoktan seçmeli test soruları için eşit kotalı (A..E veya A..D) ve ardışık 3+ tekrar (streak)
+     içermeyen deterministik doğru harf dizisi üretir. */
+  function uretDengeliHarfDizisi(adet, sikSayisi = 5, tohumDizgesi = 'DENGELI-ANAHTAR') {
+    const n = Math.max(0, Number(adet) || 0);
+    if (n === 0) return [];
+    const k = Number(sikSayisi) === 4 ? 4 : 5;
+    const harfler = ['A', 'B', 'C', 'D', 'E'].slice(0, k);
+    const tabanKota = Math.floor(n / k);
+    const kalan = n % k;
+
+    const havuz = [];
+    for (let i = 0; i < k; i++) {
+      for (let j = 0; j < tabanKota; j++) havuz.push(harfler[i]);
+    }
+    const kalanHarfler = diziKaristirDeterministik(harfler, `${tohumDizgesi}-KALAN`);
+    for (let i = 0; i < kalan; i++) {
+      havuz.push(kalanHarfler[i]);
+    }
+
+    const dizi = diziKaristirDeterministik(havuz, `${tohumDizgesi}-SIRA`);
+
+    const ihlalVarMi = (arr, idx) => {
+      if (idx < 0 || idx >= arr.length) return false;
+      const h = arr[idx];
+      if (idx >= 2 && arr[idx - 1] === h && arr[idx - 2] === h) return true;
+      if (idx >= 1 && idx + 1 < arr.length && arr[idx - 1] === h && arr[idx + 1] === h) return true;
+      if (idx + 2 < arr.length && arr[idx + 1] === h && arr[idx + 2] === h) return true;
+      return false;
+    };
+
+    for (let tur = 0; tur < 4; tur++) {
+      for (let i = 2; i < dizi.length; i++) {
+        if (dizi[i] === dizi[i - 1] && dizi[i] === dizi[i - 2]) {
+          let takasEdildi = false;
+          for (let j = 0; j < dizi.length; j++) {
+            const adayIdx = (i + 1 + j) % dizi.length;
+            if (adayIdx === i || dizi[adayIdx] === dizi[i]) continue;
+            const gecici = dizi[i];
+            dizi[i] = dizi[adayIdx];
+            dizi[adayIdx] = gecici;
+            if (!ihlalVarMi(dizi, i) && !ihlalVarMi(dizi, adayIdx)) {
+              takasEdildi = true;
+              break;
+            }
+            dizi[adayIdx] = dizi[i];
+            dizi[i] = gecici;
+          }
+          if (!takasEdildi) {
+            for (let j = 0; j < dizi.length; j++) {
+              if (dizi[j] !== dizi[i]) {
+                const gecici = dizi[i];
+                dizi[i] = dizi[j];
+                dizi[j] = gecici;
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+    return dizi;
+  }
+
+  /* Doğru/Yanlış (D/Y) sorularında 4+ ardışık aynı cevap (D,D,D,D veya Y,Y,Y,Y) yığılmasını önler */
+  function onleDyArdisikYigilma(dyListesi) {
+    const dizi = Array.isArray(dyListesi) ? dyListesi.slice() : [];
+    if (dizi.length < 4) return dizi;
+    for (let tur = 0; tur < 3; tur++) {
+      for (let i = 3; i < dizi.length; i++) {
+        const c = String(dizi[i].dogruDY || 'D').toUpperCase();
+        const c1 = String(dizi[i - 1].dogruDY || 'D').toUpperCase();
+        const c2 = String(dizi[i - 2].dogruDY || 'D').toUpperCase();
+        const c3 = String(dizi[i - 3].dogruDY || 'D').toUpperCase();
+        if (c === c1 && c === c2 && c === c3) {
+          for (let j = 0; j < dizi.length; j++) {
+            const adayIdx = (i + 1 + j) % dizi.length;
+            const adayC = String(dizi[adayIdx].dogruDY || 'D').toUpperCase();
+            if (adayC !== c) {
+              const gecici = dizi[i];
+              dizi[i] = dizi[adayIdx];
+              dizi[adayIdx] = gecici;
+              break;
+            }
+          }
+        }
+      }
+    }
+    return dizi;
+  }
+
+  /* A/B/C/D Kitapçık Üretici ve Simetrik Cevap Anahtarı Hesaplayıcı:
+     sikKaristir=true olduğunda A dahil TÜM kitapçıklarda doğru şıklar A..E (veya A..D) arasında
+     mümkün olduğunca eşit dağıtılır (yığılma ve 3+ ardışık aynı harf tekrarları engellenir). */
   function uretKitapcikVaryasyonu(seciliSorular, grupHarfi, sinavKodu, sikKaristir = true, sikSayisi = 5) {
     const dySorular = seciliSorular.filter((s) => s.tur === 'dy');
     const testSorular = seciliSorular.filter((s) => s.tur === 'test');
     const klasikSorular = seciliSorular.filter((s) => s.tur === 'klasik');
+    const aktifGrup = String(grupHarfi || 'A').toUpperCase();
 
-    if (grupHarfi === 'A') {
+    if (aktifGrup === 'A') {
+      const dengeliHarfA = sikKaristir
+        ? uretDengeliHarfDizisi(testSorular.length, sikSayisi, `${sinavKodu}-DENGELI-A`)
+        : [];
+      const grupADy = dySorular.map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1, orijinalNo: idx + 1 }));
+      const grupATest = testSorular.map((s, idx) => {
+        const korunan = karistirSoruSiklariVeKoru(
+          s,
+          `${sinavKodu}-SIK-A-${s.id}-${idx}`,
+          sikSayisi,
+          Boolean(sikKaristir),
+          sikKaristir ? dengeliHarfA[idx] : null
+        );
+        return {
+          ...korunan,
+          kitapcikSoruNo: idx + 1,
+          orijinalNo: idx + 1
+        };
+      });
+      const grupAKlasik = klasikSorular.map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1, orijinalNo: idx + 1 }));
       return {
         grup: 'A',
-        dy: dySorular.map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1, orijinalNo: idx + 1 })),
-        test: testSorular.map((s, idx) => {
-          const korunan = karistirSoruSiklariVeKoru(s, `${sinavKodu}-SIK-A-${s.id}`, sikSayisi, false);
-          return {
-            ...korunan,
-            kitapcikSoruNo: idx + 1,
-            orijinalNo: idx + 1
-          };
-        }),
-        klasik: klasikSorular.map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1, orijinalNo: idx + 1 }))
+        dy: grupADy,
+        test: grupATest,
+        klasik: grupAKlasik,
+        cevapAnahtari: {
+          dy: grupADy.map((s) => (String(s.dogruDY || 'D').toUpperCase() === 'Y' ? 'Y' : 'D')),
+          test: grupATest.map((s) => String(s.dogruHarf || 'A').toUpperCase()),
+          klasik: grupAKlasik.map((s, idx) => ({
+            soruNo: idx + 1,
+            orijinalNo: idx + 1,
+            tamPuan: Number(s.puan || 10),
+            rubrik: s.rubrik || 'Tam ve doğru açıklamaya tam puan verilir.'
+          }))
+        }
       };
     }
 
-    const karisikDy = diziKaristirDeterministik(
+    const karisikDyHam = diziKaristirDeterministik(
       dySorular.map((s, idx) => ({ ...s, orijinalNo: idx + 1 })),
-      `${sinavKodu}-DY-${grupHarfi}`
-    ).map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1 }));
+      `${sinavKodu}-DY-${aktifGrup}`
+    );
+    const karisikDy = (sikKaristir ? onleDyArdisikYigilma(karisikDyHam) : karisikDyHam)
+      .map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1 }));
+
+    const dengeliHarfGrup = sikKaristir
+      ? uretDengeliHarfDizisi(testSorular.length, sikSayisi, `${sinavKodu}-DENGELI-${aktifGrup}`)
+      : [];
+
+    // A grubundaki şık haritasını referans alabilmek için A grubundaki karşılığını da hesapla
+    const dengeliHarfA = sikKaristir
+      ? uretDengeliHarfDizisi(testSorular.length, sikSayisi, `${sinavKodu}-DENGELI-A`)
+      : [];
+    const aGrubuReferansTest = testSorular.map((s, idx) =>
+      karistirSoruSiklariVeKoru(
+        s,
+        `${sinavKodu}-SIK-A-${s.id}-${idx}`,
+        sikSayisi,
+        Boolean(sikKaristir),
+        sikKaristir ? dengeliHarfA[idx] : null
+      )
+    );
 
     const karisikTest = diziKaristirDeterministik(
-      testSorular.map((s, idx) => ({ ...s, orijinalNo: idx + 1 })),
-      `${sinavKodu}-TEST-${grupHarfi}`
+      testSorular.map((s, idx) => ({ ...s, orijinalNo: idx + 1, aGrubuDogruHarf: aGrubuReferansTest[idx].dogruHarf })),
+      `${sinavKodu}-TEST-${aktifGrup}`
     ).map((s, idx) => {
       const korunan = karistirSoruSiklariVeKoru(
         s,
-        `${sinavKodu}-SIK-${grupHarfi}-${s.id}`,
+        `${sinavKodu}-SIK-${aktifGrup}-${s.id}-${idx}`,
         sikSayisi,
-        sikKaristir
+        Boolean(sikKaristir),
+        sikKaristir ? dengeliHarfGrup[idx] : null
       );
       return {
         ...korunan,
+        orijinalDogruHarf: s.aGrubuDogruHarf || korunan.orijinalDogruHarf,
         kitapcikSoruNo: idx + 1
       };
     });
 
     const karisikKlasik = diziKaristirDeterministik(
       klasikSorular.map((s, idx) => ({ ...s, orijinalNo: idx + 1 })),
-      `${sinavKodu}-KLASIK-${grupHarfi}`
+      `${sinavKodu}-KLASIK-${aktifGrup}`
     ).map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1 }));
 
     return {
-      grup: grupHarfi,
+      grup: aktifGrup,
       dy: karisikDy,
       test: karisikTest,
-      klasik: karisikKlasik
+      klasik: karisikKlasik,
+      cevapAnahtari: {
+        dy: karisikDy.map((s) => (String(s.dogruDY || 'D').toUpperCase() === 'Y' ? 'Y' : 'D')),
+        test: karisikTest.map((s) => String(s.dogruHarf || 'A').toUpperCase()),
+        klasik: karisikKlasik.map((s, idx) => ({
+          soruNo: idx + 1,
+          orijinalNo: s.orijinalNo || idx + 1,
+          tamPuan: Number(s.puan || 10),
+          rubrik: s.rubrik || 'Tam ve doğru açıklamaya tam puan verilir.'
+        }))
+      }
     };
   }
 
@@ -640,8 +813,8 @@
         ciz(bx, by) {
           harita.etiketler.push({
             x: bx, y: by + 10,
-            metin: klasikOptikModu === 'onlar_birler' ? 'KLASİK PUAN (1 PUAN HASSASİYET)' : 'KLASİK PUAN (HOCA BARI)',
-            boyut: 10, kalin: true
+            metin: klasikOptikModu === 'onlar_birler' ? 'KLASİK PUAN (1P · YALNIZ GÖREVLİ)' : 'KLASİK PUAN (YALNIZ GÖREVLİ)',
+            boyut: 9.5, kalin: true
           });
           for (let k = 0; k < klasikSayisi; k++) {
             const tamPuan = (Array.isArray(s.klasikSoruPuanlari) && s.klasikSoruPuanlari[k] !== undefined)
@@ -702,7 +875,8 @@
   }
 
   /* BASILAN optik form: yerleşimden üretilen vektörel (SVG) çizim.
-     sec: { grup:'A', ogrNoKod:'2023104042', baslik:'...' } -> grup balonu ve öğrenci numarası ön-baskılı doldurulur. */
+     sec: { grup:'A', ogrNoKod:'2023104042', baslik:'...' } -> grup balonu ve öğrenci numarası ön-baskılı doldurulur.
+     En üst bantta Doğru (● Tam Dolu) ve Yanlış (✗ Çarpı, ✓ Tik, ◐ Yarım, ⊙ Nokta) kodlama örnekleri yer alır. */
   function uretOptikFormSVG(sema, sec = {}) {
     const y = uretOptikYerlesim(sema);
     const W = y.genislik;
@@ -712,14 +886,19 @@
     parcalar.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#ffffff"/>`);
     parcalar.push(`<rect x="7" y="7" width="${W - 14}" height="${H - 14}" fill="none" stroke="#111" stroke-width="1.6"/>`);
 
-    const fid = (cx, cy, ici) => {
-      let s2 = `<rect x="${cx - 12}" y="${cy - 12}" width="24" height="24" fill="#000"/><rect x="${cx - 6}" y="${cy - 6}" width="12" height="12" fill="#fff"/>`;
+    const fid = (cx, cy, ici, koseAd) => {
+      let s2 = `<rect class="fiducial-kare fiducial-${koseAd}" x="${cx - 12}" y="${cy - 12}" width="24" height="24" fill="#000"/><rect x="${cx - 6}" y="${cy - 6}" width="12" height="12" fill="#fff"/>`;
       if (!ici) s2 += `<rect x="${cx - 3}" y="${cy - 3}" width="6" height="6" fill="#000"/>`;
       return s2;
     };
     const M = KANONIK_FIDUCIAL_MERKEZ;
     // Sol-üst fiducial içi BOŞ (yön işareti), diğer üçünün merkezinde siyah nokta var
-    parcalar.push(fid(M, M, true), fid(W - M, M, false), fid(M, H - M, false), fid(W - M, H - M, false));
+    parcalar.push(
+      fid(M, M, true, 'tl'),
+      fid(W - M, M, false, 'tr'),
+      fid(M, H - M, false, 'bl'),
+      fid(W - M, H - M, false, 'br')
+    );
 
     // Mini geometri matrisi (üst orta)
     try {
@@ -734,9 +913,28 @@
       parcalar.push(`<rect x="${W / 2 - 18}" y="6" width="36" height="36" fill="none" stroke="#000" stroke-width="1"/>${r}`);
     } catch (_) { /* geometri matrisi opsiyonel */ }
 
+    // Üst Bant Sol (x: 62..370): Başlık + Görsel Doğru ve Yanlış Kodlama Örnekleri (Fiducial sessiz bölgesini bozmaz)
     if (sec.baslik) {
-      parcalar.push(`<text x="52" y="22" font-size="11" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#000">${kac(sec.baslik)}</text>`);
+      parcalar.push(`<text x="62" y="17" font-size="9" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#000">${kac(sec.baslik)}</text>`);
     }
+    const oy = sec.baslik ? 30 : 24;
+    parcalar.push(
+      `<g class="optik-kodlama-rehberi" aria-label="Doğru ve Yanlış Kodlama Örnekleri">` +
+      `<text x="62" y="${oy + 2}" font-size="7.4" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#111">DOĞRU:</text>` +
+      `<circle class="kodlama-ornek-balon" cx="101" cy="${oy - 1}" r="3.4" fill="#111"/>` +
+      `<text x="107" y="${oy + 2}" font-size="7" font-family="Arial,Helvetica,sans-serif" fill="#111">Tam Dolu</text>` +
+      `<text x="145" y="${oy + 2}" font-size="7.4" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#444">| YANLIŞ:</text>` +
+      `<text x="186" y="${oy + 2}" font-size="7" font-family="Arial,Helvetica,sans-serif" fill="#333">✗ Çarpı · ✓ Tik · ◐ Yarım · ⊙ Nokta/Silik</text>` +
+      `</g>`
+    );
+
+    // Üst Bant Sağ (x: 432..736): Öğrenci No Kodlama Örneği & Klasik Barı Uyarısı
+    parcalar.push(
+      `<g class="optik-kimlik-rehberi" aria-label="Öğrenci Numarası Kodlama Örneği">` +
+      `<text x="432" y="${oy + 2}" font-size="7.2" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#111">` +
+      `Örn. No Sonu ...07 → Onlar:(0)● Birler:(7)● | Klasik: Yalnız Görevli` +
+      `</text></g>`
+    );
 
     for (const e of y.etiketler) {
       parcalar.push(`<text x="${e.x}" y="${e.y}" font-size="${e.boyut || 9}" ${e.kalin ? 'font-weight="700"' : ''} ${e.hiza ? `text-anchor="${e.hiza}"` : ''} font-family="Arial,Helvetica,sans-serif" fill="#000">${kac(e.metin)}</text>`);
@@ -744,9 +942,9 @@
 
     const balon = (b, metin, dolu) => {
       if (dolu) {
-        return `<circle cx="${b.x}" cy="${b.y}" r="${b.r}" fill="#111" stroke="#111" stroke-width="1.2"/>`;
+        return `<circle class="optik-balon" cx="${b.x}" cy="${b.y}" r="${b.r}" fill="#111" stroke="#111" stroke-width="1.2"/>`;
       }
-      return `<circle cx="${b.x}" cy="${b.y}" r="${b.r}" fill="#fff" stroke="#222" stroke-width="1.2"/>` +
+      return `<circle class="optik-balon" cx="${b.x}" cy="${b.y}" r="${b.r}" fill="#fff" stroke="#222" stroke-width="1.2"/>` +
         `<text x="${b.x}" y="${b.y}" dy="0.35em" text-anchor="middle" font-size="${(b.r * 1.05).toFixed(1)}" font-family="Arial,Helvetica,sans-serif" fill="#444">${kac(metin)}</text>`;
     };
 
@@ -2168,7 +2366,74 @@
 
   /* ------------------------------------------------------------------------
      7. AKADEMİK MADDE ANALİZİ (pj Güçlük, rjx Ayırt Edicilik, Çeldirici) MOTORU
+     A/B/C/D kitapçıklarında karıştırılmış soruları ve şıkları A grubunun kanonik
+     soru numarasına (orijinalNo / id) ve kanonik şık harfine geri eşleyerek analiz eder.
      ------------------------------------------------------------------------ */
+  function bulOgrenciKanonikCevap(ogrenciSonuc, tur, aIdx, sinavYapisi) {
+    const detayAlan = tur === 'dy' ? 'dyDetay' : (tur === 'test' ? 'testDetay' : 'klasikDetay');
+    const detayDizi = (ogrenciSonuc && Array.isArray(ogrenciSonuc[detayAlan])) ? ogrenciSonuc[detayAlan] : [];
+    const grup = String((ogrenciSonuc && ogrenciSonuc.grup) || 'A').toUpperCase();
+    const kitapciklar = (sinavYapisi && sinavYapisi.kitapciklar) || {};
+    const grupA = kitapciklar.A || {};
+    const aSorular = Array.isArray(grupA[tur]) ? grupA[tur] : [];
+    const aSoru = aSorular[aIdx] || null;
+    const gKitapcik = kitapciklar[grup] || null;
+    const gSorular = (gKitapcik && Array.isArray(gKitapcik[tur])) ? gKitapcik[tur] : null;
+
+    let gIdx = aIdx;
+    let gSoru = aSoru;
+    if (grup !== 'A' && gSorular && gSorular.length > 0) {
+      const bulunanIdx = gSorular.findIndex((q) => {
+        if (!q) return false;
+        if (aSoru && aSoru.id && q.id && String(q.id) === String(aSoru.id)) return true;
+        if (q.orijinalNo !== undefined && Number(q.orijinalNo) === aIdx + 1) return true;
+        return false;
+      });
+      if (bulunanIdx >= 0) {
+        gIdx = bulunanIdx;
+        gSoru = gSorular[bulunanIdx];
+      }
+    }
+
+    const detay = detayDizi[gIdx] || null;
+    let kanonikVerilen = detay ? detay.verilen : '';
+    if (tur === 'test' && detay && detay.verilen && grup !== 'A' && gSoru) {
+      const harfler = ['A', 'B', 'C', 'D', 'E'];
+      const vHarf = String(detay.verilen).toUpperCase();
+      if (Array.isArray(gSoru.siklar) && aSoru && Array.isArray(aSoru.siklar)) {
+        const gSecenekMetin = gSoru.siklar[harfler.indexOf(vHarf)];
+        if (gSecenekMetin !== undefined) {
+          const aSecenekIdx = aSoru.siklar.findIndex((m) => String(m).trim() === String(gSecenekMetin).trim());
+          if (aSecenekIdx >= 0) kanonikVerilen = harfler[aSecenekIdx] || vHarf;
+        }
+      } else if (gSoru.secenekHaritasi && gSoru.secenekHaritasi[vHarf]) {
+        kanonikVerilen = gSoru.secenekHaritasi[vHarf];
+      } else if (gSoru.dogruHarf && aSoru && aSoru.dogruHarf && vHarf === String(gSoru.dogruHarf).toUpperCase()) {
+        kanonikVerilen = String(aSoru.dogruHarf).toUpperCase();
+      }
+    }
+
+    // Eğer detay.sonuc yoksa (ham verilen şık varsa) grup cevap anahtarına göre doğruluğu belirle
+    let dogruMu = Boolean(detay && detay.sonuc === 'DOGRU');
+    if (detay && !detay.sonuc && detay.verilen) {
+      const gAnahtar = sinavYapisi && sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari[grup];
+      const beklenen = (gAnahtar && Array.isArray(gAnahtar[tur]) && gAnahtar[tur][gIdx])
+        || (gSoru && (tur === 'dy' ? gSoru.dogruDY : gSoru.dogruHarf));
+      if (beklenen) {
+        dogruMu = String(detay.verilen).toUpperCase() === String(beklenen).toUpperCase();
+      }
+    }
+
+    return {
+      detay,
+      dogruMu,
+      kanonikVerilen,
+      gIdx,
+      aSoru,
+      gSoru
+    };
+  }
+
   function hesaplaSinifVeMaddeAnalizi(okumaSonuclari, sinavYapisi) {
     const n = okumaSonuclari.length;
     if (n === 0) {
@@ -2205,7 +2470,7 @@
     const maddeler = [];
     const anahtarA = (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari.A) || { dy: [], test: [] };
 
-    // Doğru/Yanlış Maddeleri Analizi
+    // Doğru/Yanlış Maddeleri Analizi (Kanonik A Grubu Sırasına Göre)
     const dySayisi = Number(sinavYapisi.dySayisi || 0);
     for (let i = 0; i < dySayisi; i++) {
       let dogruSay = 0;
@@ -2214,18 +2479,18 @@
       const dagilim = { D: 0, Y: 0, BOS: 0 };
 
       for (const s of siraliSonuclar) {
-        const d = s.dyDetay && s.dyDetay[i];
-        if (!d) continue;
-        if (d.sonuc === 'DOGRU') dogruSay++;
-        if (d.verilen === 'D') dagilim.D++;
-        else if (d.verilen === 'Y') dagilim.Y++;
+        const es = bulOgrenciKanonikCevap(s, 'dy', i, sinavYapisi);
+        if (!es.detay) continue;
+        if (es.dogruMu) dogruSay++;
+        if (es.kanonikVerilen === 'D') dagilim.D++;
+        else if (es.kanonikVerilen === 'Y') dagilim.Y++;
         else dagilim.BOS++;
       }
       for (const s of ustGrup) {
-        if (s.dyDetay && s.dyDetay[i] && s.dyDetay[i].sonuc === 'DOGRU') ustDogru++;
+        if (bulOgrenciKanonikCevap(s, 'dy', i, sinavYapisi).dogruMu) ustDogru++;
       }
       for (const s of altGrup) {
-        if (s.dyDetay && s.dyDetay[i] && s.dyDetay[i].sonuc === 'DOGRU') altDogru++;
+        if (bulOgrenciKanonikCevap(s, 'dy', i, sinavYapisi).dogruMu) altDogru++;
       }
 
       const pj = Number((dogruSay / n).toFixed(2));
@@ -2243,7 +2508,7 @@
       });
     }
 
-    // Çoktan Seçmeli Test Maddeleri Analizi
+    // Çoktan Seçmeli Test Maddeleri Analizi (Kanonik A Grubu Sırasına Göre)
     const testSayisi = Number(sinavYapisi.testSayisi || 0);
     for (let i = 0; i < testSayisi; i++) {
       let dogruSay = 0;
@@ -2252,25 +2517,26 @@
       const dagilim = { A: 0, B: 0, C: 0, D: 0, E: 0, BOS: 0 };
 
       for (const s of siraliSonuclar) {
-        const d = s.testDetay && s.testDetay[i];
-        if (!d) continue;
-        if (d.sonuc === 'DOGRU') dogruSay++;
-        if (d.verilen && dagilim[d.verilen] !== undefined) dagilim[d.verilen]++;
+        const es = bulOgrenciKanonikCevap(s, 'test', i, sinavYapisi);
+        if (!es.detay) continue;
+        if (es.dogruMu) dogruSay++;
+        if (es.kanonikVerilen && dagilim[es.kanonikVerilen] !== undefined) dagilim[es.kanonikVerilen]++;
         else dagilim.BOS++;
       }
       for (const s of ustGrup) {
-        if (s.testDetay && s.testDetay[i] && s.testDetay[i].sonuc === 'DOGRU') ustDogru++;
+        if (bulOgrenciKanonikCevap(s, 'test', i, sinavYapisi).dogruMu) ustDogru++;
       }
       for (const s of altGrup) {
-        if (s.testDetay && s.testDetay[i] && s.testDetay[i].sonuc === 'DOGRU') altDogru++;
+        if (bulOgrenciKanonikCevap(s, 'test', i, sinavYapisi).dogruMu) altDogru++;
       }
 
       const pj = Number((dogruSay / n).toFixed(2));
       const rjx = Number(((ustDogru - altDogru) / grupBoyutu).toFixed(2));
+      const aSoru = sinavYapisi.kitapciklar && sinavYapisi.kitapciklar.A && sinavYapisi.kitapciklar.A.test && sinavYapisi.kitapciklar.A.test[i];
       maddeler.push({
         kod: `TEST-${i + 1}`,
         tur: 'Çoktan Seçmeli',
-        dogruCevap: anahtarA.test[i] || 'A',
+        dogruCevap: anahtarA.test[i] || (aSoru && aSoru.dogruHarf) || 'A',
         pj,
         rjx,
         zorlukYorum: pj >= 0.70 ? 'Kolay' : (pj >= 0.30 ? 'İdeal (Orta)' : 'Zor'),
@@ -2284,8 +2550,14 @@
     const kMaddeSayisi = maddeler.length;
     let kr20 = 0;
     if (kMaddeSayisi > 1 && n > 1) {
-      // Her öğrencinin toplam doğru sayısı (0/1 ikili puan toplamı) varyansı
-      const dogruSayilari = siraliSonuclar.map((s) => Number(s.dyDogru || 0) + Number(s.testDogru || 0));
+      const dogruSayilari = siraliSonuclar.map((s) => {
+        let topDogru = Number(s.dyDogru || 0) + Number(s.testDogru || 0);
+        if (topDogru === 0 && ((s.dyDetay && s.dyDetay.length) || (s.testDetay && s.testDetay.length))) {
+          for (let i = 0; i < dySayisi; i++) if (bulOgrenciKanonikCevap(s, 'dy', i, sinavYapisi).dogruMu) topDogru++;
+          for (let i = 0; i < testSayisi; i++) if (bulOgrenciKanonikCevap(s, 'test', i, sinavYapisi).dogruMu) topDogru++;
+        }
+        return topDogru;
+      });
       const ortDogru = dogruSayilari.reduce((a, b) => a + b, 0) / n;
       const varDogru = dogruSayilari.reduce((ak, d) => ak + Math.pow(d - ortDogru, 2), 0) / n;
       const toplamPq = maddeler.reduce((ak, m) => ak + m.pj * (1 - m.pj), 0);
@@ -2404,6 +2676,9 @@
 
   /* ------------------------------------------------------------------------
      7C. KONU / KAZANIM (ÖÇ) BAŞARI ANALİZİ VE BİREYSEL ÖĞRENCİ SONUÇ KARNESİ
+     A/B/C/D kitapçıklarında kanonik soru eşlemesi (orijinalNo / id), soru puanı
+     ağırlıklı (100 * Σ kazanılan puan / Σ azami puan) hesaplama, Klasik soruların
+     dahil edilmesi, Ölçülmeyen ÖÇ ayrımı ve Öğrenci × ÖÇ Akreditasyon Matrisi içerir.
      ------------------------------------------------------------------------ */
   function hesaplaKazanimVeKarneAnalizi(okumaSonuclari = [], sinavYapisi = {}) {
     const varsayilanKazanimlar = [
@@ -2413,32 +2688,68 @@
       'ÖÇ-4: Sıfır Güven (Zero-Trust) Mimari Tasarımı'
     ];
     const grupA = (sinavYapisi.kitapciklar && sinavYapisi.kitapciklar.A) || { dy: [], test: [], klasik: [] };
-    const kazanimHaritasi = {};
+    const dyBirimPuan = Math.max(0.5, Number(sinavYapisi.dySoruPuan || 2));
+    const testBirimPuan = Math.max(0.5, Number(sinavYapisi.testSoruPuan || 5));
+    const klasikVarsayilanPuan = Math.max(1, Number(sinavYapisi.klasikSoruPuan || 10));
+    const klasikSoruPuanlari = Array.isArray(sinavYapisi.klasikSoruPuanlari) ? sinavYapisi.klasikSoruPuanlari : [];
+    const barajEsigi = Math.max(1, Math.min(100, Number(sinavYapisi.akreditasyonBaraji || 60)));
 
-    const ekleKazanimSkor = (kod, dogruMu, tamOran = 1) => {
-      const anahtar = kod || varsayilanKazanimlar[0];
-      if (!kazanimHaritasi[anahtar]) {
-        kazanimHaritasi[anahtar] = { kod: anahtar, soruSayisi: 0, toplamGirisim: 0, basariliToplam: 0 };
+    const kazanimHaritasi = {};
+    const kayitAc = (kod) => {
+      let anahtar = kod || varsayilanKazanimlar[0];
+      const ocEslesme = String(anahtar).match(/^(ÖÇ-\d+|OC-\d+)/i);
+      if (ocEslesme) {
+        const ocOnEk = ocEslesme[1].toUpperCase().replace(/^OC-/, 'ÖÇ-');
+        const mevcutAnahtar = Object.keys(kazanimHaritasi).find((m) => m === ocOnEk || m.startsWith(ocOnEk + ':'));
+        if (mevcutAnahtar) anahtar = mevcutAnahtar;
       }
-      kazanimHaritasi[anahtar].toplamGirisim += 1;
-      if (dogruMu) kazanimHaritasi[anahtar].basariliToplam += tamOran;
+      if (!kazanimHaritasi[anahtar]) {
+        const ocKodu = (String(anahtar).match(/^(ÖÇ-\d+|OC-\d+)/i) || [anahtar])[0].toUpperCase().replace(/^OC-/, 'ÖÇ-');
+        kazanimHaritasi[anahtar] = {
+          kod: anahtar,
+          ocKodu,
+          soruSayisi: 0,
+          azamiSoruPuan: 0,
+          toplamGirisimPuan: 0,
+          kazanilanToplamPuan: 0,
+          ogrenciYuzdeleri: []
+        };
+      }
+      return kazanimHaritasi[anahtar];
     };
 
-    // Soru sayılarını kaydet
-    (grupA.dy || []).forEach((s, idx) => {
-      const k = s.kazanim || varsayilanKazanimlar[idx % varsayilanKazanimlar.length];
-      if (!kazanimHaritasi[k]) kazanimHaritasi[k] = { kod: k, soruSayisi: 0, toplamGirisim: 0, basariliToplam: 0 };
-      kazanimHaritasi[k].soruSayisi++;
+    // Ders için tanımlı tüm ÖÇ'leri (ölçülmeyenler dahil) kaydet
+    if (Array.isArray(sinavYapisi.dersOgrenimCiktilari)) {
+      sinavYapisi.dersOgrenimCiktilari.forEach((doc) => {
+        const etiket = doc && doc.kod
+          ? (doc.aciklama ? `${doc.kod}: ${doc.aciklama}` : doc.kod)
+          : String(doc || '');
+        if (etiket) kayitAc(etiket);
+      });
+    }
+
+    const dySoruListesi = grupA.dy || [];
+    const testSoruListesi = grupA.test || [];
+    const klasikSoruListesi = grupA.klasik || [];
+
+    dySoruListesi.forEach((s, idx) => {
+      const k = s.kazanim || s.ocKodu || varsayilanKazanimlar[idx % varsayilanKazanimlar.length];
+      const kh = kayitAc(k);
+      kh.soruSayisi++;
+      kh.azamiSoruPuan += dyBirimPuan;
     });
-    (grupA.test || []).forEach((s, idx) => {
-      const k = s.kazanim || varsayilanKazanimlar[(idx + 1) % varsayilanKazanimlar.length];
-      if (!kazanimHaritasi[k]) kazanimHaritasi[k] = { kod: k, soruSayisi: 0, toplamGirisim: 0, basariliToplam: 0 };
-      kazanimHaritasi[k].soruSayisi++;
+    testSoruListesi.forEach((s, idx) => {
+      const k = s.kazanim || s.ocKodu || varsayilanKazanimlar[(idx + 1) % varsayilanKazanimlar.length];
+      const kh = kayitAc(k);
+      kh.soruSayisi++;
+      kh.azamiSoruPuan += testBirimPuan;
     });
-    (grupA.klasik || []).forEach((s, idx) => {
-      const k = s.kazanim || varsayilanKazanimlar[3];
-      if (!kazanimHaritasi[k]) kazanimHaritasi[k] = { kod: k, soruSayisi: 0, toplamGirisim: 0, basariliToplam: 0 };
-      kazanimHaritasi[k].soruSayisi++;
+    klasikSoruListesi.forEach((s, idx) => {
+      const k = s.kazanim || s.ocKodu || varsayilanKazanimlar[3];
+      const tamP = klasikSoruPuanlari[idx] !== undefined ? Number(klasikSoruPuanlari[idx]) : Number(s.puan || klasikVarsayilanPuan);
+      const kh = kayitAc(k);
+      kh.soruSayisi++;
+      kh.azamiSoruPuan += tamP;
     });
 
     const sirali = okumaSonuclari.slice().sort((a, b) => b.toplamPuan - a.toplamPuan);
@@ -2447,28 +2758,70 @@
 
     const ogrenciKarneleri = sirali.map((ogr, siraIdx) => {
       const ogrKazanim = {};
-      (ogr.dyDetay || []).forEach((d, idx) => {
-        const soru = (grupA.dy && grupA.dy[idx]) || {};
-        const k = soru.kazanim || varsayilanKazanimlar[idx % varsayilanKazanimlar.length];
-        ekleKazanimSkor(k, d.sonuc === 'DOGRU', 1);
-        if (!ogrKazanim[k]) ogrKazanim[k] = { dogru: 0, toplam: 0 };
-        ogrKazanim[k].toplam++;
-        if (d.sonuc === 'DOGRU') ogrKazanim[k].dogru++;
-      });
-      (ogr.testDetay || []).forEach((t, idx) => {
-        const soru = (grupA.test && grupA.test[idx]) || {};
-        const k = soru.kazanim || varsayilanKazanimlar[(idx + 1) % varsayilanKazanimlar.length];
-        ekleKazanimSkor(k, t.sonuc === 'DOGRU', 1);
-        if (!ogrKazanim[k]) ogrKazanim[k] = { dogru: 0, toplam: 0 };
-        ogrKazanim[k].toplam++;
-        if (t.sonuc === 'DOGRU') ogrKazanim[k].dogru++;
-      });
+      const ogrEkle = (kod, kazanilanPuan, azamiPuan) => {
+        const kh = kayitAc(kod || varsayilanKazanimlar[0]);
+        const k = kh.kod;
+        kh.toplamGirisimPuan += azamiPuan;
+        kh.kazanilanToplamPuan += kazanilanPuan;
+        if (!ogrKazanim[k]) ogrKazanim[k] = { kazanilanPuan: 0, azamiPuan: 0, dogru: 0, toplam: 0 };
+        ogrKazanim[k].kazanilanPuan += kazanilanPuan;
+        ogrKazanim[k].azamiPuan += azamiPuan;
+        ogrKazanim[k].toplam += 1;
+        if (kazanilanPuan >= azamiPuan * 0.5) ogrKazanim[k].dogru += 1;
+      };
+
+      const dyAdet = Math.max(dySoruListesi.length, (ogr.dyDetay || []).length);
+      for (let i = 0; i < dyAdet; i++) {
+        const es = bulOgrenciKanonikCevap(ogr, 'dy', i, sinavYapisi);
+        if (!es.detay) continue;
+        const soru = dySoruListesi[i] || {};
+        const k = soru.kazanim || soru.ocKodu || varsayilanKazanimlar[i % varsayilanKazanimlar.length];
+        ogrEkle(k, es.dogruMu ? dyBirimPuan : 0, dyBirimPuan);
+      }
+
+      const testAdet = Math.max(testSoruListesi.length, (ogr.testDetay || []).length);
+      for (let i = 0; i < testAdet; i++) {
+        const es = bulOgrenciKanonikCevap(ogr, 'test', i, sinavYapisi);
+        if (!es.detay) continue;
+        const soru = testSoruListesi[i] || {};
+        const k = soru.kazanim || soru.ocKodu || varsayilanKazanimlar[(i + 1) % varsayilanKazanimlar.length];
+        ogrEkle(k, es.dogruMu ? testBirimPuan : 0, testBirimPuan);
+      }
+
+      const klasikAdet = klasikSoruListesi.length;
+      if (klasikAdet > 0) {
+        const toplamAzamiKlasik = klasikSoruListesi.reduce(
+          (ak, s, idx) => ak + (klasikSoruPuanlari[idx] !== undefined ? Number(klasikSoruPuanlari[idx]) : Number(s.puan || klasikVarsayilanPuan)),
+          0
+        );
+        for (let i = 0; i < klasikAdet; i++) {
+          const soru = klasikSoruListesi[i] || {};
+          const k = soru.kazanim || soru.ocKodu || varsayilanKazanimlar[3];
+          const tamP = klasikSoruPuanlari[i] !== undefined ? Number(klasikSoruPuanlari[i]) : Number(soru.puan || klasikVarsayilanPuan);
+          const es = bulOgrenciKanonikCevap(ogr, 'klasik', i, sinavYapisi);
+          let alinanP = null;
+          if (es.detay && es.detay.verilenPuan !== undefined) {
+            alinanP = Math.max(0, Math.min(tamP, Number(es.detay.verilenPuan) || 0));
+          } else if (ogr.klasikToplamPuan !== undefined && toplamAzamiKlasik > 0) {
+            alinanP = Math.max(0, Math.min(tamP, (Number(ogr.klasikToplamPuan) || 0) * (tamP / toplamAzamiKlasik)));
+          }
+          if (alinanP !== null) {
+            ogrEkle(k, alinanP, tamP);
+          }
+        }
+      }
 
       const yuzdelikDilim = n > 1 ? Math.max(1, Math.round(((n - siraIdx) / n) * 100)) : 100;
-      const kazanimOzet = Object.keys(ogrKazanim).map((k) => ({
-        kod: k,
-        yuzde: Math.round((ogrKazanim[k].dogru / Math.max(1, ogrKazanim[k].toplam)) * 100)
-      }));
+      const kazanimOzet = Object.keys(ogrKazanim).map((k) => {
+        const yuzde = Math.round((ogrKazanim[k].kazanilanPuan / Math.max(0.001, ogrKazanim[k].azamiPuan)) * 100);
+        if (kazanimHaritasi[k]) kazanimHaritasi[k].ogrenciYuzdeleri.push(yuzde);
+        return {
+          kod: k,
+          yuzde,
+          kazanilanPuan: Number(ogrKazanim[k].kazanilanPuan.toFixed(2)),
+          azamiPuan: Number(ogrKazanim[k].azamiPuan.toFixed(2))
+        };
+      });
 
       return {
         sira: siraIdx + 1,
@@ -2485,24 +2838,57 @@
         klasikToplamPuan: ogr.klasikToplamPuan,
         dyDetay: ogr.dyDetay || [],
         testDetay: ogr.testDetay || [],
+        klasikDetay: ogr.klasikDetay || [],
         kazanimOzet
       };
     });
 
     const kazanimTablosu = Object.values(kazanimHaritasi).map((k) => {
-      const basariYuzde = k.toplamGirisim > 0 ? Math.round((k.basariliToplam / k.toplamGirisim) * 100) : 0;
+      const olculduMu = k.soruSayisi > 0 && k.toplamGirisimPuan > 0;
+      const basariYuzde = olculduMu ? Math.round((k.kazanilanToplamPuan / k.toplamGirisimPuan) * 100) : 0;
+      const saglayanOgrenciSayisi = k.ogrenciYuzdeleri.filter((y) => y >= barajEsigi).length;
+      const saglamaOraniYuzde = k.ogrenciYuzdeleri.length > 0
+        ? Math.round((saglayanOgrenciSayisi / k.ogrenciYuzdeleri.length) * 100)
+        : 0;
       return {
         kod: k.kod,
+        ocKodu: k.ocKodu || k.kod,
         soruSayisi: k.soruSayisi,
+        azamiSoruPuan: Number(k.azamiSoruPuan.toFixed(2)),
+        olculduMu,
         basariYuzde,
-        durum: basariYuzde >= 70 ? '🟢 Başarılı (Hedef Sağlandı)' : (basariYuzde >= 50 ? '🟡 Orta (Desteklenmeli)' : '🔴 Kritik (Telafi Önerilir)')
+        barajEsigi,
+        saglayanOgrenciSayisi,
+        saglamaOraniYuzde,
+        durum: !olculduMu
+          ? (k.soruSayisi === 0 ? '⚪ Ölçülmedi (Bu Sınavda Soru Yok)' : '⚪ Veri Bekleniyor')
+          : (basariYuzde >= 70 ? '🟢 Başarılı (Hedef Sağlandı)' : (basariYuzde >= 50 ? '🟡 Orta (Desteklenmeli)' : '🔴 Kritik (Telafi Önerilir)'))
+      };
+    });
+
+    const olculenOcKodlari = kazanimTablosu.filter((k) => k.soruSayisi > 0).map((k) => k.kod);
+    const ogrenciOcMatrisi = ogrenciKarneleri.map((karne) => {
+      const ocYuzdeHarita = {};
+      (karne.kazanimOzet || []).forEach((ko) => {
+        ocYuzdeHarita[ko.kod] = ko.yuzde;
+      });
+      return {
+        ogrNo: karne.ogrNo,
+        adSoyad: karne.adSoyad,
+        grup: karne.grup,
+        toplamPuan: karne.toplamPuan,
+        harfNotu: karne.harfNotu,
+        ocYuzdeleri: ocYuzdeHarita
       };
     });
 
     return {
       sinifOrtalama,
+      barajEsigi,
+      olculenOcKodlari,
       kazanimTablosu,
-      ogrenciKarneleri
+      ogrenciKarneleri,
+      ogrenciOcMatrisi
     };
   }
 
@@ -4541,13 +4927,38 @@
     try {
       const jsonStr = base64ToUtf8Guvenli(decodeURIComponent(ham));
       const v = JSON.parse(jsonStr);
-      if (!v || typeof v !== 'object') return null;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+
+      // Şema ve sınır doğrulaması (0 <= dySayisi <= 50, 0 <= testSayisi <= 100, geçerli harfler)
+      if (v.dySayisi !== undefined) {
+        const dyN = Number(v.dySayisi);
+        if (!Number.isFinite(dyN) || dyN < 0 || dyN > 50) return null;
+        v.dySayisi = Math.round(dyN);
+      }
+      if (v.testSayisi !== undefined) {
+        const testN = Number(v.testSayisi);
+        if (!Number.isFinite(testN) || testN < 0 || testN > 100) return null;
+        v.testSayisi = Math.round(testN);
+      }
+      if (v.klasikSayisi !== undefined) {
+        const klN = Number(v.klasikSayisi);
+        if (!Number.isFinite(klN) || klN < 0 || klN > 20) return null;
+        v.klasikSayisi = Math.round(klN);
+      }
+      if ((v.dySayisi || 0) === 0 && (v.testSayisi || 0) === 0 && (v.klasikSayisi || 0) === 0) {
+        return null;
+      }
+
       if (v.cevapAnahtarlari && typeof v.cevapAnahtarlari === 'object') {
         for (const g of ['A', 'B', 'C', 'D']) {
           const a = v.cevapAnahtarlari[g];
           if (a) {
-            a.dy = Array.isArray(a.dy) ? a.dy : String(a.dy || '').split('').filter(Boolean);
-            a.test = Array.isArray(a.test) ? a.test : String(a.test || '').split('').filter(Boolean);
+            const dyDizi = Array.isArray(a.dy) ? a.dy : String(a.dy || '').split('').filter(Boolean);
+            const testDizi = Array.isArray(a.test) ? a.test : String(a.test || '').split('').filter(Boolean);
+            if (dyDizi.some((ch) => !['D', 'Y'].includes(String(ch).toUpperCase()))) return null;
+            if (testDizi.some((ch) => !['A', 'B', 'C', 'D', 'E'].includes(String(ch).toUpperCase()))) return null;
+            a.dy = dyDizi.map((ch) => String(ch).toUpperCase());
+            a.test = testDizi.map((ch) => String(ch).toUpperCase());
             if (!Array.isArray(a.klasik)) a.klasik = [];
           }
         }
@@ -4560,6 +4971,108 @@
       return v;
     } catch (_) {
       return null;
+    }
+  }
+
+  /* Mobil Optik Okuyucudan (optik-mobil.html) Bilgisayar Stüdyosuna (index.html)
+     Madde Analizi (pj/rjx) ve ÖÇ Karnesi İçin Detaylı Okuma Sonuçları Aktarım Paketi */
+  function uretOmrSonucPaketi(okumaSonuclari = [], sinavKodu = 'SINAV-2026', tabanAdres = '') {
+    const hafifListe = (Array.isArray(okumaSonuclari) ? okumaSonuclari : [])
+      .filter((s) => s && (s.ogrNo || s.okunanNoKod))
+      .map((s) => ({
+        no: String(s.ogrNo || s.okunanNoKod || ''),
+        ad: String(s.adSoyad || '').slice(0, 32),
+        g: String(s.grup || 'A').toUpperCase(),
+        p: Number(s.toplamPuan || 0),
+        dn: Number(s.dyNet || 0),
+        tn: Number(s.testNet || 0),
+        kp: Number(s.klasikToplamPuan || 0),
+        dy: (Array.isArray(s.dyDetay) ? s.dyDetay : []).map((d) => `${d.verilen || '-'}:${d.sonuc === 'DOGRU' ? '1' : '0'}`).join(','),
+        t: (Array.isArray(s.testDetay) ? s.testDetay : []).map((d) => `${d.verilen || '-'}:${d.sonuc === 'DOGRU' ? '1' : '0'}`).join(','),
+        kl: (Array.isArray(s.klasikDetay) ? s.klasikDetay : []).map((k) => Number(k.verilenPuan || 0))
+      }));
+
+    const nesne = {
+      v: 1,
+      kod: String(sinavKodu || 'SINAV-2026'),
+      zaman: new Date().toISOString(),
+      kayitlar: hafifListe
+    };
+    const b64 = utf8ToBase64Guvenli(JSON.stringify(nesne));
+    const temizTaban = String(tabanAdres || '').trim().replace(/\/+$/, '');
+    const urlBilgisayar = `${temizTaban ? temizTaban + '/index.html' : 'index.html'}#omr-sonuc=${encodeURIComponent(b64)}`;
+    return {
+      kayitSayisi: hafifListe.length,
+      paketKodu: `OMR-SONUC|${b64}`,
+      urlBilgisayar,
+      jsonMetni: JSON.stringify({
+        belgeTuru: 'OMR_DETAYLI_SONUC_PAKETI',
+        sinavKodu,
+        olusturulmaZamani: nesne.zaman,
+        okumaSonuclari: (Array.isArray(okumaSonuclari) ? okumaSonuclari : []).map((s) => {
+          const { kanonikIkili, kanonikGri, kanonikHarita, ...temiz } = s || {};
+          return temiz;
+        })
+      }, null, 2)
+    };
+  }
+
+  function cozOmrSonucPaketi(girdi = '') {
+    let ham = String(girdi || '').trim();
+    if (!ham) return { gecerli: false, okumaSonuclari: [], hata: 'Boş OMR sonuç verisi.' };
+    try {
+      if (ham.startsWith('{')) {
+        const j = JSON.parse(ham);
+        if (j && Array.isArray(j.okumaSonuclari)) {
+          return { gecerli: true, okumaSonuclari: j.okumaSonuclari, sinavKodu: j.sinavKodu || 'SINAV-2026' };
+        }
+      }
+      if (ham.includes('#omr-sonuc=')) {
+        ham = decodeURIComponent(ham.slice(ham.indexOf('#omr-sonuc=') + 11).split('&')[0]);
+      } else if (ham.startsWith('OMR-SONUC|')) {
+        ham = ham.slice(10).trim();
+      }
+      const nesne = JSON.parse(base64ToUtf8Guvenli(ham));
+      if (!nesne || !Array.isArray(nesne.kayitlar)) {
+        return { gecerli: false, okumaSonuclari: [], hata: 'OMR sonuç paketi formatı geçersiz.' };
+      }
+      const okumaSonuclari = nesne.kayitlar.map((k, idx) => {
+        const dyDetay = String(k.dy || '').split(',').filter(Boolean).map((p, i) => {
+          const [verilen, d] = p.split(':');
+          return { soruNo: i + 1, verilen: verilen === '-' ? '' : verilen, sonuc: d === '1' ? 'DOGRU' : (verilen === '-' ? 'BOS' : 'YANLIS') };
+        });
+        const testDetay = String(k.t || '').split(',').filter(Boolean).map((p, i) => {
+          const [verilen, d] = p.split(':');
+          return { soruNo: i + 1, verilen: verilen === '-' ? '' : verilen, sonuc: d === '1' ? 'DOGRU' : (verilen === '-' ? 'BOS' : 'YANLIS') };
+        });
+        const klasikDetay = (Array.isArray(k.kl) ? k.kl : []).map((puan, i) => ({
+          soruNo: i + 1,
+          verilenPuan: Number(puan || 0)
+        }));
+        return {
+          id: `mobil-aktarim-${Date.now()}-${idx}`,
+          ogrNo: String(k.no || ''),
+          okunanNoKod: String(k.no || '').slice(-2),
+          adSoyad: String(k.ad || 'Öğrenci'),
+          grup: String(k.g || 'A'),
+          toplamPuan: Number(k.p || 0),
+          dyNet: Number(k.dn || 0),
+          testNet: Number(k.tn || 0),
+          dyDogru: dyDetay.filter((x) => x.sonuc === 'DOGRU').length,
+          dyYanlis: dyDetay.filter((x) => x.sonuc === 'YANLIS').length,
+          testDogru: testDetay.filter((x) => x.sonuc === 'DOGRU').length,
+          testYanlis: testDetay.filter((x) => x.sonuc === 'YANLIS').length,
+          klasikToplamPuan: Number(k.kp || 0),
+          dyDetay,
+          testDetay,
+          klasikDetay,
+          supheliMi: false,
+          incelemeKuyrugu: []
+        };
+      });
+      return { gecerli: true, okumaSonuclari, sinavKodu: nesne.kod || 'SINAV-2026' };
+    } catch (e) {
+      return { gecerli: false, okumaSonuclari: [], hata: 'OMR sonuç paketi çözümlenemedi.' };
     }
   }
 
@@ -4627,19 +5140,28 @@
     return 'FF';
   }
 
+  function temizleCsvFormulEnjeksiyon(hucre) {
+    const s = String(hucre === undefined || hucre === null ? '' : hucre).replace(/;/g, ',').replace(/[\r\n]+/g, ' ').trim();
+    if (/^[=+\-@]/.test(s)) return `'${s}`;
+    return s;
+  }
+
   function uretResmiObsNotCizelgesiCSV(ogrenciler, okumaSonuclari) {
     const baslik = 'Sira;Ogrenci_No;Ad_Soyad;Bolum;Kitapcik;DY_Net;Test_Net;Klasik_Puan;Resmi_Not;Harf_Notu;Durum';
     const siraliOgrenciler = ogrenciler.slice().sort((a, b) => String(a.ogrNo).localeCompare(String(b.ogrNo)));
     const satirlar = [baslik];
 
     siraliOgrenciler.forEach((ogr, idx) => {
+      const no = temizleCsvFormulEnjeksiyon(ogr.ogrNo);
+      const ad = temizleCsvFormulEnjeksiyon(ogr.adSoyad);
+      const bol = temizleCsvFormulEnjeksiyon(ogr.bolum || 'Genel');
       const okunan = okumaSonuclari.find((s) => String(s.ogrNo) === String(ogr.ogrNo));
       if (!okunan) {
-        satirlar.push(`${idx + 1};${ogr.ogrNo};${ogr.adSoyad};${ogr.bolum || 'Genel'};-;-;-;-;GR;GR;Sınava Girmedi (GR)`);
+        satirlar.push(`${idx + 1};${no};${ad};${bol};-;-;-;-;GR;GR;Sınava Girmedi (GR)`);
       } else {
         const harf = hesaplaHarfNotu(okunan.toplamPuan);
         const gectiDurum = okunan.toplamPuan >= 50 ? 'Geçti' : 'Kaldı';
-        satirlar.push(`${idx + 1};${ogr.ogrNo};${ogr.adSoyad};${ogr.bolum || 'Genel'};${okunan.grup};${okunan.dyNet};${okunan.testNet};${okunan.klasikToplamPuan};${okunan.toplamPuan};${harf};${gectiDurum}`);
+        satirlar.push(`${idx + 1};${no};${ad};${bol};${temizleCsvFormulEnjeksiyon(okunan.grup)};${okunan.dyNet};${okunan.testNet};${okunan.klasikToplamPuan};${okunan.toplamPuan};${harf};${gectiDurum}`);
       }
     });
 
@@ -4887,20 +5409,114 @@
 
   /* ------------------------------------------------------------------------
      DELİL NİTELİĞİNDE SINAV BAZLI DENETİM & İHLAL LOG ZİNCİRİ (ADLİ TUTANAK EKİ)
+     Gerçek FIPS 180-4 SHA-256 Kriptografik Özet Motoru (UTF-8 -> 64 Hex)
      ------------------------------------------------------------------------ */
+  const SHA256_K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+
   function uretDelilLogHash(metin) {
     const giris = String(metin || '');
-    const tohumlar = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35, 0x27d4eb2f, 0x165667b1, 0xd3a2646c, 0xfd7046c5];
-    let cikti = '';
-    for (let k = 0; k < tohumlar.length; k++) {
-      let h = tohumlar[k] >>> 0;
-      for (let i = 0; i < giris.length; i++) {
-        h ^= (giris.charCodeAt(i) + k * 31 + i) & 0xffff;
-        h = Math.imul(h, 0x01000193) >>> 0;
+    const utf8 = [];
+    for (let i = 0; i < giris.length; i++) {
+      let c = giris.charCodeAt(i);
+      if (c < 0x80) {
+        utf8.push(c);
+      } else if (c < 0x800) {
+        utf8.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+      } else if (c < 0xd800 || c >= 0xe000) {
+        utf8.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+      } else {
+        i++;
+        c = 0x10000 + (((c & 0x3ff) << 10) | (giris.charCodeAt(i) & 0x3ff));
+        utf8.push(
+          0xf0 | (c >> 18),
+          0x80 | ((c >> 12) & 0x3f),
+          0x80 | ((c >> 6) & 0x3f),
+          0x80 | (c & 0x3f)
+        );
       }
-      cikti += h.toString(16).padStart(8, '0');
     }
-    return cikti.toUpperCase();
+
+    const bitUzunluk = utf8.length * 8;
+    utf8.push(0x80);
+    while ((utf8.length % 64) !== 56) utf8.push(0);
+    const yuksekBit = Math.floor(bitUzunluk / 0x100000000);
+    const dusukBit = bitUzunluk >>> 0;
+    for (let i = 3; i >= 0; i--) utf8.push((yuksekBit >>> (i * 8)) & 0xff);
+    for (let i = 3; i >= 0; i--) utf8.push((dusukBit >>> (i * 8)) & 0xff);
+
+    let h0 = 0x6a09e667;
+    let h1 = 0xbb67ae85;
+    let h2 = 0x3c6ef372;
+    let h3 = 0xa54ff53a;
+    let h4 = 0x510e527f;
+    let h5 = 0x9b05688c;
+    let h6 = 0x1f83d9ab;
+    let h7 = 0x5be0cd19;
+
+    const w = new Array(64);
+    const ror = (x, n) => (x >>> n) | (x << (32 - n));
+
+    for (let i = 0; i < utf8.length; i += 64) {
+      for (let j = 0; j < 16; j++) {
+        const idx = i + j * 4;
+        w[j] = ((utf8[idx] << 24) | (utf8[idx + 1] << 16) | (utf8[idx + 2] << 8) | utf8[idx + 3]) >>> 0;
+      }
+      for (let j = 16; j < 64; j++) {
+        const s0 = (ror(w[j - 15], 7) ^ ror(w[j - 15], 18) ^ (w[j - 15] >>> 3)) >>> 0;
+        const s1 = (ror(w[j - 2], 17) ^ ror(w[j - 2], 19) ^ (w[j - 2] >>> 10)) >>> 0;
+        w[j] = (w[j - 16] + s0 + w[j - 7] + s1) >>> 0;
+      }
+
+      let a = h0;
+      let b = h1;
+      let c = h2;
+      let d = h3;
+      let e = h4;
+      let f = h5;
+      let g = h6;
+      let h = h7;
+
+      for (let j = 0; j < 64; j++) {
+        const S1 = (ror(e, 6) ^ ror(e, 11) ^ ror(e, 25)) >>> 0;
+        const ch = ((e & f) ^ (~e & g)) >>> 0;
+        const temp1 = (h + S1 + ch + SHA256_K[j] + w[j]) >>> 0;
+        const S0 = (ror(a, 2) ^ ror(a, 13) ^ ror(a, 22)) >>> 0;
+        const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+        const temp2 = (S0 + maj) >>> 0;
+
+        h = g;
+        g = f;
+        f = e;
+        e = (d + temp1) >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = (temp1 + temp2) >>> 0;
+      }
+
+      h0 = (h0 + a) >>> 0;
+      h1 = (h1 + b) >>> 0;
+      h2 = (h2 + c) >>> 0;
+      h3 = (h3 + d) >>> 0;
+      h4 = (h4 + e) >>> 0;
+      h5 = (h5 + f) >>> 0;
+      h6 = (h6 + g) >>> 0;
+      h7 = (h7 + h) >>> 0;
+    }
+
+    return [h0, h1, h2, h3, h4, h5, h6, h7]
+      .map((v) => v.toString(16).padStart(8, '0'))
+      .join('')
+      .toUpperCase();
   }
 
   function olusturKioskDelilLogKaydi(veri = {}, oncekiHash = 'GENESIS-00000000') {
@@ -5234,19 +5850,21 @@
       }
     );
 
-    const seciliDy = ocSecim.dy.slice(0, dySayisi).map((s, i) => ({
+    const seciliDy = onleDyArdisikYigilma(ocSecim.dy.slice(0, dySayisi)).map((s, i) => ({
       ...s,
       kitapcikSoruNo: i + 1,
       orijinalNo: i + 1
     }));
 
+    const dengeliHarfOgr = uretDengeliHarfDizisi(testSayisi, sikSayisi, `OGR-DENGELI-${sinavKodu}-${ogrNo}`);
     const seciliTest = ocSecim.test.slice(0, testSayisi).map((s, i) => {
       const sikTohumu = `OGR-SIK-${sinavKodu}-${ogrNo}-${s.id}-${i}`;
       const korunan = karistirSoruSiklariVeKoru(
         s,
         sikTohumu,
         sikSayisi,
-        true
+        true,
+        dengeliHarfOgr[i]
       );
       return {
         ...korunan,
@@ -5787,6 +6405,8 @@
     tohumluRastgele,
     diziKaristirDeterministik,
     karistirSoruSiklariVeKoru,
+    uretDengeliHarfDizisi,
+    onleDyArdisikYigilma,
     uretKitapcikVaryasyonu,
     kodlaOptikGeometriMatrisi,
     cozOptikGeometriMatrisi,
@@ -5848,9 +6468,12 @@
     cozOgrenciQrPaketi,
     uretKompaktSetupQrPaketi,
     cozKompaktSetupQrPaketi,
+    uretOmrSonucPaketi,
+    cozOmrSonucPaketi,
     uretBosCevapAnahtariCSV,
     cozCevapAnahtariCSV,
     hesaplaHarfNotu,
+    temizleCsvFormulEnjeksiyon,
     uretResmiObsNotCizelgesiCSV,
     kontrolCanliSifreKurallari,
     dogrulaOgrenciIlkKayit,

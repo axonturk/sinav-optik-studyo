@@ -120,6 +120,34 @@ async function main() {
 
   try {
     await sayfa.goto(`${taban}/index.html`, { waitUntil: 'networkidle0' });
+    await sayfa.evaluate(() => { const b = document.getElementById('btn-hoca-giris-yap'); if (b) b.click(); });
+    await bekle(300);
+    await sayfa.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k) k.click(); });
+    await bekle(150);
+    // Temiz başlangıçta E2E senaryosu için ilk ders (BİL304) ve ilk salon (B-201) hazırlanır
+    await sayfa.evaluate(() => {
+      const mBtn = document.getElementById('btn-yeni-ders-modal');
+      if (mBtn) mBtn.click();
+      const kod = document.getElementById('yeni-ders-kod');
+      const ad = document.getElementById('yeni-ders-ad');
+      if (kod) { kod.value = 'BİL304'; kod.dispatchEvent(new Event('input', { bubbles: true })); }
+      if (ad) { ad.value = 'Ağ Güvenliği'; ad.dispatchEvent(new Event('input', { bubbles: true })); }
+      const kBtn = document.getElementById('btn-yeni-ders-kaydet');
+      if (kBtn) kBtn.click();
+      const salonInp = document.querySelector('[data-salon-ad="0"]');
+      if (salonInp) {
+        salonInp.value = 'B-201';
+        salonInp.dispatchEvent(new Event('input', { bubbles: true }));
+        salonInp.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const tutSalon = document.getElementById('tut-salon');
+      if (tutSalon) {
+        tutSalon.value = 'B-201';
+        tutSalon.dispatchEvent(new Event('input', { bubbles: true }));
+        tutSalon.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    await bekle(200);
     kontrol('Ana sayfa hatasız yüklendi', hatalar.length === 0, hatalar.join(' | '));
     kontrol('Canlı A4 önizleme sayfaları üretildi', (await sayfa.$$('#a4-onizleme-sahne .a4-sayfa')).length >= 2);
 
@@ -155,8 +183,8 @@ async function main() {
     const soruSayisi = async () => sayfa.$eval('#rozet-banka-toplam', (e) => Number(e.textContent));
     const soruInput = await sayfa.$('#input-soru-csv-yukle');
     for (const [dosya, beklenen] of [
-      ['ornek_sorular_karma.csv', 5], ['ornek_sorular_karma.xlsx', 5], ['ornek_sorular_test.csv', 3],
-      ['ornek_sorular_test.xlsx', 3], ['ornek_sorular_dy.csv', 3], ['ornek_sorular_klasik.csv', 2], ['kullanici_dy_sorulari.xlsx', 3]
+      ['ornek_sorular_karma.csv', 5], ['ornek_sorular_karma.xlsx', 5], ['ornek_sorular_test.csv', 4],
+      ['ornek_sorular_test.xlsx', 4], ['ornek_sorular_dy.csv', 4], ['ornek_sorular_klasik.csv', 2], ['kullanici_dy_sorulari.xlsx', 3]
     ]) {
       const once = await soruSayisi();
       await soruInput.uploadFile(path.join(URETILEN, dosya));

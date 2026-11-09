@@ -15,17 +15,17 @@ const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Pro
     const cerceve = document.querySelector('#a4-onizleme-sahne .optik-cerceve');
     if (!cerceve) return { hata: 'optik-cerceve yok' };
     const r = cerceve.getBoundingClientRect();
-    const fid = Array.from(cerceve.querySelectorAll('.fiducial-kare')).map((f) => { const q = f.getBoundingClientRect(); return { sinif: f.className, cx: q.x + q.width / 2 - r.x, cy: q.y + q.height / 2 - r.y }; });
+    const fid = Array.from(cerceve.querySelectorAll('.fiducial-kare')).map((f) => { const q = f.getBoundingClientRect(); return { sinif: f.getAttribute('class') || '', cx: q.x + q.width / 2 - r.x, cy: q.y + q.height / 2 - r.y }; });
     const balonlar = Array.from(cerceve.querySelectorAll('.optik-balon')).map((o) => { const q = o.getBoundingClientRect(); return { t: o.textContent.trim(), cx: q.x + q.width / 2 - r.x, cy: q.y + q.height / 2 - r.y, w: q.width }; });
     return { w: r.width, h: r.height, fid, n: balonlar.length, balonlar: balonlar.slice(0, 60) };
   });
   console.log('Çerçeve boyutu (px):', Math.round(olcum.w), 'x', Math.round(olcum.h), '| oran:', (olcum.w / olcum.h).toFixed(2), '(kanonik 800x420 oran:', (800 / 420).toFixed(2) + ')');
   console.log('Fiducial merkezleri:', JSON.stringify(olcum.fid.map((f) => ({ k: f.sinif.split('fiducial-')[2], x: Math.round(f.cx), y: Math.round(f.cy) }))));
   console.log('Toplam balon:', olcum.n);
-  // Haritayla karşılaştır: DOM merkezlerini kanonik koordinata ölçekle (fiducial merkezleri 26,26 - 774,394)
-  const tl = olcum.fid.find((f) => /tl/.test(f.sinif)); const br = olcum.fid.find((f) => /br/.test(f.sinif));
-  const sx = (774 - 26) / (br.cx - tl.cx); const sy = (394 - 26) / (br.cy - tl.cy);
+  // Haritayla karşılaştır: DOM merkezlerini kanonik koordinata ölçekle (fiducial merkezleri 26,26 - 774,harita.yukseklik-26)
   const harita = C.hesaplaKanonikBalonHaritasi({ dySayisi: 10, testSayisi: 10, sikSayisi: 5, klasikSayisi: 2, kimlikModu: 'son2', klasikSoruPuan: 10 });
+  const tl = olcum.fid.find((f) => /tl/.test(f.sinif)); const br = olcum.fid.find((f) => /br/.test(f.sinif));
+  const sx = (harita.genislik - 26 - 26) / (br.cx - tl.cx); const sy = (harita.yukseklik - 26 - 26) / (br.cy - tl.cy);
   const hepsi = [];
   harita.grupBalonlari.forEach((x) => hepsi.push({ ad: 'grup ' + x.harf, x: x.x, y: x.y }));
   harita.kimlikSatirlari.forEach((sat) => sat.balonlar.forEach((x) => hepsi.push({ ad: `no${sat.haneIndeks}-${x.rakam}`, x: x.x, y: x.y })));

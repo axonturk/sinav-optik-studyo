@@ -802,13 +802,37 @@ async function calistirTumTestler() {
     const yeniDersSorulari = aktarim.sorular.filter((s) => s.dersId === yeniDersId && !s.arsivde);
     assert.strictEqual(yeniDersSorulari.length, 2);
 
-    // Online Sınav Tanımlama ve Durum Sunucu API doğrulaması
+    // Online Sınav Tanımlama ve Durum Sunucu API doğrulaması (Hoca Oturumu Zorunluluğu Dahil)
     const server = await baslatSunucu(0);
     try {
       const port = server.address().port;
-      const tanimYanit = await fetch(`http://127.0.0.1:${port}/api/online-sinav-tanimla`, {
+
+      // Yetkisiz tanımlama denemesi 401 dönmelidir
+      const yetkisizTanim = await fetch(`http://127.0.0.1:${port}/api/online-sinav-tanimla`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sinav: { sinavId: 'SINAV-YETKISIZ', aktif: true } })
+      });
+      assert.strictEqual(yetkisizTanim.status, 401, 'Hoca tokenı olmadan sınav tanımlama 401 dönmelidir');
+
+      // Hoca girişi ile yetkili token al
+      const hocaGirisYanit = await fetch(`http://127.0.0.1:${port}/api/hoca-giris`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kullaniciAdi: Cekirdek.VARSAYILAN_HOCA_HESAP.kullaniciAdi,
+          sifre: Cekirdek.VARSAYILAN_HOCA_HESAP.sifre
+        })
+      });
+      assert.strictEqual(hocaGirisYanit.status, 200);
+      const { token: hocaToken } = await hocaGirisYanit.json();
+
+      const tanimYanit = await fetch(`http://127.0.0.1:${port}/api/online-sinav-tanimla`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${hocaToken}`
+        },
         body: JSON.stringify({
           sinav: {
             sinavId: 'SINAV-2026-FINAL',
@@ -833,7 +857,7 @@ async function calistirTumTestler() {
       assert.strictEqual(durumVeri.sinavId, 'SINAV-2026-FINAL');
       assert.strictEqual(durumVeri.sureDk, 50);
 
-      // 13. Sınav Bazlı Delil Niteliğinde Kiosk Denetim Logları (Zincirleme Hash, TXT/CSV/JSON Rapor ve API)
+      // 13. Sınav Bazlı Delil Niteliğinde Kiosk Denetim Logları (Gerçek SHA-256 Zincirleme Hash, TXT/CSV/JSON Rapor ve API)
       const log1 = Cekirdek.olusturKioskDelilLogKaydi({
         sinavId: 'SINAV-2026-FINAL',
         sinavBaslik: '2026-2027 Güz Final Sınavı',
@@ -863,6 +887,7 @@ async function calistirTumTestler() {
       }, log1.olayHash);
 
       assert.strictEqual(log1.oncekiHash, 'GENESIS-00000000');
+      assert.strictEqual(log1.olayHash.length, 64, 'Delil log özeti 64 karakterlik gerçek SHA-256 hex olmalıdır');
       assert.strictEqual(log2.oncekiHash, log1.olayHash, 'Her log kaydı bir önceki kaydın kriptografik özetine (oncekiHash) bağlanmalıdır');
       assert.notStrictEqual(log1.olayHash, log2.olayHash);
 
@@ -883,13 +908,27 @@ async function calistirTumTestler() {
       const logKaydetYanit = await fetch(`http://127.0.0.1:${port}/api/kiosk-log-kaydet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(log2)
+        body: JSON.stringify(Object.assign({}, log2, { zamanDamgasi: '2000-01-01T00:00:00.000Z' }))
       });
       assert.strictEqual(logKaydetYanit.status, 201);
-      const logIndirTxt = await fetch(`http://127.0.0.1:${port}/api/kiosk-log-indir?sinavId=SINAV-2026-FINAL&format=txt`);
+      const logKaydetVeri = await logKaydetYanit.json();
+      assert.notStrictEqual(logKaydetVeri.log.zamanDamgasi, '2000-01-01T00:00:00.000Z', 'Sahte istemci zaman damgası sunucu tarafından ezilmelidir');
+
+      const yetkisizLogIndir = await fetch(`http://127.0.0.1:${port}/api/kiosk-log-indir?sinavId=SINAV-2026-FINAL&format=txt`);
+      assert.strictEqual(yetkisizLogIndir.status, 401, 'Hoca tokenı olmadan delil log indirme 401 dönmelidir');
+
+      const logIndirTxt = await fetch(`http://127.0.0.1:${port}/api/kiosk-log-indir?sinavId=SINAV-2026-FINAL&format=txt`, {
+        headers: { Authorization: `Bearer ${hocaToken}` }
+      });
       assert.strictEqual(logIndirTxt.status, 200);
       const indirilenMetin = await logIndirTxt.text();
       assert.ok(indirilenMetin.includes('IHLAL_SEKME_UYGULAMA'));
+
+      // Statik dosya sızıntı koruması (404)
+      const kaynakKodYanit = await fetch(`http://127.0.0.1:${port}/server.js`);
+      assert.strictEqual(kaynakKodYanit.status, 404, '/server.js dışarıya servis edilmemelidir');
+      const ornekDosyaYanit = await fetch(`http://127.0.0.1:${port}/ornek-dosyalar/ornek_sorular_test.csv`);
+      assert.strictEqual(ornekDosyaYanit.status, 404, '/ornek-dosyalar/* dışarıya servis edilmemelidir');
     } finally {
       server.close();
     }
@@ -1082,6 +1121,111 @@ async function calistirTumTestler() {
     } finally {
       server.close();
     }
+  });
+
+  // 16. 5 Uzman Denetimi Karşı-Örnek Kapanışı, Dengeli Cevap Anahtarı ve En Üstte Doğru/Yanlış Kodlama Örnekleri
+  await testEt('16. Dengeli Cevap Anahtarı (A/B/C/D eşit dağılım), En Üstte Doğru/Yanlış Kodlama Örnekleri, B/C/D Kanonik Madde/ÖÇ Analizi ve Gerçek SHA-256', async () => {
+    // 16.1 Yığılmış (hepsi A olan) 15 soruluk bir testte bile A, B, C, D kitapçıklarının tümünde şıklar eşit dağılmalı (3A, 3B, 3C, 3D, 3E)
+    const yigilmisSorular = [];
+    for (let i = 1; i <= 10; i++) {
+      yigilmisSorular.push({
+        id: `DY-YIG-${i}`,
+        tur: 'dy',
+        metin: `D/Y Sorusu ${i}`,
+        dogruDY: i <= 6 ? 'D' : 'Y',
+        puan: 2,
+        ocKodu: i <= 5 ? 'ÖÇ-1' : 'ÖÇ-2'
+      });
+    }
+    for (let i = 1; i <= 15; i++) {
+      yigilmisSorular.push({
+        id: `TST-YIG-${i}`,
+        tur: 'test',
+        metin: `Test Sorusu ${i}`,
+        siklar: [`Doğru Yanıt ${i}`, `Çeldirici B${i}`, `Çeldirici C${i}`, `Çeldirici D${i}`, `Çeldirici E${i}`],
+        dogruHarf: 'A', // Tüm sorular bankada A şıkkına yığılmış!
+        puan: 4,
+        ocKodu: i <= 8 ? 'ÖÇ-1' : 'ÖÇ-2'
+      });
+    }
+
+    const kitapciklar = {};
+    for (const grup of ['A', 'B', 'C', 'D']) {
+      const v = Cekirdek.uretKitapcikVaryasyonu(yigilmisSorular, grup, 'DENGELI-2026', true, 5);
+      kitapciklar[grup] = v;
+      const testAnahtar = v.test.map((s) => s.dogruHarf);
+      const sayac = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+      testAnahtar.forEach((h) => { sayac[h] = (sayac[h] || 0) + 1; });
+      const degerler = Object.values(sayac);
+      const fark = Math.max(...degerler) - Math.min(...degerler);
+      assert.ok(fark <= 1, `${grup} kitapçığında şık dağılımı eşit olmalıdır (15 soruda her şık 3 kez; bulunan: ${JSON.stringify(sayac)})`);
+      // Ardışık 3 aynı şık olmamalı
+      for (let i = 2; i < testAnahtar.length; i++) {
+        assert.ok(
+          !(testAnahtar[i] === testAnahtar[i - 1] && testAnahtar[i] === testAnahtar[i - 2]),
+          `${grup} kitapçığında 3 ardışık aynı test şıkkı bulunmamalıdır (${testAnahtar.join(',')})`
+        );
+      }
+      // Her soruda yeni doğru harfteki şık metni orijinal doğru yanıtla birebir eşleşmeli
+      for (const s of v.test) {
+        const idx = ['A', 'B', 'C', 'D', 'E'].indexOf(s.dogruHarf);
+        assert.strictEqual(s.siklar[idx], s.dogruSikDegeri, `${grup} grubunda doğru şık metni korunmalıdır`);
+      }
+    }
+
+    // 16.2 Optik Form SVG en üst bantta Doğru ve Yanlış Kodlama Örneklerini barındırmalı
+    const svg = Cekirdek.uretOptikFormSVG({ dySayisi: 10, testSayisi: 10, sikSayisi: 5 }, { grup: 'A', ogrNoKod: '07' });
+    assert.ok(svg.includes('optik-kodlama-rehberi'), 'SVG en üstte optik-kodlama-rehberi grubunu içermelidir');
+    assert.ok(svg.includes('DOĞRU:') && svg.includes('Tam Dolu'), 'SVG doğru kodlama örneğini içermelidir');
+    assert.ok(svg.includes('YANLIŞ:') && svg.includes('✗ Çarpı') && svg.includes('✓ Tik') && svg.includes('◐ Yarım'), 'SVG yanlış kodlama örneklerini içermelidir');
+    assert.ok(svg.includes('Onlar:(0)● Birler:(7)●'), 'SVG öğrenci numarası kodlama örneğini içermelidir');
+
+    // 16.3 B/C/D kitapçığı kanonik ters-eşleme ve Bologna ÖÇ ağırlıklı başarım + Ölçülmedi durumu
+    const bVaryasyon = kitapciklar.B;
+    const tamDogruB = {
+      ogrNo: '2026001',
+      adSoyad: 'B Kitapçığı Tam Puan Öğrencisi',
+      grup: 'B',
+      toplamPuan: 80,
+      dyDetay: bVaryasyon.dy.map((s, i) => ({ soruNo: i + 1, verilen: s.dogruDY, dogru: s.dogruDY, sonuc: 'DOGRU' })),
+      testDetay: bVaryasyon.test.map((s, i) => ({ soruNo: i + 1, verilen: s.dogruHarf, dogru: s.dogruHarf, sonuc: 'DOGRU' }))
+    };
+    const sinavYapiB = {
+      dySayisi: 10,
+      dySoruPuan: 2,
+      testSayisi: 15,
+      testSoruPuan: 4,
+      klasikSayisi: 0,
+      cevapAnahtarlari: {
+        A: { dy: kitapciklar.A.dy.map((s) => s.dogruDY), test: kitapciklar.A.test.map((s) => s.dogruHarf), klasik: [] },
+        B: { dy: kitapciklar.B.dy.map((s) => s.dogruDY), test: kitapciklar.B.test.map((s) => s.dogruHarf), klasik: [] }
+      },
+      kitapciklar,
+      dersOgrenimCiktilari: [
+        { kod: 'ÖÇ-1', aciklama: 'Temel kavramları açıklar' },
+        { kod: 'ÖÇ-2', aciklama: 'Mimari yapıları analiz eder' },
+        { kod: 'ÖÇ-3', aciklama: 'Bu sınavda hiç sorulmayan çıktı' }
+      ],
+      barajEsigi: 60
+    };
+    const maddeAnalizB = Cekirdek.hesaplaSinifVeMaddeAnalizi([tamDogruB], sinavYapiB);
+    maddeAnalizB.maddeler.forEach((m) => {
+      assert.strictEqual(m.pj, 1, `B kitapçığı kanonik eşlemesiyle ${m.etiket} pj değeri 1.00 olmalıdır (Bulunan: ${m.pj})`);
+    });
+    const kazanimAnalizB = Cekirdek.hesaplaKazanimVeKarneAnalizi([tamDogruB], sinavYapiB);
+    const oc3Analiz = kazanimAnalizB.kazanimTablosu.find((k) => k.ocKodu === 'ÖÇ-3');
+    assert.ok(oc3Analiz && oc3Analiz.durum.includes('Ölçülmedi'), 'Soru sorulmayan ÖÇ-3 için Ölçülmedi durumu raporlanmalıdır');
+    assert.ok(Array.isArray(kazanimAnalizB.ogrenciOcMatrisi) && kazanimAnalizB.ogrenciOcMatrisi.length === 1, 'Öğrenci × ÖÇ başarım matrisi üretilmelidir');
+
+    // 16.4 Gerçek FIPS 180-4 SHA-256 (64 hex) ve CSV Formül Enjeksiyonu Koruması
+    const sha = Cekirdek.uretDelilLogHash('SINAV-2026|2026001', 'GENESIS');
+    assert.strictEqual(sha.length, 64, 'uretDelilLogHash 64 karakterlik gerçek SHA-256 üretmelidir');
+    assert.ok(/^[0-9A-F]{64}$/i.test(sha), 'SHA-256 çıktısı 64 haneli hex olmalıdır');
+    const csvGuvenli = Cekirdek.uretResmiObsNotCizelgesiCSV(
+      [{ ogrNo: '2026001', adSoyad: '=cmd|\'/C calc\'!A0' }],
+      [{ ogrNo: '2026001', toplamPuan: 85 }]
+    );
+    assert.ok(csvGuvenli.includes("'=cmd|"), 'CSV formül enjeksiyonu tek tırnak ile etkisizleştirilmelidir');
   });
 
   console.log(`\n=== TÜM TESTLER BAŞARIYLA TAMAMLANDI (${gecen}/${gecen} GEÇTİ · 0 HATA) ===`);

@@ -49,6 +49,12 @@ function denemeCsvUret() {
   const csv = '\ufeff' + [baslik, ...satirlar].join('\r\n');
   fs.mkdirSync(URETILEN, { recursive: true });
   fs.writeFileSync(path.join(URETILEN, 'dogru_sik_deneme.csv'), csv, 'utf8');
+  if (!fs.existsSync(path.join(URETILEN, 'ornek_sorular_test.csv'))) {
+    fs.writeFileSync(path.join(URETILEN, 'ornek_sorular_test.csv'), '\ufeff' + C.uretBosTestSablonuCSV(), 'utf8');
+  }
+  if (!fs.existsSync(path.join(URETILEN, 'ornek_sorular_karma.csv'))) {
+    fs.writeFileSync(path.join(URETILEN, 'ornek_sorular_karma.csv'), '\ufeff' + C.uretBosSoruSablonuCSV(), 'utf8');
+  }
   const aoa = [baslik.split(';'), ...DENEME_CSV_SATIRLARI.map((s, i) => [...s.slice(0, 7), zorluklar[i % 3], 'ÖÇ-1: Deneme', (i % 7) + 1])];
   const kitap = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(kitap, XLSX.utils.aoa_to_sheet(aoa), 'Sayfa1');
@@ -156,6 +162,10 @@ async function tarayiciTestleri() {
   const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
   try {
     await sayfa.goto(`${taban}/index.html`, { waitUntil: 'networkidle0' });
+    await sayfa.evaluate(() => { const b = document.getElementById('btn-hoca-giris-yap'); if (b) b.click(); });
+    await bekle(300);
+    await sayfa.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k) k.click(); });
+    await bekle(150);
     const soruInput = await sayfa.$('#input-soru-csv-yukle');
     for (const f of ['dogru_sik_deneme.csv', 'dogru_sik_deneme.xlsx', 'ornek_sorular_test.csv', 'ornek_sorular_karma.csv']) {
       await soruInput.uploadFile(path.join(URETILEN, f));

@@ -326,6 +326,10 @@ async function arayuzTestleri(tarayici, taban) {
   st.on('pageerror', (e) => stHata.push('pageerror: ' + e.message));
   st.on('dialog', async (d) => { stHata.push('dialog: ' + d.message()); await d.dismiss(); });
   await st.goto(taban + '/index.html', { waitUntil: 'networkidle0' });
+  await st.evaluate(() => { const b = document.getElementById('btn-hoca-giris-yap'); if (b) b.click(); });
+  await bekle(300);
+  await st.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k) k.click(); });
+  await bekle(150);
   await st.evaluate(() => document.querySelector('[data-sekme="sekme-omr"]').click());
   await bekle(300);
   const stGirdi = await st.$('#input-omr-foto');

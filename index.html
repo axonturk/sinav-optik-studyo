@@ -766,9 +766,9 @@
                   <div>
                     <label class="etiket" for="tut-uygunluk">Sınav durumu</label>
                     <select id="tut-uygunluk">
-                      <option value="uygun" selected>☒ Kurallara uygun bir sınav gerçekleşmiştir</option>
+                      <option value="bos" selected>☐ Boş bırak (elle işaretlenecek)</option>
+                      <option value="uygun">☒ Kurallara uygun bir sınav gerçekleşmiştir</option>
                       <option value="uygunDegil">☒ Kurallara uygun bir sınav gerçekleşmemiştir</option>
-                      <option value="bos">☐ Boş bırak (elle işaretlenecek)</option>
                     </select>
                   </div>
                 </div>
@@ -1942,7 +1942,7 @@
   </section>
 
   <!-- YENİ DERS EKLEME, BOLOGNA ÖÇ MADDE GİRİŞİ, DERS SİLME VE SORU ARŞİVİ DAHİL ETME MODALİ -->
-  <div id="modal-yeni-ders" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.58); z-index:999; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
+  <div id="modal-yeni-ders" role="dialog" aria-modal="true" aria-label="Ders Yönetimi ve Bologna ÖÇ Kaydı" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.58); z-index:999; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
     <div class="kart" style="max-width:680px; width:100%; margin:0; max-height:92vh; overflow-y:auto;">
       <div class="kart-baslik">
         <span>📚 Ders Yönetimi, Yeni Ders Oluşturma &amp; Bologna ÖÇ Kaydı</span>
@@ -2047,10 +2047,10 @@
     </div>
   </div>
   <!-- TEK ORTAK BAŞLANGIÇ GİRİŞ KAPISI (👨‍🏫 EĞİTMEN GİRİŞİ & 🎓 ÖĞRENCİ GİRİŞİ) VE YETKİLENDİRME MODALİ -->
-  <div id="modal-hoca-giris" style="display:flex; position:fixed; top:62px; left:0; right:0; bottom:0; background:rgba(15,23,42,0.82); z-index:1000; align-items:flex-start; justify-content:center; padding:0.5rem 0.75rem; overflow-y:auto;">
+  <div id="modal-hoca-giris" role="dialog" aria-modal="true" aria-label="Eğitmen Girişi ve Yetkilendirme Kapısı" style="display:flex; position:fixed; top:62px; left:0; right:0; bottom:0; background:rgba(15,23,42,0.82); z-index:1000; align-items:flex-start; justify-content:center; padding:0.5rem 0.75rem; overflow-y:auto;">
     <div class="kart" style="max-width:980px; width:100%; max-height:calc(100vh - 76px); overflow-y:auto; margin:auto; padding:0.7rem 0.95rem;">
       <!-- Tek Ortak Giriş Kapısı Rol Seçici (Eğitmen Girişi / Öğrenci Girişi) -->
-      <div id="ortak-giris-rol-secici" style="display:flex; gap:0.45rem; padding:0.35rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.45rem;">
+      <div id="ortak-giris-rol-secici" style="display:flex; gap:0.45rem; padding:0.35rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.45rem; flex-wrap:wrap;">
         <button type="button" class="btn btn-birincil btn-kucuk" id="btn-giris-rol-egitmen" style="flex:1; font-weight:800; min-height:30px;">
           👨‍🏫 Eğitmen Girişi (Öğretmen &amp; Yönetici Stüdyosu — Aktif)
         </button>
@@ -2058,8 +2058,8 @@
           🎓 Öğrenci Girişi (Online Sınav &amp; Kiosk Ekranına Geç)
         </button>
       </div>
-      <div class="kart-baslik" style="position:sticky; top:-0.75rem; background:var(--bg-kart); z-index:5; padding:0.3rem 0 0.45rem 0; margin-bottom:0.5rem; display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:nowrap;">
-        <span style="font-size:0.93rem; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">👨‍🏫 Eğitmen Girişi, Şifre Kurtarma &amp; Yetkilendirme Kapısı</span>
+      <div class="kart-baslik" style="position:sticky; top:-0.75rem; background:var(--bg-kart); z-index:5; padding:0.3rem 0 0.45rem 0; margin-bottom:0.5rem; display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+        <span style="font-size:0.93rem; font-weight:800; overflow:hidden; text-overflow:ellipsis;">👨‍🏫 Eğitmen Girişi, Şifre Kurtarma &amp; Yetkilendirme Kapısı</span>
         <div style="display:flex; gap:0.45rem; align-items:center; flex-shrink:0; white-space:nowrap;">
           <span class="rozet rozet-kirmizi" id="rozet-hoca-oturum-durum" style="white-space:nowrap;">🔒 Doğrulama Bekleniyor</span>
           <button type="button" class="btn btn-kucuk" id="btn-modal-hoca-kapat" style="padding:0.28rem 0.65rem; font-weight:800; flex-shrink:0;">✕ Kapat</button>
@@ -2069,7 +2069,7 @@
       <div id="hoca-giris-hata" hidden style="padding:0.5rem 0.65rem; background:var(--tehlike-acik); color:var(--tehlike); border-radius:6px; margin-bottom:0.6rem; font-size:0.8rem; font-weight:700;"></div>
       <div id="hoca-giris-bilgi" style="display:none; padding:0.5rem 0.65rem; background:var(--basari-acik); color:var(--basari); border-radius:6px; margin-bottom:0.6rem; font-size:0.8rem; font-weight:700;"></div>
 
-      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(390px, 1fr)); gap:0.75rem; align-items:start;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap:0.75rem; align-items:start;">
         <!-- SOL SÜTUN: Giriş + Şifre Kurtarma (E-Posta/Telefon) + Yönetici Onay Paneli -->
         <div style="display:grid; gap:0.65rem;">
           <!-- Bölüm 1: Hoca Kullanıcı Adı ve Şifre Doğrulama (Giriş / Kilitleme) -->
@@ -2234,7 +2234,7 @@
   </div>
 
   <!-- A4 KAĞIT ÜZERİNDE HIZLI SORU DÜZENLEME MODALI -->
-  <div id="modal-hizli-soru-duzenle" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:220; align-items:center; justify-content:center; padding:1rem;">
+  <div id="modal-hizli-soru-duzenle" role="dialog" aria-modal="true" aria-label="Hızlı Soru Düzenle" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.72); z-index:220; align-items:center; justify-content:center; padding:1rem;">
     <div class="kart" style="width:100%; max-width:560px; margin:0;">
       <div class="kart-baslik">
         <span>✏️ Kağıt Üzerinde Hızlı Soru &amp; Şık Düzenle</span>
@@ -2307,7 +2307,7 @@
   </div>
 
   <!-- ÖĞRENCİ LİSTESİNİ ÇİFT YÖNLÜ (TELEFONDAN BİLGİSAYARA & BİLGİSAYARDAN TELEFONA) AKTARAN GERÇEK QR MODALI -->
-  <div id="modal-ogrenci-qr" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.75); z-index:230; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
+  <div id="modal-ogrenci-qr" role="dialog" aria-modal="true" aria-label="Öğrenci Listesi QR Aktarımı" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.75); z-index:230; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
     <div class="kart" style="width:100%; max-width:620px; margin:auto; max-height:92vh; overflow-y:auto;">
       <div class="kart-baslik">
         <span>🔄 Öğrenci Listesi QR Aktarımı (Bilgisayara ↔ Telefona)</span>

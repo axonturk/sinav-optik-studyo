@@ -21,10 +21,23 @@ const tikla = async (sayfa, sec) => { await sayfa.$eval(sec, (e) => e.scrollInto
   let onayCevabi = true;
   sayfa.on('pageerror', (e) => hatalar.push(e.message));
   sayfa.on('dialog', async (d) => { if (d.type() === 'confirm') { if (onayCevabi) await d.accept(); else await d.dismiss(); } else { hatalar.push('dialog: ' + d.message()); await d.dismiss(); } });
+  const hocaGirisAc = async () => {
+    await sayfa.evaluate(() => { const b = document.getElementById('btn-hoca-giris-yap'); if (b) b.click(); });
+    await bekle(300);
+    await sayfa.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k) k.click(); });
+    await bekle(150);
+  };
   try {
+    await sayfa.setViewport({ width: 1400, height: 1000 });
     await sayfa.goto(`${taban}/index.html`, { waitUntil: 'networkidle0' });
+    await hocaGirisAc();
     await sayfa.evaluate(() => document.querySelector('[data-sekme="sekme-online"]').click());
     await bekle(300);
+    const baslangicAdet = await sayfa.$eval('#rozet-tanimli-online-sayisi', (e) => e.textContent.trim());
+    if (baslangicAdet === '0 Sınav') {
+      await tikla(sayfa, '#btn-online-tanimla-kaydet');
+      await bekle(400);
+    }
     const satir = () => sayfa.evaluate(() => {
       const b = document.querySelector('[data-online-sec-baslat]');
       const r = document.querySelector('#tablo-tanimli-online-sinavlar .rozet');
@@ -65,6 +78,7 @@ const tikla = async (sayfa, sec) => { await sayfa.$eval(sec, (e) => e.scrollInto
     kontrol('Onaylanınca tek (son) sınav silinir; liste boş mesajı görünür', bos.sayi === '0 Sınav' && /Tanımlı online sınav yok/.test(bos.metin), JSON.stringify(bos));
     // Yeniden yükle: silinen geri gelmemeli
     await sayfa.reload({ waitUntil: 'networkidle0' });
+    await hocaGirisAc();
     await sayfa.evaluate(() => document.querySelector('[data-sekme="sekme-online"]').click());
     await bekle(400);
     const sonra = await sayfa.$eval('#rozet-tanimli-online-sayisi', (e) => e.textContent.trim());
