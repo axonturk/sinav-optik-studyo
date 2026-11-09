@@ -987,27 +987,29 @@
 
     const minBoyut = Math.max(5, kisaKenar * 0.012);
     const maxBoyut = kisaKenar * 0.22;
-    const adaylar = [];
+    const kesinAdaylar = [];
+    const esnekAdaylar = [];
     for (const b of bilesenler) {
       const bw = b.maxx - b.minx + 1;
       const bh = b.maxy - b.miny + 1;
       if (bw < minBoyut || bh < minBoyut || bw > maxBoyut || bh > maxBoyut) continue;
       const oran = bw / bh;
-      if (oran < 0.7 || oran > 1.42) continue;
+      if (oran < 0.68 || oran > 1.46) continue;
       const dolu = b.alan / (bw * bh);
-      if (dolu < 0.52 || dolu > 0.94) continue;
+      if (dolu < 0.50 || dolu > 0.95) continue;
       const nokta = (fx, fy) => {
         const px = Math.min(g - 1, Math.max(0, Math.round(b.minx + fx * (bw - 1))));
         const py = Math.min(y - 1, Math.max(0, Math.round(b.miny + fy * (bh - 1))));
         return ikili[py * g + px];
       };
-      const beyaz = [[0.34, 0.34], [0.66, 0.34], [0.34, 0.66], [0.66, 0.66]].filter(([a, c]) => nokta(a, c) === 0).length;
-      if (beyaz < 3) continue;
       const kenar = [[0.12, 0.5], [0.88, 0.5], [0.5, 0.12], [0.5, 0.88]].filter(([a, c]) => nokta(a, c) === 1).length;
       if (kenar < 4) continue;
-      // Halka ile orta nokta arasındaki beyaz bant (0.25..0.37): dört orta-kenar noktası beyaz olmalı
+      const beyaz = [[0.34, 0.34], [0.66, 0.34], [0.34, 0.66], [0.66, 0.66]].filter(([a, c]) => nokta(a, c) === 0).length;
       const bant = [[0.31, 0.5], [0.69, 0.5], [0.5, 0.31], [0.5, 0.69]].filter(([a, c]) => nokta(a, c) === 0).length;
-      if (bant < 3) continue;
+      const kesinMi = beyaz >= 3 && bant >= 3 && dolu >= 0.52 && dolu <= 0.94 && oran >= 0.7 && oran <= 1.42;
+      const kucukFiducialMi = Math.min(bw, bh) <= 13 && beyaz >= 2 && (bant >= 1 || beyaz >= 3);
+      if (!kesinMi && !kucukFiducialMi) continue;
+
       const cx = b.minx + (bw - 1) / 2;
       const cy = b.miny + (bh - 1) / 2;
       let t = 0;
@@ -1020,64 +1022,84 @@
           n++;
         }
       }
-      adaylar.push({ cx, cy, boyut: (bw + bh) / 2, merkezGri: t / n, kalite: Math.abs(dolu - 0.74) });
+      const adayObj = { cx, cy, boyut: (bw + bh) / 2, merkezGri: t / n, kalite: (kesinMi ? 0 : 0.22) + Math.abs(dolu - 0.74) };
+      if (kesinMi) kesinAdaylar.push(adayObj);
+      esnekAdaylar.push(adayObj);
     }
 
-    if (adaylar.length < 4) {
-      return { bulundu: false, neden: `Köşe işaretleri bulunamadı (${adaylar.length}/4). Formun 4 köşesindeki siyah kareler görünecek şekilde çekin.`, aday: adaylar.length };
+    if (esnekAdaylar.length < 4) {
+      return {
+        bulundu: false,
+        neden: `Optik kutunun 4 köşesindeki siyah kareler (▣) bulunamadı (${esnekAdaylar.length}/4). Kamerayı kağıdın üstündeki optik kutuya yaklaştırın.`,
+        aday: esnekAdaylar.length
+      };
     }
 
-    adaylar.sort((a, b) => a.kalite - b.kalite);
-    const havuz = adaylar.slice(0, 22);
     const hedefR = Math.max(hedefOran, 1 / hedefOran);
-    let enIyi = null;
-    for (let a = 0; a < havuz.length; a++) {
-      for (let b = a + 1; b < havuz.length; b++) {
-        for (let c = b + 1; c < havuz.length; c++) {
-          for (let d = c + 1; d < havuz.length; d++) {
-            const dortlu = [havuz[a], havuz[b], havuz[c], havuz[d]];
-            const bs = dortlu.map((q) => q.boyut);
-            const boyutOrani = Math.max(...bs) / Math.min(...bs);
-            if (boyutOrani > 2.3) continue;
-            const mx = dortlu.reduce((t, q) => t + q.cx, 0) / 4;
-            const my = dortlu.reduce((t, q) => t + q.cy, 0) / 4;
-            const sirali = dortlu.slice().sort((p, q) => Math.atan2(p.cy - my, p.cx - mx) - Math.atan2(q.cy - my, q.cx - mx));
-            let isaret = 0;
-            let konveks = true;
-            for (let i = 0; i < 4; i++) {
-              const p0 = sirali[i];
-              const p1 = sirali[(i + 1) % 4];
-              const p2 = sirali[(i + 2) % 4];
-              const cz = (p1.cx - p0.cx) * (p2.cy - p1.cy) - (p1.cy - p0.cy) * (p2.cx - p1.cx);
-              if (cz === 0) { konveks = false; break; }
-              if (isaret === 0) isaret = Math.sign(cz);
-              else if (Math.sign(cz) !== isaret) { konveks = false; break; }
+    const dortluAra = (adayListesi, esnekOranMi = false) => {
+      if (adayListesi.length < 4) return null;
+      const siraliAdaylar = adayListesi.slice().sort((a, b) => a.kalite - b.kalite);
+      const havuz = siraliAdaylar.slice(0, 24);
+      let enIyi = null;
+      for (let a = 0; a < havuz.length; a++) {
+        for (let b = a + 1; b < havuz.length; b++) {
+          for (let c = b + 1; c < havuz.length; c++) {
+            for (let d = c + 1; d < havuz.length; d++) {
+              const dortlu = [havuz[a], havuz[b], havuz[c], havuz[d]];
+              const bs = dortlu.map((q) => q.boyut);
+              const boyutOrani = Math.max(...bs) / Math.min(...bs);
+              if (boyutOrani > (esnekOranMi ? 1.85 : 2.3)) continue;
+              const mx = dortlu.reduce((t, q) => t + q.cx, 0) / 4;
+              const my = dortlu.reduce((t, q) => t + q.cy, 0) / 4;
+              const sirali = dortlu.slice().sort((p, q) => Math.atan2(p.cy - my, p.cx - mx) - Math.atan2(q.cy - my, q.cx - mx));
+              let isaret = 0;
+              let konveks = true;
+              for (let i = 0; i < 4; i++) {
+                const p0 = sirali[i];
+                const p1 = sirali[(i + 1) % 4];
+                const p2 = sirali[(i + 2) % 4];
+                const cz = (p1.cx - p0.cx) * (p2.cy - p1.cy) - (p1.cy - p0.cy) * (p2.cx - p1.cx);
+                if (cz === 0) { konveks = false; break; }
+                if (isaret === 0) isaret = Math.sign(cz);
+                else if (Math.sign(cz) !== isaret) { konveks = false; break; }
+              }
+              if (!konveks) continue;
+              const mes = (p, q) => Math.hypot(p.cx - q.cx, p.cy - q.cy);
+              const d01 = mes(sirali[0], sirali[1]);
+              const d12 = mes(sirali[1], sirali[2]);
+              const d23 = mes(sirali[2], sirali[3]);
+              const d30 = mes(sirali[3], sirali[0]);
+              const yatay = (d01 + d23) / 2;
+              const dikey = (d12 + d30) / 2;
+              const oran = Math.max(yatay, dikey) / Math.max(1, Math.min(yatay, dikey));
+              const oranFarki = esnekOranMi
+                ? Math.min(Math.abs(Math.log(oran / hedefR)), Math.abs(Math.log(oran / 3.7)))
+                : Math.abs(Math.log(oran / hedefR));
+              const skor = oranFarki + 0.8 * (Math.abs(Math.log(d01 / d23)) + Math.abs(Math.log(d12 / d30))) + 0.8 * Math.log(boyutOrani);
+              const formBoyut = Math.max(yatay, dikey);
+              const bekBoy = formBoyut * (24 / (KANONIK_GENISLIK - 2 * KANONIK_FIDUCIAL_MERKEZ));
+              const boyutUyum = Math.abs(Math.log((bs.reduce((t, q) => t + q, 0) / 4) / bekBoy));
+              let alan = 0;
+              for (let i = 0; i < 4; i++) { const p0 = sirali[i]; const p1 = sirali[(i + 1) % 4]; alan += p0.cx * p1.cy - p1.cx * p0.cy; }
+              alan = Math.abs(alan) / 2;
+              if (alan < g * y * (esnekOranMi ? 0.022 : 0.03)) continue;
+              const toplamSkor = skor + 0.9 * boyutUyum;
+              if (!enIyi || toplamSkor < enIyi.skor) enIyi = { skor: toplamSkor, dortlu };
             }
-            if (!konveks) continue;
-            const mes = (p, q) => Math.hypot(p.cx - q.cx, p.cy - q.cy);
-            const d01 = mes(sirali[0], sirali[1]);
-            const d12 = mes(sirali[1], sirali[2]);
-            const d23 = mes(sirali[2], sirali[3]);
-            const d30 = mes(sirali[3], sirali[0]);
-            const yatay = (d01 + d23) / 2;
-            const dikey = (d12 + d30) / 2;
-            const oran = Math.max(yatay, dikey) / Math.max(1, Math.min(yatay, dikey));
-            const skor = Math.abs(Math.log(oran / hedefR)) + 0.8 * (Math.abs(Math.log(d01 / d23)) + Math.abs(Math.log(d12 / d30))) + 0.8 * Math.log(boyutOrani);
-            // Köşe karelerinin boyutu form boyutuyla orantılı olmalı (24 / 748 ≈ 0.032)
-            const formBoyut = Math.max(yatay, dikey);
-            const bekBoy = formBoyut * (24 / (KANONIK_GENISLIK - 2 * KANONIK_FIDUCIAL_MERKEZ));
-            const boyutUyum = Math.abs(Math.log((bs.reduce((t, q) => t + q, 0) / 4) / bekBoy));
-            // Dörtgen alanı görüntünün anlamlı bir bölümünü kaplamalı (küçük gürültü dörtlülerini ele)
-            let alan = 0;
-            for (let i = 0; i < 4; i++) { const p0 = sirali[i]; const p1 = sirali[(i + 1) % 4]; alan += p0.cx * p1.cy - p1.cx * p0.cy; }
-            alan = Math.abs(alan) / 2;
-            if (alan < g * y * 0.03) continue;
-            const toplamSkor = skor + 0.9 * boyutUyum;
-            if (!enIyi || toplamSkor < enIyi.skor) enIyi = { skor: toplamSkor, dortlu };
           }
         }
       }
+      return enIyi;
+    };
+
+    let enIyi = dortluAra(kesinAdaylar, false);
+    if (!enIyi || enIyi.skor > 1.15) {
+      const esnekEnIyi = dortluAra(esnekAdaylar, true);
+      if (esnekEnIyi && (!enIyi || esnekEnIyi.skor < enIyi.skor)) {
+        enIyi = esnekEnIyi;
+      }
     }
+    const adaylar = esnekAdaylar;
 
     if (!enIyi || enIyi.skor > 1.15) {
       return { bulundu: false, neden: 'Form köşeleri bulunamadı veya şekil beklenen form oranına uymuyor. Kağıdı düz ve tamamı görünecek şekilde tutun.', aday: adaylar.length };
@@ -1341,9 +1363,10 @@
      ozelKoseler verilmezse form, görüntünün HERHANGİ bir yerinde 4 köşe fiducialinden aranır.
      Form bulunamazsa { formBulundu:false, hata, mesaj } döner (yanlış puan üretilmez). */
   function okuOptikFormImageData(imageData, sinavYapisi, ogrenciListesi = [], ozelKoseler = null) {
-    const harita = hesaplaKanonikBalonHaritasi(sinavYapisi);
-    const KG = harita.genislik;
-    const KY = harita.yukseklik;
+    let etkinYapi = Object.assign({}, sinavYapisi || {});
+    let harita = hesaplaKanonikBalonHaritasi(etkinYapi);
+    let KG = harita.genislik;
+    let KY = harita.yukseklik;
     aktifKanonikYukseklik = KY;
 
     let koseler = ozelKoseler;
@@ -1362,6 +1385,74 @@
     }
 
     const kaynakGri = griyeCevirImageData(imageData);
+
+    // Fiziksel 4 köşe oranından (homografi öncesi) kağıttaki gerçek satır/bant yapısını otomatik uyarla:
+    // Telefondaki sınav yapısı (örn. varsayılan 10 D/Y + 10 Test + 2 Klasik -> KY=330) ile
+    // basılı kağıttaki optik kutu (örn. 15 D/Y + 10 Test + 0 Klasik -> KY=254) farklıysa otomatik algılar.
+    if (!ozelKoseler && koseler && koseler.tl && koseler.tr && koseler.bl && koseler.br) {
+      const ustGen = Math.hypot(koseler.tr.x - koseler.tl.x, koseler.tr.y - koseler.tl.y);
+      const altGen = Math.hypot(koseler.br.x - koseler.bl.x, koseler.br.y - koseler.bl.y);
+      const solYuk = Math.hypot(koseler.bl.x - koseler.tl.x, koseler.bl.y - koseler.tl.y);
+      const sagYuk = Math.hypot(koseler.br.x - koseler.tr.x, koseler.br.y - koseler.tr.y);
+      const ortGen = (ustGen + altGen) / 2;
+      const ortYuk = (solYuk + sagYuk) / 2;
+      if (ortGen > 25 && ortYuk > 15) {
+        const fizikiOran = ortGen / ortYuk;
+        const tahminiKY = Math.round(2 * KANONIK_FIDUCIAL_MERKEZ + (KANONIK_GENISLIK - 2 * KANONIK_FIDUCIAL_MERKEZ) / fizikiOran);
+        if (Math.abs(tahminiKY - KY) > 22 && tahminiKY >= 165 && tahminiKY <= 295) {
+          const tahminiSatir = Math.max(3, Math.min(13, Math.round((tahminiKY - 94) / 20)));
+          const maksAdaySoru = tahminiSatir * 2;
+          const denemeYapi = Object.assign({}, etkinYapi, {
+            dySayisi: maksAdaySoru,
+            testSayisi: maksAdaySoru,
+            klasikSayisi: 0
+          });
+          const denemeHarita = hesaplaKanonikBalonHaritasi(denemeYapi);
+          const dKY = denemeHarita.yukseklik;
+          const dGri = perspektifDuzeltGri(kaynakGri, imageData.width, imageData.height, koseler, KG, dKY);
+          const dIkili = adaptifEsiklemeGri(dGri, KG, dKY, 32, 0.16).ikili;
+          const satirBasiliMi = (balonlar) => {
+            let toplamSiyah = 0;
+            for (const b of balonlar) {
+              const r = Math.ceil(b.r + 1);
+              for (let dy = -r; dy <= r; dy++) {
+                const py = Math.round(b.y + dy);
+                if (py < 0 || py >= dKY) continue;
+                for (let dx = -r; dx <= r; dx++) {
+                  const px = Math.round(b.x + dx);
+                  if (px < 0 || px >= KG) continue;
+                  if (dx * dx + dy * dy <= (b.r + 1.2) * (b.r + 1.2)) {
+                    toplamSiyah += dIkili[py * KG + px];
+                  }
+                }
+              }
+            }
+            return (toplamSiyah / Math.max(1, balonlar.length)) >= 11;
+          };
+          let algilananDy = 0;
+          for (let i = 0; i < denemeHarita.dySatirlari.length; i++) {
+            if (satirBasiliMi(denemeHarita.dySatirlari[i].balonlar)) algilananDy = i + 1;
+          }
+          let algilananTest = 0;
+          for (let i = 0; i < denemeHarita.testSatirlari.length; i++) {
+            if (satirBasiliMi(denemeHarita.testSatirlari[i].balonlar)) algilananTest = i + 1;
+          }
+          if (algilananDy > 0 || algilananTest > 0) {
+            etkinYapi = Object.assign({}, etkinYapi, {
+              dySayisi: algilananDy || etkinYapi.dySayisi,
+              testSayisi: algilananTest || etkinYapi.testSayisi,
+              klasikSayisi: 0,
+              otomatikAlgilandiMi: true
+            });
+            harita = hesaplaKanonikBalonHaritasi(etkinYapi);
+            KG = harita.genislik;
+            KY = harita.yukseklik;
+            aktifKanonikYukseklik = KY;
+          }
+        }
+      }
+    }
+
     const duzGri = perspektifDuzeltGri(kaynakGri, imageData.width, imageData.height, koseler, KG, KY);
     const duz = { gri: duzGri, ikili: adaptifEsiklemeGri(duzGri, KG, KY, 32, 0.16).ikili };
 
@@ -1610,6 +1701,7 @@
       testDetay,
       klasikDetay,
       koseler,
+      algilananYapi: etkinYapi,
       kanonikBoyut: { genislik: KG, yukseklik: KY },
       kanonikHarita: harita,
       kanonikIkili: duz.ikili,

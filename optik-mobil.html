@@ -164,19 +164,28 @@
          ==================================================================== -->
     <section class="sekme-panel aktif" id="m-panel-tara">
 
+      <!-- Kamera Hizalama Rehberi (Tüm Kağıt mı Optik Kutu mu?) -->
+      <div style="background:rgba(37,99,235,0.12); border:1px solid var(--birincil); border-radius:8px; padding:0.45rem 0.65rem; margin-bottom:0.55rem; font-size:0.78rem; line-height:1.35;">
+        <strong>🎯 Neyi Çekeceğim?</strong> Kağıdın üst kısmındaki <strong>4 köşesi siyah kareli (▣) OPTİK KUTUYU</strong> ekranda görünecek şekilde tutun.
+        <span style="color:var(--metin-ikincil);">İster <strong>yalnız optik kutuya yaklaştırın</strong> (önerilen), ister <strong>tüm A4 kağıdı</strong> dik veya yan tutun; kamera açıldığında otomatik okur!</span>
+      </div>
+
       <!-- Kamera / Canvas Vizörü -->
       <div class="vizor-kutu">
-        <video id="mobil-video" autoplay playsinline muted style="width:100%; display:none;"></video>
+        <video id="mobil-video" autoplay playsinline muted style="width:100%; max-height:380px; object-fit:contain; display:none;"></video>
         <canvas id="mobil-canvas-vizor" width="800" height="420" style="width:100%; display:block;"></canvas>
         <div class="vizor-kilavuz"></div>
         <div class="vizor-kose vk-tl"></div>
         <div class="vizor-kose vk-tr"></div>
         <div class="vizor-kose vk-bl"></div>
         <div class="vizor-kose vk-br"></div>
+        <button type="button" class="btn btn-basari btn-kucuk" id="btn-vizor-ustu-oku" style="position:absolute; bottom:12px; right:12px; z-index:20; font-weight:800; box-shadow:0 4px 12px rgba(0,0,0,0.45);">
+          ⚡ Şimdi Oku
+        </button>
       </div>
 
       <!-- Ana Tarama Butonları -->
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-bottom:0.75rem;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-bottom:0.55rem;">
         <button type="button" class="btn btn-birincil" id="btn-mobil-kamera-ac" style="padding:0.7rem;">
           📷 Arka Kamerayı Aç
         </button>
@@ -185,7 +194,7 @@
         </button>
       </div>
 
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-bottom:0.75rem;">
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-bottom:0.65rem;">
         <label class="btn" style="cursor:pointer; margin:0; text-align:center;">
           🖼️ Fotoğraf Seç / Çek
           <input type="file" id="input-mobil-foto" accept="image/*" capture="environment" style="display:none;" />
@@ -195,12 +204,46 @@
         </button>
       </div>
 
+      <!-- PWA İçi QR Tarama, Cevap Anahtarı Özeti ve Öğrenci Listesi Aktarım Merkezi -->
+      <div class="kart" id="mobil-anahtar-ve-qr-merkezi" style="margin-bottom:0.75rem; padding:0.65rem;">
+        <div class="kart-baslik" style="margin-bottom:0.4rem;">
+          <span>🔑 Aktif Cevap Anahtarı &amp; PWA QR Aktarım</span>
+          <span class="rozet rozet-mavi" id="mobil-tara-ogr-rozet">0 Öğrenci</span>
+        </div>
+        <div id="mobil-aktif-anahtar-ozet-kutu" style="font-size:0.76rem; background:var(--bg-ikincil); padding:0.45rem 0.55rem; border-radius:6px; border:1px solid var(--kenar); margin-bottom:0.5rem; line-height:1.4;"></div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.4rem; margin-bottom:0.4rem;">
+          <button type="button" class="btn btn-birincil btn-kucuk" id="btn-pwa-qr-tara-ac">
+            📷 QR Tara (Anahtar &amp; Liste Al)
+          </button>
+          <button type="button" class="btn btn-mor btn-kucuk" id="btn-tara-master-kagit-okut" title="Kameradaki işaretlenmiş öğretmen kağıdını cevap anahtarı olarak kaydet">
+            📸 Kağıttan Anahtar Oku
+          </button>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.4rem;">
+          <button type="button" class="btn btn-kucuk" id="btn-tara-anahtar-duzenle-git">
+            ✏️ Cevap Anahtarını Düzenle
+          </button>
+          <button type="button" class="btn btn-basari btn-kucuk" id="btn-tara-liste-aktar-git">
+            📲 Öğrenci Listesi QR Aktar
+          </button>
+        </div>
+        <div id="kutu-pwa-qr-yapistir" style="display:none; margin-top:0.5rem; padding-top:0.45rem; border-top:1px dashed var(--kenar);">
+          <div style="font-size:0.75rem; color:var(--metin-ikincil); margin-bottom:0.35rem;">
+            📷 Kamerayı bilgisayardaki <strong>📱 Telefon QR</strong> (Cevap Anahtarı + Sınav Yapısı) veya <strong>📲 Öğrenci Listesi QR</strong> koduna tutun; ya da kopyaladığınız bağlantıyı/paketi aşağıya yapıştırın:
+          </div>
+          <div style="display:flex; gap:0.35rem;">
+            <input type="text" id="girdi-pwa-qr-metin" placeholder="#setup=... veya OGR-QR|... yapıştırın" style="flex:1; font-size:0.78rem;" />
+            <button type="button" class="btn btn-basari btn-kucuk" id="btn-pwa-qr-metin-yukle">📥 Yükle</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Form Türü: Uygulama formu veya Standart (hazır baskı) optik form -->
       <div class="kart" id="mobil-form-turu-kart">
         <div class="kart-baslik"><span>📄 Okunacak Form Türü</span></div>
         <select id="m-form-turu" aria-label="Form türü">
-          <option value="uygulama">Bu uygulamanın optik formu (4 köşe işaretli)</option>
-          <option value="standart">Standart / hazır baskı optik form (A-B-C-D-E balonlu)</option>
+          <option value="uygulama">✅ Bu Stüdyonun A4 Sınav Kağıdı (Üstteki 4 Köşe Kareli ▣ Optik Kutu — Önerilen)</option>
+          <option value="standart">📄 Harici / Kırtasiye Tipi Hazır Optik Form (Yalnız A-B-C-D-E Test Kağıdı)</option>
         </select>
         <div id="m-standart-ayar" hidden style="margin-top:0.5rem;">
           <div class="form-satir">
@@ -483,9 +526,13 @@
         try {
           const hamDepo = localStorage.getItem(DEPO_ANAHTAR);
           if (hamDepo) {
-            const veri = C.semaDogrulaVeTemizle(JSON.parse(hamDepo));
+            const hamJson = JSON.parse(hamDepo);
+            const veri = C.semaDogrulaVeTemizle(hamJson);
             if (Array.isArray(veri.ogrenciler)) mobilDurum.ogrenciler = veri.ogrenciler;
             if (Array.isArray(veri.okumaSonuclari)) mobilDurum.okumaSonuclari = veri.okumaSonuclari;
+            if (hamJson && hamJson.mobilSinavYapisi && typeof hamJson.mobilSinavYapisi === 'object') {
+              Object.assign(mobilDurum.sinavYapisi, hamJson.mobilSinavYapisi);
+            }
           }
         } catch (_) {}
 
@@ -544,6 +591,56 @@
         const y = mobilDurum.sinavYapisi;
         document.getElementById('mobil-aktif-sinav-ozet').textContent =
           `${y.dySayisi} D/Y + ${y.testSayisi} Test + ${y.klasikSayisi} Klasik · ${y.kimlikModu === 'tam' ? 'Tam No' : 'Son 2 Hane'}`;
+        const ogrRozet = document.getElementById('mobil-tara-ogr-rozet');
+        if (ogrRozet) ogrRozet.textContent = `${mobilDurum.ogrenciler.length} Öğrenci`;
+        const ogrSayacEl = document.getElementById('mobil-ogr-sayac');
+        if (ogrSayacEl) ogrSayacEl.textContent = String(mobilDurum.ogrenciler.length);
+        const ozetKutu = document.getElementById('mobil-aktif-anahtar-ozet-kutu');
+        if (ozetKutu) {
+          const a = (y.cevapAnahtarlari && y.cevapAnahtarlari.A) || { dy: [], test: [] };
+          const dyStr = y.dySayisi > 0 ? a.dy.slice(0, y.dySayisi).map((v, i) => `${i + 1}${v}`).join(' ') : 'Yok';
+          const testStr = y.testSayisi > 0 ? a.test.slice(0, y.testSayisi).map((v, i) => `${i + 1}${v}`).join(' ') : 'Yok';
+          ozetKutu.innerHTML = `
+            <div><strong>📚 Sınav Yapısı:</strong> ${C.kacisHTML(y.dersAd || 'Aktif Sınav')} (${y.dySayisi} D/Y · ${y.testSayisi} Test · ${y.klasikSayisi} Klasik)</div>
+            <div class="mono" style="margin-top:2px;"><strong>🔑 A Grubu D/Y:</strong> ${C.kacisHTML(dyStr)}</div>
+            <div class="mono"><strong>🔘 A Grubu Test:</strong> ${C.kacisHTML(testStr)}</div>
+          `;
+        }
+      }
+
+      function uygulaPwaQrMetni(hamMetin, kaynakEtiket = 'QR') {
+        const metin = String(hamMetin || '').trim();
+        if (!metin) return false;
+        if (metin.includes('setup=')) {
+          const parca = metin.slice(metin.indexOf('setup='));
+          const cozulmusSetup = C.cozKompaktSetupQrPaketi('#' + parca);
+          if (cozulmusSetup) {
+            Object.assign(mobilDurum.sinavYapisi, cozulmusSetup);
+            if (Array.isArray(cozulmusSetup.ogrenciler) && cozulmusSetup.ogrenciler.length > 0) {
+              mobilDurum.ogrenciler = cozulmusSetup.ogrenciler;
+            }
+            document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
+            document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
+            document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
+            kaydetYerelDepoya();
+            guncelleUstOzet();
+            cizDokunmatikAnahtarEditoru();
+            bipCal(true);
+            mobilUyariGoster(`✅ ${kaynakEtiket}: Sınav yapısı (${mobilDurum.sinavYapisi.dySayisi} D/Y + ${mobilDurum.sinavYapisi.testSayisi} Test), Cevap Anahtarı ve ${mobilDurum.ogrenciler.length} öğrenci yüklendi!`);
+            return true;
+          }
+        }
+        const cozulmusOgr = C.cozOgrenciQrPaketi(metin);
+        if (cozulmusOgr && cozulmusOgr.gecerli && cozulmusOgr.ogrenciler.length > 0) {
+          mobilDurum.ogrenciler = cozulmusOgr.ogrenciler;
+          kaydetYerelDepoya();
+          guncelleUstOzet();
+          cizMobilOgrenciQrBilgisayara();
+          bipCal(true);
+          mobilUyariGoster(`✅ ${kaynakEtiket}: ${cozulmusOgr.ogrenciler.length} kişilik öğrenci listesi telefona yüklendi!`);
+          return true;
+        }
+        return false;
       }
 
       function kaydetYerelDepoya() {
@@ -551,6 +648,7 @@
           const mevcutHam = localStorage.getItem(DEPO_ANAHTAR);
           const mevcut = mevcutHam ? JSON.parse(mevcutHam) : {};
           mevcut.okumaSonuclari = mobilDurum.okumaSonuclari;
+          mevcut.mobilSinavYapisi = mobilDurum.sinavYapisi;
           if (Array.isArray(mobilDurum.ogrenciler) && mobilDurum.ogrenciler.length > 0) {
             mevcut.ogrenciler = mobilDurum.ogrenciler;
           }
@@ -835,16 +933,48 @@
         vizorCanvas.width = Math.max(1, Math.round(kaynakGen * olcek));
         vizorCanvas.height = Math.max(1, Math.round(kaynakYuk * olcek));
         ctx.drawImage(kaynak, 0, 0, vizorCanvas.width, vizorCanvas.height);
+
+        // Kamera karesinde bilgisayardan gösterilen Kurulum (#setup=) veya Öğrenci Listesi (#ogr= / OGR-QR) QR kodu varsa otomatik yakala
+        if (typeof window.BarcodeDetector === 'function') {
+          try {
+            const dedektor = new window.BarcodeDetector({ formats: ['qr_code'] });
+            dedektor.detect(vizorCanvas).then((kodlar) => {
+              if (kodlar && kodlar.length > 0 && kodlar[0].rawValue) {
+                uygulaPwaQrMetni(kodlar[0].rawValue, 'Kamera QR');
+              }
+            }).catch(() => {});
+          } catch (_) {}
+        }
+
         const imgData = ctx.getImageData(0, 0, vizorCanvas.width, vizorCanvas.height);
-        const standart = standartFormMu();
-        const sonuc = standart
-          ? C.okuStandartOptikFormImageData(imgData, standartAyarOku())
-          : C.okuOptikFormImageData(imgData, mobilDurum.sinavYapisi, mobilDurum.ogrenciler);
+        let standart = standartFormMu();
+        // Kullanıcı yanlışlıkla "Standart / hazır baskı" seçmiş olsa bile karede stüdyonun 4 köşe kareli (▣) optik kutusu varsa otomatik stüdyo modunda oku!
+        let sonuc = C.okuOptikFormImageData(imgData, mobilDurum.sinavYapisi, mobilDurum.ogrenciler);
+        if (sonuc.formBulundu && standart) {
+          standart = false;
+          const sel = document.getElementById('m-form-turu');
+          if (sel) sel.value = 'uygulama';
+          const stdAyar = document.getElementById('m-standart-ayar');
+          if (stdAyar) stdAyar.hidden = true;
+        } else if (!sonuc.formBulundu && standart) {
+          sonuc = C.okuStandartOptikFormImageData(imgData, standartAyarOku());
+        }
         if (!sonuc.formBulundu) {
           seriSon.imza = ''; seriSon.sayi = 0; seriSon.kaydedildi = false;
           mobilUyariGoster('⚠️ Form bulunamadı: ' + sonuc.mesaj);
           if (!seri) bipCal(false);
           return null;
+        }
+        // Kağıttaki optik kutudan soru sayıları (örn. 15 D/Y + 10 Test + 0 Klasik) otomatik algılandıysa sınav yapısını senkronize et
+        if (!standart && sonuc.algilananYapi && sonuc.algilananYapi.otomatikAlgilandiMi) {
+          mobilDurum.sinavYapisi.dySayisi = sonuc.algilananYapi.dySayisi;
+          mobilDurum.sinavYapisi.testSayisi = sonuc.algilananYapi.testSayisi;
+          mobilDurum.sinavYapisi.klasikSayisi = sonuc.algilananYapi.klasikSayisi;
+          document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
+          document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
+          document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
+          guncelleUstOzet();
+          cizDokunmatikAnahtarEditoru();
         }
         mobilUyariGoster('');
         if (seri) {
@@ -995,6 +1125,53 @@
         });
 
         document.getElementById('btn-mobil-kare-oku').addEventListener('click', taraAktifKareVeyaSimuleEt);
+        const btnVizorUstuOku = document.getElementById('btn-vizor-ustu-oku');
+        if (btnVizorUstuOku) btnVizorUstuOku.addEventListener('click', taraAktifKareVeyaSimuleEt);
+
+        const btnPwaQrTaraAc = document.getElementById('btn-pwa-qr-tara-ac');
+        if (btnPwaQrTaraAc) {
+          btnPwaQrTaraAc.addEventListener('click', () => {
+            const kutu = document.getElementById('kutu-pwa-qr-yapistir');
+            if (kutu) kutu.style.display = kutu.style.display === 'none' ? 'block' : 'none';
+            if (!kameraStream) {
+              document.getElementById('btn-mobil-kamera-ac').click();
+            }
+          });
+        }
+
+        const btnPwaQrMetinYukle = document.getElementById('btn-pwa-qr-metin-yukle');
+        if (btnPwaQrMetinYukle) {
+          btnPwaQrMetinYukle.addEventListener('click', () => {
+            const inp = document.getElementById('girdi-pwa-qr-metin');
+            if (inp && uygulaPwaQrMetni(inp.value, 'Yapıştırılan QR Paketi')) {
+              inp.value = '';
+            } else {
+              mobilUyariGoster('⚠️ Geçerli bir #setup= (Cevap Anahtarı) veya #ogr= / OGR-QR (Öğrenci Listesi) paketi bulunamadı.');
+            }
+          });
+        }
+
+        const btnTaraAnahtarDuzenleGit = document.getElementById('btn-tara-anahtar-duzenle-git');
+        if (btnTaraAnahtarDuzenleGit) {
+          btnTaraAnahtarDuzenleGit.addEventListener('click', () => {
+            const b = document.querySelector('[data-msekme="m-panel-anahtar"]');
+            if (b) b.click();
+          });
+        }
+
+        const btnTaraListeAktarGit = document.getElementById('btn-tara-liste-aktar-git');
+        if (btnTaraListeAktarGit) {
+          btnTaraListeAktarGit.addEventListener('click', () => {
+            const b = document.querySelector('[data-msekme="m-panel-anahtar"]');
+            if (b) b.click();
+            const kutu = document.getElementById('kutu-mobil-ogr-qr-bilgisayara');
+            if (kutu) {
+              kutu.style.display = 'block';
+              cizMobilOgrenciQrBilgisayara();
+              kutu.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          });
+        }
 
         document.getElementById('m-form-turu').addEventListener('change', (e) => {
           const std = e.target.value === 'standart';
@@ -1022,6 +1199,9 @@
           if (kameraStream) {
             kameraStream.getTracks().forEach((t) => t.stop());
             kameraStream = null;
+            seriTaramaAktif = false;
+            C.temizleGuvenliInterval('mobil-seri');
+            document.getElementById('btn-mobil-seri-tara').textContent = '🔄 Seri Tarama: Kapalı';
             document.getElementById('mobil-video').style.display = 'none';
             document.getElementById('mobil-canvas-vizor').style.display = 'block';
             e.currentTarget.textContent = '📷 Arka Kamerayı Aç';
@@ -1037,6 +1217,10 @@
             v.style.display = 'block';
             document.getElementById('mobil-canvas-vizor').style.display = 'none';
             e.currentTarget.textContent = '⏹️ Kamerayı Kapat';
+            // Kamera açıldığında otomatik seri taramayı da başlat (kullanıcı düğme aramadan optik kutuyu tuttuğunda otomatik okusun)
+            seriTaramaAktif = true;
+            document.getElementById('btn-mobil-seri-tara').textContent = '⏹️ Seri Tarama: Açık';
+            C.kurGuvenliInterval('mobil-seri', taraAktifKareVeyaSimuleEt, 950);
           } catch (err) {
             alert('Kamera açılamadı, simülasyon veya fotoğraf yükleme modunu kullanabilirsiniz: ' + err.message);
           }
@@ -1076,22 +1260,45 @@
           cizDokunmatikAnahtarEditoru();
         });
 
-        document.getElementById('btn-master-kagit-okut').addEventListener('click', () => {
+        const okutOgretmenMasterKagidi = () => {
           const canvas = document.getElementById('mobil-canvas-vizor');
-          const ctx = canvas.getContext('2d');
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (kameraStream) {
+            const video = document.getElementById('mobil-video');
+            const vw = video.videoWidth || 1280;
+            const vh = video.videoHeight || 720;
+            const olcek = Math.min(1, 1600 / Math.max(vw, vh));
+            canvas.width = Math.max(1, Math.round(vw * olcek));
+            canvas.height = Math.max(1, Math.round(vh * olcek));
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          }
           const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
           const okuma = C.okuOptikFormImageData(imgData, mobilDurum.sinavYapisi, mobilDurum.ogrenciler);
-          if (!okuma.formBulundu) { mobilUyariGoster('⚠️ Form bulunamadı: ' + okuma.mesaj); bipCal(false); return; }
+          if (!okuma.formBulundu) { mobilUyariGoster('⚠️ Öğretmen kağıdı okunamadı: ' + okuma.mesaj); bipCal(false); return; }
+          if (okuma.algilananYapi && okuma.algilananYapi.otomatikAlgilandiMi) {
+            mobilDurum.sinavYapisi.dySayisi = okuma.algilananYapi.dySayisi;
+            mobilDurum.sinavYapisi.testSayisi = okuma.algilananYapi.testSayisi;
+            mobilDurum.sinavYapisi.klasikSayisi = okuma.algilananYapi.klasikSayisi;
+          }
           const grup = okuma.grup || 'A';
           mobilDurum.sinavYapisi.cevapAnahtarlari[grup] = {
             dy: okuma.dyDetay.map((d) => d.verilen || 'D'),
             test: okuma.testDetay.map((t) => t.verilen || 'A'),
             klasik: []
           };
+          document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
+          document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
+          document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
           document.getElementById('m-ayar-grup-sec').value = grup;
+          kaydetYerelDepoya();
+          guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
           bipCal(true);
-        });
+          mobilUyariGoster(`✅ ${grup} Kitapçığı Cevap Anahtarı kağıttan okundu ve kaydedildi (${okuma.dyDetay.length} D/Y + ${okuma.testDetay.length} Test)!`);
+        };
+        document.getElementById('btn-master-kagit-okut').addEventListener('click', okutOgretmenMasterKagidi);
+        const btnTaraMasterOkut = document.getElementById('btn-tara-master-kagit-okut');
+        if (btnTaraMasterOkut) btnTaraMasterOkut.addEventListener('click', okutOgretmenMasterKagidi);
 
         // Mod 3 Kontrolleri
         document.getElementById('btn-mobil-csv-indir').addEventListener('click', () => {
