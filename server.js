@@ -241,7 +241,7 @@ function istekIsleyici(req, res) {
     }
   }
 
-  // 0a-OMR. Telefondan -> Bilgisayara Optik Okuma Sonuçları (OMR) Canlı Senkronizasyon Köprüsü
+  // 0a-OMR. Telefondan -> Bilgisayara Optik Okuma Sonuçları (OMR) Canlı Senkronizasyon Köprüsü (Öğretmen Yetkisi Zorunlu)
   if (yol === '/api/omr-sonuc-senkron') {
     if (!sunucuDurumu.omrSonucKuyrugu) {
       sunucuDurumu.omrSonucKuyrugu = new Map();
@@ -249,9 +249,30 @@ function istekIsleyici(req, res) {
     if (req.method === 'POST') {
       okuJsonGovde(req, 524288)
         .then((govde) => {
+          const hocaToken = cozHocaTokenIstekten(req, govde, urlNesne);
+          if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
+            return gonderJson(res, 401, { hata: 'OMR okuma sonucu senkronizasyonu için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+          }
           const oturumKodu = String((govde && govde.oturumKodu) || 'GENEL').trim().toUpperCase() || 'GENEL';
-          const cozum = Cekirdek.cozOmrSonucPaketi(govde && govde.paket ? govde.paket : govde);
+          const omrSinirlar = {};
+          if (sunucuDurumu.kayitliOgrenciler && sunucuDurumu.kayitliOgrenciler.size > 0) {
+            omrSinirlar.ogrenciler = Array.from(sunucuDurumu.kayitliOgrenciler.values());
+          }
+          if (sunucuDurumu.aktifSinav && govde && govde.sinavKodu && String(govde.sinavKodu) === String(sunucuDurumu.aktifSinav.sinavId)) {
+            if (sunucuDurumu.aktifSinav.sinavSurumId) {
+              omrSinirlar.beklenenSinavSurumId = String(sunucuDurumu.aktifSinav.sinavSurumId);
+            }
+            if (Array.isArray(sunucuDurumu.aktifSinav.sorular) && sunucuDurumu.aktifSinav.sorular.length > 0) {
+              omrSinirlar.azamiDy = Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'dy').length || 50);
+              omrSinirlar.azamiTest = Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'test').length || 200);
+              omrSinirlar.azamiKlasik = Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'klasik').length || 25);
+            }
+          }
+          const cozum = Cekirdek.cozOmrSonucPaketi(govde && govde.paket ? govde.paket : govde, omrSinirlar);
           const okunanListe = cozum.okumaSonuclari || cozum.sonuclar || [];
+          if (cozum.surumUyusmazligi) {
+            return gonderJson(res, 409, { hata: cozum.hata });
+          }
           if (!cozum.gecerli || okunanListe.length === 0) {
             return gonderJson(res, 400, { hata: cozum.hata || 'Aktarılacak geçerli OMR okuma sonucu bulunamadı.' });
           }
@@ -269,26 +290,34 @@ function istekIsleyici(req, res) {
             oturumKodu,
             aktarilanSayi: okunanListe.length,
             kayitSayisi: okunanListe.length,
-            adet: okunanListe.length
+            adet: okunanListe.length,
+            kimlikBekleyenSayisi: okunanListe.filter((x) => x.kimlikEslesmeBekliyor).length
           });
         })
         .catch((err) => gonderJson(res, 400, { hata: err.message }));
       return;
     }
     if (req.method === 'GET') {
-      const oturumKodu = String(urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || 'GENEL').trim().toUpperCase() || 'GENEL';
+      const hocaToken = cozHocaTokenIstekten(req, null, urlNesne);
+      if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
+        return gonderJson(res, 401, { hata: 'OMR sonuç kuyruğunu okumak için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+      }
+      const oturumKodu = String(urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || urlNesne.searchParams.get('kod') || 'GENEL').trim().toUpperCase() || 'GENEL';
       const tuket = urlNesne.searchParams.get('tuket') === '1';
       const kayit = sunucuDurumu.omrSonucKuyrugu.get(oturumKodu) || null;
       if (kayit && tuket) {
         sunucuDurumu.omrSonucKuyrugu.delete(oturumKodu);
       }
-      const varMi = Boolean(kayit && Array.isArray(kayit.sonuclar) && kayit.sonuclar.length > 0);
+      const sonuclarList = kayit && Array.isArray(kayit.sonuclar) ? kayit.sonuclar : [];
+      const varMi = sonuclarList.length > 0;
       return gonderJson(res, 200, {
         varMi,
         bulundu: varMi,
         oturumKodu,
-        sonuclar: kayit ? kayit.sonuclar : [],
-        okumaSonuclari: kayit ? kayit.sonuclar : [],
+        kayitSayisi: sonuclarList.length,
+        adet: sonuclarList.length,
+        sonuclar: sonuclarList,
+        okumaSonuclari: sonuclarList,
         zamanMs: kayit ? kayit.zamanMs : 0
       });
     }
@@ -574,6 +603,7 @@ function istekIsleyici(req, res) {
         return gonderJson(res, 200, {
           kaydedildi: true,
           sinavId: sunucuDurumu.aktifSinav.sinavId,
+          sinavSurumId: sunucuDurumu.aktifSinav.sinavSurumId,
           aktif: sunucuDurumu.aktifSinav.aktif,
           sureDk: sunucuDurumu.aktifSinav.sureDk,
           soruSayisi: sunucuDurumu.aktifSinav.sorular.length
@@ -587,6 +617,7 @@ function istekIsleyici(req, res) {
     const s = sunucuDurumu.aktifSinav;
     return gonderJson(res, 200, {
       sinavId: s.sinavId,
+      sinavSurumId: s.sinavSurumId || 'SURUM-BASLANGIC-1',
       baslik: s.baslik || '',
       sinavTuru: s.sinavTuru || '',
       dersId: s.dersId || '',
@@ -902,6 +933,114 @@ function istekIsleyici(req, res) {
     return gonderJson(res, 200, { loglar });
   }
 
+  // 2d. Faz 2: Bologna Bilgi Paketi (HTML / Metin / Ekran Görüntüsü) Güvenli Çözümleyici (Öğretmen Yetkisi Zorunlu)
+  if (req.method === 'POST' && yol === '/api/ai-bologna-coz') {
+    okuJsonGovde(req, 2097152)
+      .then(async (govde) => {
+        const hocaToken = cozHocaTokenIstekten(req, govde, urlNesne);
+        if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
+          return gonderJson(res, 401, { hata: 'Bologna bilgi paketi çözümleyici için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+        }
+        const hamMetin = String((govde && (govde.htmlTablo || govde.html || govde.metin)) || '').trim();
+        const gorselDataUrl = String((govde && govde.gorselDataUrl) || '').trim();
+        const apiKey = String(process.env.GEMINI_API_KEY || '').trim();
+
+        if (apiKey && gorselDataUrl.startsWith('data:image/')) {
+          try {
+            const esl = gorselDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+            if (esl) {
+              const geminiYanit = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [{
+                      parts: [
+                        { text: 'Bu üniversite Bologna ders bilgi paketi ekran görüntüsündeki tüm metni ve tabloları (Dersin Ayrıntıları, Değerlendirme Ölçütleri, Öğrenme Çıktıları, 1-14 Hafta Ders Konuları, Program Çıktılarına Katkı) olduğu gibi düz metin/tablo olarak eksiksiz çıkar.' },
+                        { inlineData: { mimeType: esl[1], data: esl[2] } }
+                      ]
+                    }]
+                  })
+                }
+              );
+              if (geminiYanit.ok) {
+                const j = await geminiYanit.json();
+                const cikanMetin = j?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('\n') || '';
+                if (cikanMetin.trim()) {
+                  const bologna = Cekirdek.cozBolognaBilgiPaketi(cikanMetin);
+                  return gonderJson(res, 200, { basarili: true, mod: 'gemini_multimodal', bologna });
+                }
+              }
+            }
+          } catch (_) {}
+        }
+
+        if (!hamMetin) {
+          return gonderJson(res, 400, {
+            hata: gorselDataUrl
+              ? 'Ekran görüntüsünden OCR/AI okuması için sunucuda GEMINI_API_KEY tanımlı olmalıdır. Alternatif olarak Bologna sayfasında Ctrl+A → Ctrl+C yapıp metin/tablo kutusuna doğrudan yapıştırabilirsiniz.'
+              : 'Çözümlenecek Bologna HTML veya metin içeriği boş.'
+          });
+        }
+        const bologna = Cekirdek.cozBolognaBilgiPaketi(hamMetin);
+        if (!bologna.gecerli) {
+          return gonderJson(res, 400, { hata: bologna.hata || 'Bologna verisi ayrıştırılamadı.' });
+        }
+        return gonderJson(res, 200, { basarili: true, mod: 'yerel_deterministik', bologna });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  // 2e. Faz 2: Soru Bazlı Otomatik ÖÇ + Hafta + Bloom + Zorluk Etiketleyici (Öğretmen Yetkisi Zorunlu)
+  if (req.method === 'POST' && yol === '/api/ai-soru-oc-etiketle') {
+    okuJsonGovde(req, 1048576)
+      .then(async (govde) => {
+        const hocaToken = cozHocaTokenIstekten(req, govde, urlNesne);
+        if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
+          return gonderJson(res, 401, { hata: 'Soru bazlı ÖÇ analizi için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+        }
+        const sorular = Array.isArray(govde && govde.sorular) ? govde.sorular : [];
+        if (sorular.length === 0) {
+          return gonderJson(res, 400, { hata: 'Analiz edilecek soru listesi boş.' });
+        }
+        const bolognaVerisi = (govde && (govde.bolognaVerisi || govde.bologna)) || {};
+        const etiketler = Cekirdek.etiketleSorularOtomatikOcBloom(sorular, bolognaVerisi);
+        return gonderJson(res, 200, { basarili: true, mod: 'semantik_enum_kilitli', etiketler });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  // 2f. Faz 2: Kurumsal Kalite Şablonları Kayıt / Listeleme Ucu (Öğretmen Yetkisi Zorunlu)
+  if (yol === '/api/kurumsal-sablonlar') {
+    const hocaToken = cozHocaTokenIstekten(req, null, urlNesne);
+    if (req.method === 'GET') {
+      if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
+        return gonderJson(res, 401, { hata: 'Kurumsal şablonları okumak için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+      }
+      const liste = Array.isArray(sunucuDurumu.kurumsalSablonlar) && sunucuDurumu.kurumsalSablonlar.length > 0
+        ? sunucuDurumu.kurumsalSablonlar
+        : Cekirdek.VARSAYILAN_KURUMSAL_SABLONLAR;
+      return gonderJson(res, 200, { basarili: true, kurumsalSablonlar: liste });
+    }
+    if (req.method === 'POST') {
+      okuJsonGovde(req, 1048576)
+        .then((govde) => {
+          const hTok = cozHocaTokenIstekten(req, govde, urlNesne);
+          if (!hTok || !sunucuDurumu.aktifHocaTokenlar.has(hTok)) {
+            return gonderJson(res, 401, { hata: 'Kurumsal şablon kaydetmek için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+          }
+          const temiz = Cekirdek.semaDogrulaVeTemizle({ kurumsalSablonlar: govde.kurumsalSablonlar || [] });
+          sunucuDurumu.kurumsalSablonlar = temiz.kurumsalSablonlar;
+          return gonderJson(res, 200, { basarili: true, adet: sunucuDurumu.kurumsalSablonlar.length });
+        })
+        .catch((err) => gonderJson(res, 400, { hata: err.message }));
+      return;
+    }
+  }
+
   // 3. Statik Dosya Sunumu (Sunucu Kaynak Kodları, Test Betikleri ve İç Veri Klasörleri Engellenir)
   const temizYol = yol === '/' ? '/index.html' : yol;
   const kucukYol = temizYol.toLowerCase();
@@ -911,7 +1050,10 @@ function istekIsleyici(req, res) {
     kucukYol === '/package.json' ||
     kucukYol === '/package-lock.json' ||
     kucukYol === '/wrangler.jsonc' ||
+    kucukYol === '/wrangler.toml' ||
+    kucukYol === '/test-suite.js' ||
     kucukYol === '/omr-geometri-denetim.js' ||
+    kucukYol.startsWith('/test-artifacts/') ||
     kucukYol.startsWith('/ornek-dosyalar/') ||
     kucukYol.startsWith('/node_modules/') ||
     kucukYol.startsWith('/.') ||

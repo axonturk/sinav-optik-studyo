@@ -528,8 +528,53 @@
           }
         },
         ogrenciler: [],
-        okumaSonuclari: []
+        okumaSonuclari: [],
+        omrYetkiToken: ''
       };
+
+      function kaydetMobilHocaToken(tok) {
+        const temiz = String(tok || '').trim();
+        if (!temiz) return;
+        mobilDurum.omrYetkiToken = temiz;
+        try { sessionStorage.setItem('MOBIL_OMR_HOCA_TOKEN_V1', temiz); } catch (_) {}
+      }
+
+      function alAktifMobilHocaToken() {
+        if (mobilDurum.omrYetkiToken) return mobilDurum.omrYetkiToken;
+        try {
+          const mTok = sessionStorage.getItem('MOBIL_OMR_HOCA_TOKEN_V1');
+          if (mTok) return mTok;
+          const hOturum = JSON.parse(sessionStorage.getItem('HOCA_AKTIF_OTURUM_V1') || 'null');
+          if (hOturum && hOturum.token) return hOturum.token;
+        } catch (_) {}
+        return '';
+      }
+
+      function ayiklaHashParametresi(hamHash, anahtar) {
+        const s = String(hamHash || '').replace(/^#/, '');
+        const parcalar = s.split('&');
+        for (const p of parcalar) {
+          const es = p.indexOf('=');
+          if (es > 0 && p.slice(0, es) === anahtar) {
+            return decodeURIComponent(p.slice(es + 1)).trim();
+          }
+        }
+        return '';
+      }
+
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const yetkiKanal = new BroadcastChannel('sinav_omr_yetki');
+          yetkiKanal.onmessage = (ev) => {
+            if (ev && ev.data && ev.data.tip === 'OMR_TOKEN_YANIT' && ev.data.token) {
+              kaydetMobilHocaToken(ev.data.token);
+            }
+          };
+          if (!alAktifMobilHocaToken()) {
+            yetkiKanal.postMessage({ tip: 'OMR_TOKEN_ISTE' });
+          }
+        }
+      } catch (_) {}
 
       /* Test/teşhis için salt-okunur öğrenci listesi erişimi */
       window.__mobilOgrenciler = () => mobilDurum.ogrenciler.slice();
@@ -537,6 +582,8 @@
       /* #setup= Parametresinden veya localStorage'dan Sınav Yapısını Yükle */
       function yukleBaslangicVerisi() {
         try { localStorage.removeItem('SINAV_OPTIK_STUDYO_VERI_V1'); } catch (_) {}
+        const hashToken = ayiklaHashParametresi(location.hash, 'omrToken');
+        if (hashToken) kaydetMobilHocaToken(hashToken);
         try {
           const hamDepo = localStorage.getItem(DEPO_ANAHTAR);
           if (hamDepo) {
@@ -578,9 +625,11 @@
         }
 
         if (location.hash && location.hash.startsWith('#pc-aktar=')) {
-          const kod = decodeURIComponent(location.hash.slice('#pc-aktar='.length)).trim();
+          const kod = ayiklaHashParametresi(location.hash, 'pc-aktar');
           const kodInput = document.getElementById('mobil-pc-oturum-kodu');
           if (kodInput && kod) kodInput.value = kod;
+          const sonucKodInp = document.getElementById('mobil-sonuc-pc-kodu');
+          if (sonucKodInp && kod) sonucKodInp.value = kod;
           setTimeout(() => {
             const sekmeBtn = document.querySelector('[data-msekme="m-panel-anahtar"]');
             if (sekmeBtn) sekmeBtn.click();
@@ -627,6 +676,10 @@
       function uygulaPwaQrMetni(hamMetin, kaynakEtiket = 'QR') {
         const metin = String(hamMetin || '').trim();
         if (!metin) return false;
+        if (metin.includes('omrToken=')) {
+          const qrTok = ayiklaHashParametresi(metin.slice(metin.indexOf('#') >= 0 ? metin.indexOf('#') : 0), 'omrToken');
+          if (qrTok) kaydetMobilHocaToken(qrTok);
+        }
         if (metin.includes('setup=')) {
           const parca = metin.slice(metin.indexOf('setup='));
           const cozulmusSetup = C.cozKompaktSetupQrPaketi('#' + parca);
@@ -726,11 +779,7 @@
           return;
         }
         try {
-          let hocaToken = '';
-          try {
-            const hOturum = JSON.parse(sessionStorage.getItem('HOCA_AKTIF_OTURUM_V1') || 'null');
-            if (hOturum && hOturum.token) hocaToken = hOturum.token;
-          } catch (_) {}
+          const hocaToken = alAktifMobilHocaToken();
           const basliklar = { 'Content-Type': 'application/json' };
           if (hocaToken) basliklar.Authorization = `Bearer ${hocaToken}`;
           const y = await fetch('/api/ogrenci-qr-senkron', {
@@ -1541,20 +1590,29 @@
             }
             const paket = C.uretOmrSonucPaketi(mobilDurum.okumaSonuclari, mobilDurum.sinavYapisi);
             try {
+              const hocaToken = alAktifMobilHocaToken();
+              const basliklar = { 'Content-Type': 'application/json' };
+              if (hocaToken) basliklar.Authorization = `Bearer ${hocaToken}`;
               const y = await fetch('/api/omr-sonuc-senkron', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: basliklar,
                 body: JSON.stringify({
                   oturumKodu,
                   paket: paket.paketKodu,
                   okumaSonuclari: paket.okumaSonuclari,
-                  sinavKodu: paket.sinavKodu
+                  sinavKodu: paket.sinavKodu,
+                  sinavSurumId: paket.sinavSurumId || undefined,
+                  token: hocaToken || undefined
                 })
               });
               const v = await y.json();
               if (y.ok && v && v.basarili) {
                 if (bilgi) bilgi.textContent = `✅ ${v.adet || v.aktarilanSayi || paket.kayitSayisi} kağıtlık detaylı sonuç (${oturumKodu}) bilgisayar stüdyosuna gönderildi!`;
                 bipCal(true);
+                return;
+              }
+              if (y.status === 401) {
+                if (bilgi) bilgi.textContent = '🔒 Yetkili öğretmen oturumu gerekiyor (401): Bilgisayar stüdyosundan kurulum QR kodunu okutun veya "📋 Paketi Kopyala" / "📦 Stüdyo Paketi (.json)" kullanın.';
                 return;
               }
               if (bilgi) bilgi.textContent = `⚠️ Sunucu yanıtı: ${(v && v.hata) || y.status}. "📦 Stüdyo Paketi (.json)" veya "📋 Paketi Kopyala" kullanabilirsiniz.`;

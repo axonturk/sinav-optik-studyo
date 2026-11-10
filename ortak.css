@@ -1072,11 +1072,16 @@ body.kiosk-aktif .kiosk-gizle {
   #sekme-omr,
   #sekme-ogrenciler,
   #sekme-online,
+  #sekme-sablonlar,
   #sekme-analiz > :not(#kart-bireysel-karneler),
   #modal-hoca-giris,
   #modal-yeni-ders,
   #modal-ogrenci-qr,
   #modal-hizli-soru-duzenle,
+  #modal-bologna-ice-aktar,
+  #modal-ai-oc-onay,
+  #uyari-a4-tasma-kutu,
+  #trafik-oc-bloom-cubuk,
   #kiosk-sinav-alani {
     display: none !important;
   }
@@ -1087,6 +1092,7 @@ body.kiosk-aktif .kiosk-gizle {
 
   .ana-kapsayici,
   .iki-sutun-duzen,
+  #baski-alan-kapsayici,
   .a4-sahne {
     margin: 0 !important;
     padding: 0 !important;
@@ -1101,7 +1107,7 @@ body.kiosk-aktif .kiosk-gizle {
     min-height: 297mm !important;
     max-height: 297mm !important;
     margin: 0 !important;
-    padding: 8mm 9mm !important;
+    padding: var(--sayfa-ic-bosluk, 8mm 9mm) !important;
     box-shadow: none !important;
     page-break-after: always;
     break-after: page;
@@ -1207,16 +1213,16 @@ body.kiosk-aktif .kiosk-gizle {
 .soru-ekran-araclari:focus-within { opacity: 1; pointer-events: auto; }
 .soru-ekran-araclari .soru-ekran-etiket { white-space: nowrap; }
 
-/* ===== Sekme çubuğu v2: 6 eşit sütun, iki satırlı (başlık + alt açıklama), rozet köşede, yatay kaydırma yok, yazı üst üste binmez ===== */
-.sekme-cubuk-ic { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.4rem; overflow: visible; }
-.sekme-btn { position: relative; flex-direction: row; justify-content: flex-start; align-items: center; white-space: normal; min-width: 0; text-align: left; padding: 0.45rem 0.7rem; gap: 0.5rem; line-height: 1.2; }
-.sekme-ikon { font-size: 1.25rem; flex: 0 0 auto; }
+/* ===== Sekme çubuğu v3: 7 sekme desteği, iki satırlı (başlık + alt açıklama), rozet köşede, 390x844 yatay taşmasız ===== */
+.sekme-cubuk-ic { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.35rem; overflow: visible; }
+.sekme-btn { position: relative; flex-direction: row; justify-content: flex-start; align-items: center; white-space: normal; min-width: 0; text-align: left; padding: 0.42rem 0.6rem; gap: 0.45rem; line-height: 1.2; }
+.sekme-ikon { font-size: 1.18rem; flex: 0 0 auto; }
 .sekme-metin { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
-.sekme-baslik { font-size: 0.86rem; font-weight: 700; overflow-wrap: anywhere; }
-.sekme-alt { font-size: 0.7rem; font-weight: 500; color: var(--metin-ikincil); opacity: 0.9; overflow-wrap: anywhere; }
+.sekme-baslik { font-size: 0.82rem; font-weight: 700; overflow-wrap: anywhere; }
+.sekme-alt { font-size: 0.68rem; font-weight: 500; color: var(--metin-ikincil); opacity: 0.9; overflow-wrap: anywhere; }
 .sekme-btn .sekme-rozet { position: absolute; top: -6px; right: -4px; font-size: 0.68rem; padding: 0.05rem 0.4rem; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
 .sekme-btn.aktif { border-bottom: 3px solid var(--birincil); }
-@media (max-width: 1100px) { .sekme-cubuk-ic { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1280px) { .sekme-cubuk-ic { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 640px) {
   html, body { max-width: 100vw; overflow-x: hidden; }
   .sekme-cubuk-ic { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1232,3 +1238,17 @@ body.kiosk-aktif .kiosk-gizle {
 .optik-cerceve.optik-kanonik { padding: 0; border: none; margin-bottom: 6px; background: #fff !important; line-height: 0; }
 .optik-cerceve.optik-kanonik svg { display: block; width: 100%; height: auto; }
 @media print { .optik-cerceve.optik-kanonik { page-break-inside: avoid; break-inside: avoid; } }
+
+/* Faz 2: ÖÇ Kapsam Trafik Işığı, Kurumsal Şablon Kartları ve Onay Masası */
+.oc-trafik-cubuk { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem 0.75rem; border-radius: 8px; font-size: 0.78rem; margin-bottom: 0.6rem; border: 1px solid var(--kenar); }
+.oc-trafik-cubuk.yesil { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+.oc-trafik-cubuk.sari { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+.oc-trafik-cubuk.kirmizi { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
+.oc-cip-liste { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.oc-cip { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.12rem 0.45rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; background: rgba(255,255,255,0.85); border: 1px solid rgba(15,23,42,0.15); }
+.sablon-kart-izgara { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.65rem; }
+.sablon-kart { border: 1px solid var(--kenar); border-radius: 10px; padding: 0.75rem; background: #fff; display: flex; flex-direction: column; gap: 0.4rem; }
+.sablon-kart.secili { border: 2px solid var(--birincil); background: #eff6ff; }
+.yer-tutucu-etiket { display: inline-block; font-family: monospace; font-size: 0.72rem; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 0.1rem 0.35rem; cursor: pointer; }
+.balon-hizli-btn { padding: 0.15rem 0.42rem; font-size: 0.72rem; font-weight: 700; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; cursor: pointer; }
+.balon-hizli-btn:hover { background: #dbeafe; border-color: #2563eb; }

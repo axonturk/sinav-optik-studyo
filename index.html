@@ -105,6 +105,10 @@
         <span class="sekme-ikon" aria-hidden="true">🌐</span>
         <span class="sekme-metin"><span class="sekme-baslik">6. Online Sınav</span><span class="sekme-alt">kiosk kilidi</span></span>
       </button>
+      <button type="button" class="sekme-btn" data-sekme="sekme-sablonlar">
+        <span class="sekme-ikon" aria-hidden="true">🏛️</span>
+        <span class="sekme-metin"><span class="sekme-baslik">7. Kalite &amp; Şablonlar</span><span class="sekme-alt">kurumsal antet &amp; OBS</span></span>
+      </button>
     </div>
   </nav>
 
@@ -775,6 +779,20 @@
               </details>
             </div>
 
+            <!-- Hızlı Kurumsal Kalite Şablonu Seçici + Ek Sayfa (3+ Sayfa) Sınır Kilidi -->
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem; flex-wrap:wrap; padding:0.45rem 0.6rem; margin-bottom:0.45rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px;">
+              <div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; flex:1; min-width:220px;">
+                <label class="etiket" for="sec-hizli-kurum-sablonu" style="margin:0; white-space:nowrap;">🏛️ Kurumsal Şablon:</label>
+                <select id="sec-hizli-kurum-sablonu" style="flex:1; min-width:180px; font-size:0.78rem; padding:0.28rem 0.45rem;"></select>
+                <button type="button" class="btn btn-kucuk" id="btn-stüdyo-sablon-sekme-ac" title="Kurumsal Kalite & Şablon Stüdyosunu Aç">⚙️ Düzenle</button>
+                <button type="button" class="btn btn-mor btn-kucuk" id="btn-stüdyo-bologna-ac" title="Proliz / ÜBYS Bologna Ders Bilgi Paketinden ÖÇ, PÇ ve 14 Hafta Konularını İçe Aktar">🤖 Bologna / ÖÇ İçe Aktar</button>
+              </div>
+              <label for="ayar-ek-sayfa-izni" style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.76rem; font-weight:700; cursor:pointer; color:var(--metin-ikincil);" title="Varsayılan olarak sınav kağıdı 1 A4 yaprağa (2 sayfa önlü-arkalı) kilitlenir. Çok uzun metinli sınavlarda 3+ sayfaya taşmaya izin vermek için işaretleyin.">
+                <input type="checkbox" id="ayar-ek-sayfa-izni" />
+                <span>📄 Sığmazsa Ek Sayfaya (3+ A4) İzin Ver</span>
+              </label>
+            </div>
+
             <!-- 4) Tek birincil eylem + ikincil kısayollar -->
             <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; padding-top:0.5rem; border-top:1px dashed var(--kenar);">
               <button type="button" class="btn btn-birincil" id="btn-secili-baski-calistir" title="Seçtiğiniz belgeyi seçtiğiniz formatta indirir veya yazdırır">🚀 Çıktıyı Al</button>
@@ -832,8 +850,21 @@
             </div>
           </div>
 
+          <!-- BASKI ÖNCESİ ÖÇ KAPSAM & BLOOM DENGESİ TRAFİK IŞIĞI + A4 TAŞMA UYARI KALKANI -->
+          <div id="trafik-oc-bloom-cubuk" class="oc-trafik-cubuk yesil yazdir-gizle">
+            <span id="etiket-oc-trafik-mesaj">🟢 ÖÇ Kapsam &amp; Bloom Dengesi kontrol ediliyor...</span>
+            <div id="kutu-oc-trafik-cipler" class="oc-cip-liste"></div>
+          </div>
+
+          <div id="uyari-a4-tasma-kutu" class="yazdir-gizle" hidden style="padding:0.65rem 0.85rem; margin-bottom:0.6rem; background:#fef2f2; border:1.5px solid #ef4444; border-radius:8px; color:#991b1b; font-size:0.8rem; font-weight:700; display:none; align-items:center; justify-content:space-between; gap:0.5rem; flex-wrap:wrap;">
+            <span id="uyari-a4-tasma-metin">⚠️ Soru metinleri en sıkı ölçekte dahi 2 A4 sayfasını aşıyor! Soru kırpılmasını önlemek için soru sayısını azaltın veya ek sayfaya izin verin.</span>
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-tasma-ek-sayfa-ac">📄 Ek Sayfaya (3+ A4) İzin Ver ve Yeniden Diz</button>
+          </div>
+
           <!-- A4 SAHNESİ (SAYFA 1/2 VE SAYFA 2/2 BURADA ÜRETİLİR) -->
-          <div class="a4-sahne" id="a4-onizleme-sahne"></div>
+          <div id="baski-alan-kapsayici">
+            <div class="a4-sahne" id="a4-onizleme-sahne"></div>
+          </div>
         </div>
 
       </div>
@@ -1070,6 +1101,15 @@
               </select>
             </div>
           </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:0.45rem; flex-wrap:wrap; padding:0.5rem 0.65rem; margin-bottom:0.55rem; background:#eff6ff; border:1px solid #93c5fd; border-radius:8px;">
+            <div style="font-size:0.78rem; color:#1e3a8a;">
+              <strong>🤖 Akıllı Bologna &amp; ÖÇ Otomasyonu:</strong> Dersin Bologna sayfasını yapıştırarak <code>ÖÇ + PÇ + 14 Hafta</code> yapısını tanımlayın ve soruları tek tıkla <strong>ÖÇ + Hafta + Bloom</strong> ile etiketleyin.
+            </div>
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+              <button type="button" class="btn btn-mor btn-kucuk" id="btn-banka-bologna-ac">📥 Bologna Bilgi Paketi İçe Aktar</button>
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-banka-otomatik-oc-analiz">🤖 Soruları Otomatik ÖÇ &amp; Bloom Analiz Et</button>
+            </div>
+          </div>
           <div id="kutu-banka-arsiv-cubuk" style="display:none; padding:0.55rem 0.65rem; margin-bottom:0.55rem; background:var(--uyari-acik); border:1px solid var(--uyari); border-radius:6px; font-size:0.8rem;"></div>
           <div id="kutu-banka-oc-ozet" style="padding:0.45rem 0.6rem; margin-bottom:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; font-size:0.76rem;"></div>
           <div class="tablo-sarmal">
@@ -1287,7 +1327,13 @@
             <button type="button" class="btn btn-birincil btn-kucuk" id="btn-obs-resmi-csv-indir" title="Sınava girmeyenleri GR olarak işaretleyen ve Harf Notu (AA..FF) hesaplayan tam sınıf çizelgesi">
               🏛️ OBS / e-Okul Resmi Not Çizelgesi (GR + Harf Notu)
             </button>
+            <button type="button" class="btn btn-kucuk" id="btn-ozel-obs-csv-indir" title="Kurumsal Şablondaki özel sütun dizilimiyle (Proliz / ÜBYS) OBS CSV indir">
+              📑 Okula Özel OBS CSV
+            </button>
             <button type="button" class="btn btn-basari btn-kucuk" id="btn-csv-indir">📊 Okunan Kağıtlar (.csv) İndir</button>
+            <button type="button" class="btn btn-uyari btn-kucuk" id="btn-pj-rjx-bankaya-isle" title="Hesaplanan pj (güçlük) ve rjx (ayırt edicilik) değerlerini soru bankasındaki soru kartlarına geçmiş istatistik olarak kaydeder">
+              📥 pj/rjx Bankaya İşle
+            </button>
           </div>
         </div>
 
@@ -1372,6 +1418,7 @@
                 <th>Ayırt Edicilik (<code class="mono">rjx</code>)</th>
                 <th>Kalite Teşhisi</th>
                 <th>Şık / Çeldirici Dağılımı</th>
+                <th>Hızlı İşlem</th>
               </tr>
             </thead>
             <tbody id="tablo-madde-analizi"></tbody>
@@ -1426,6 +1473,76 @@
             </table>
           </div>
         </div>
+      </div>
+
+      <!-- FAZ 2: 4 KATMANLI AKREDİTASYON PANOSU (PÇ 1-5 GERÇEKLEŞME + KÜMÜLATİF DÖNEM SONU ÖÇ MATRİSİ + PUKÖ RAPORU + MADDİ HATA KANITI) -->
+      <div class="iki-sutun-duzen yazdir-gizle" style="grid-template-columns: 1fr 1fr; margin-bottom:1rem;">
+        <div class="kart" style="margin:0;">
+          <div class="kart-baslik">
+            <span>🏛️ Program Çıktıları (PÇ 1–5 Ölçeği) Gerçekleşme Tablosu</span>
+            <span class="rozet rozet-mor">Bologna ÖÇ × PÇ</span>
+          </div>
+          <p style="font-size:0.76rem; color:var(--metin-ikincil); margin-bottom:0.45rem;">
+            Dersin Bologna bilgi paketindeki <code>ÖÇ × PÇ (1–5)</code> katkı matrisine göre hesaplanan Program Çıktısı kazanım skorları:
+          </p>
+          <div class="tablo-sarmal">
+            <table class="veri-tablo">
+              <thead>
+                <tr>
+                  <th>PÇ Kodu</th>
+                  <th>Katkı Veren ÖÇ'ler</th>
+                  <th>Başarı %</th>
+                  <th>Akreditasyon Skoru (5'lik)</th>
+                  <th>Durum</th>
+                </tr>
+              </thead>
+              <tbody id="tablo-pc-gerceklesme"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="kart" style="margin:0;">
+          <div class="kart-baslik">
+            <span>📋 Otomatik PUKÖ / CQI Ders Özdeğerlendirme Tutanağı</span>
+            <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+              <button type="button" class="btn btn-kucuk" id="btn-puko-kopyala">📋 Metni Kopyala</button>
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-puko-txt-indir">📄 PUKÖ Tutanağı (.txt)</button>
+            </div>
+          </div>
+          <textarea id="metin-puko-raporu" rows="7" readonly style="font-size:0.76rem; line-height:1.45; background:var(--bg-ikincil);" placeholder="Optik okuma veya sınav verisi geldiğinde YÖKAK / MEDEK / MÜDEK uyumlu PUKÖ özdeğerlendirme metni otomatik üretilir..."></textarea>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.45rem; flex-wrap:wrap; margin-top:0.5rem; padding-top:0.45rem; border-top:1px dashed var(--kenar);">
+            <div style="display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap;">
+              <label class="etiket" for="sec-maddi-hata-ogrenci" style="margin:0; font-size:0.75rem;">⚖️ İtiraz Kanıtı:</label>
+              <select id="sec-maddi-hata-ogrenci" style="width:auto; min-width:170px; font-size:0.75rem; padding:0.22rem 0.4rem;">
+                <option value="">— Öğrenci Seçin —</option>
+              </select>
+            </div>
+            <button type="button" class="btn btn-kucuk" id="btn-maddi-hata-kanit-indir">📄 Maddi Hata Kanıt Tutanağı (.txt)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="kart yazdir-gizle">
+        <div class="kart-baslik">
+          <span>📈 Dönem Sonu Kümülatif <code class="mono">Öğrenci × ÖÇ</code> Birleştirici (Vize %40 + Final %60 / Bütünleme İkamesi)</span>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+            <select id="sec-aktif-sinav-donem-turu" style="width:auto; font-size:0.76rem; padding:0.25rem 0.45rem;">
+              <option value="vize" selected>Ara Sınav (Vize)</option>
+              <option value="final">Yarıyıl Sonu (Final)</option>
+              <option value="butunleme">Bütünleme (Final Yerine)</option>
+            </select>
+            <input type="number" id="ayar-aktif-sinav-agirlik" min="1" max="100" value="40" style="width:68px; font-size:0.76rem; padding:0.25rem 0.4rem;" title="Dönem içi ağırlık %" />
+            <span style="font-size:0.75rem; font-weight:700;">%</span>
+            <button type="button" class="btn btn-kucuk" id="btn-donem-sinav-paketi-indir" title="Bu sınavın Öğrenci × ÖÇ matrisini dönem sonu birleştirmesi için JSON olarak indir">💾 Bu Sınavı Dönem Paketi İndir</button>
+            <label for="input-donem-sinav-dosya" class="btn btn-mor btn-kucuk" style="cursor:pointer; margin:0;">📂 Önceki Sınav (Vize/Final) Ekle</label>
+            <input type="file" id="input-donem-sinav-dosya" accept=".json,application/json" style="display:none;" />
+            <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-donem-paketleri-temizle" title="Eklenen diğer dönem sınavlarını temizle">🗑️</button>
+          </div>
+        </div>
+        <div id="etiket-kumulatif-bilgi" style="font-size:0.76rem; color:var(--metin-ikincil); margin-bottom:0.45rem;">
+          Aktif sınav sonuçları dönem ağırlığıyla gösteriliyor. Vize paketini kaydedip Final sınavında yüklediğinizde (veya Bütünleme eklediğinizde) ağırlıklı dönem sonu <strong>Öğrenci × ÖÇ</strong> matrisi otomatik birleşir.
+        </div>
+        <div id="kutu-kumulatif-oc-matrisi" class="tablo-sarmal"></div>
       </div>
 
       <!-- Bireysel Öğrenci Sonuç Karneleri Önizleme & Baskı Alanı (1 A4'e 4 Kesilebilir Karne Fişi) -->
@@ -1775,6 +1892,146 @@
       </div>
     </section>
 
+    <!-- ====================================================================
+         SEKME 7: KURUMSAL KALİTE & ŞABLON STÜDYOSU (TİCARİ / ÇOKLU KURUM PAKETİ)
+         ==================================================================== -->
+    <section class="sekme-panel" id="sekme-sablonlar">
+      <div class="iki-sutun-duzen">
+        <!-- Sol: Kalite Belgesi Yükle -> Otomatik Tanı & 5'li Şablon Editörü -->
+        <div>
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>🏛️ Kalite Belgesi Yükle → Otomatik Tanı &amp; Antet Çıkarıcı</span>
+              <span class="rozet rozet-mavi">DOCX · HTML · PDF · Görsel</span>
+            </div>
+            <p style="font-size:0.79rem; color:var(--metin-ikincil); margin-bottom:0.55rem;">
+              Okulunuzun resmi kalite formunu (<code>.docx</code>, <code>.html</code>, <code>.pdf</code> veya antet görseli) yükleyin; sistem <strong>Kurum Logosu, Doküman No, Yayın/Revizyon Tarihi, Fakülte/MYO ve Alt Onay</strong> alanlarını otomatik çıkarıp şablona dönüştürsün:
+            </p>
+            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin-bottom:0.55rem;">
+              <input type="file" id="input-kalite-belge-yukle" accept=".docx,.doc,.html,.htm,.pdf,image/*" style="flex:1; min-width:210px;" />
+              <label for="input-kurum-sablon-yukle" class="btn btn-kucuk" style="cursor:pointer; margin:0;">📥 Şablon Paketi (.json) Yükle</label>
+              <input type="file" id="input-kurum-sablon-yukle" accept=".json,.kurumsablon.json,application/json" style="display:none;" />
+            </div>
+            <div id="etiket-kalite-ototani-durum" style="display:none; padding:0.5rem 0.65rem; background:#ecfdf5; border:1px solid #6ee7b7; border-radius:6px; font-size:0.78rem; color:#065f46; margin-bottom:0.55rem;"></div>
+
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="sablon-ad">Şablon Paketi Adı</label>
+                <input type="text" id="sablon-ad" placeholder="Örn: Kırıkhan MYO Kalite Şablonu (2026)" />
+              </div>
+              <div>
+                <label class="etiket" for="sablon-kurum-adi">Üniversite / Üst Kurum Adı</label>
+                <input type="text" id="sablon-kurum-adi" placeholder="Örn: T.C. HATAY MUSTAFA KEMAL ÜNİVERSİTESİ" />
+              </div>
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="sablon-birim-adi">Fakülte / MYO / Bölüm Adı</label>
+                <input type="text" id="sablon-birim-adi" placeholder="Örn: Kırıkhan MYO · Bilgi Güvenliği Teknolojisi" />
+              </div>
+              <div>
+                <label class="etiket" for="sablon-dokuman-no">Kalite Doküman No</label>
+                <input type="text" id="sablon-dokuman-no" placeholder="Örn: FR-EĞT-01 / FRM-046" />
+              </div>
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="sablon-yayin-tarihi">İlk Yayın Tarihi</label>
+                <input type="text" id="sablon-yayin-tarihi" placeholder="Örn: 30.01.2023" />
+              </div>
+              <div>
+                <label class="etiket" for="sablon-revizyon-no">Revizyon No / Tarihi</label>
+                <input type="text" id="sablon-revizyon-no" placeholder="Örn: 01 / 01.09.2025" />
+              </div>
+            </div>
+
+            <div style="margin-bottom:0.55rem;">
+              <div style="font-size:0.74rem; font-weight:700; color:var(--metin-ikincil); margin-bottom:0.3rem;">
+                Dinamik Yer Tutucular (Tıklayarak üst/alt şeride ekleyebilirsiniz):
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:0.28rem;" id="kutu-sablon-yer-tutucular">
+                <span class="yer-tutucu-etiket" data-yt="{{KURUM_ADI}}">{{KURUM_ADI}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{BIRIM_ADI}}">{{BIRIM_ADI}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{DOKUMAN_NO}}">{{DOKUMAN_NO}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{YAYIN_TARIHI}}">{{YAYIN_TARIHI}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{REVIZYON_NO}}">{{REVIZYON_NO}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{DERS_KODU}}">{{DERS_KODU}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{DERS_ADI}}">{{DERS_ADI}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{SINAV_TURU}}">{{SINAV_TURU}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{KITAPCIK_GRUBU}}">{{KITAPCIK_GRUBU}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{TARIH}}">{{TARIH}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{SURE}}">{{SURE}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{DERS_SORUMLUSU}}">{{DERS_SORUMLUSU}}</span>
+                <span class="yer-tutucu-etiket" data-yt="{{SAYFA_NO}}">{{SAYFA_NO}}</span>
+              </div>
+            </div>
+
+            <div class="form-grup">
+              <label class="etiket" for="sablon-ust-antet">1) Sınav Kağıdı Üst Antet Şablonu</label>
+              <input type="text" id="sablon-ust-antet" value="{{KURUM_ADI}} — {{BIRIM_ADI}} | {{DERS_KODU}} {{DERS_ADI}} ({{SINAV_TURU}})" />
+            </div>
+            <div class="form-grup">
+              <label class="etiket" for="sablon-alt-onay">1B) Sınav Kağıdı Alt Onay &amp; Kalite Künye Şeridi</label>
+              <input type="text" id="sablon-alt-onay" value="Doküman No: {{DOKUMAN_NO}} · Yayın: {{YAYIN_TARIHI}} · Rev: {{REVIZYON_NO}} · {{DERS_SORUMLUSU}} · {{SAYFA_NO}}" />
+            </div>
+
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="sablon-yoklama-baslik">2) Resmi Yoklama Listesi Başlığı</label>
+                <input type="text" id="sablon-yoklama-baslik" value="RESMİ SINAV YOKLAMA VE KİTAPÇIK İMZA ÇİZELGESİ" />
+              </div>
+              <div>
+                <label class="etiket" for="sablon-tutanak-baslik">3) Sınav Durum Tutanağı Başlığı</label>
+                <input type="text" id="sablon-tutanak-baslik" value="SINAV UYGULAMA VE EVRAK TESLİM TUTANAĞI" />
+              </div>
+            </div>
+
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="sablon-akreditasyon-turu">4) Bologna / Akreditasyon Standardı &amp; Baraj %</label>
+                <div style="display:flex; gap:0.35rem;">
+                  <input type="text" id="sablon-akreditasyon-turu" value="YÖKAK / MEDEK / MÜDEK" style="flex:1;" />
+                  <input type="number" id="sablon-akreditasyon-baraj" min="30" max="90" value="60" style="width:74px;" title="ÖÇ/PÇ Başarı Barajı %" />
+                </div>
+              </div>
+              <div>
+                <label class="etiket" for="sablon-obs-sutunlar">5) Okula Özel OBS Not Yükleme Sütunları (Proliz / ÜBYS)</label>
+                <input type="text" id="sablon-obs-sutunlar" value="OGRENCI_NO;AD_SOYAD;KITAPCIK;PUAN;HARF_NOTU;DURUM" title="Noktalı virgülle ayrılmış sütun kodları" />
+              </div>
+            </div>
+
+            <div style="display:flex; gap:0.45rem; flex-wrap:wrap; margin-top:0.5rem;">
+              <button type="button" class="btn btn-birincil" id="btn-kurum-sablon-kaydet">💾 5'li Kurumsal Şablon Olarak Kaydet &amp; Uygula</button>
+              <button type="button" class="btn btn-basari btn-kucuk" id="btn-kurum-sablon-indir">📦 Şablon Paketini İndir (.kurumsablon.json)</button>
+              <button type="button" class="btn btn-kucuk" id="btn-kurum-sablon-yeni">➕ Yeni Boş Şablon</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sağ: Canlı Antet Önizlemesi & Kayıtlı Kurumsal Şablonlar Kütüphanesi -->
+        <div>
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>👁️ Canlı Kurumsal Antet &amp; Alt Künye Önizlemesi</span>
+              <span class="rozet rozet-yesil">A4 Üst / Alt Şerit</span>
+            </div>
+            <div id="onizleme-kurum-antet" style="padding:0.85rem; background:#ffffff; border:1.5px solid #0f172a; border-radius:8px; font-size:0.8rem;"></div>
+          </div>
+
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>📚 Kayıtlı Kurumsal Kalite Şablonları</span>
+              <span class="rozet rozet-mor" id="rozet-kurum-sablon-sayisi">2 Şablon</span>
+            </div>
+            <p style="font-size:0.78rem; color:var(--metin-ikincil); margin-bottom:0.55rem;">
+              Farklı üniversite, fakülte veya MYO birimleri için kaydettiğiniz 5'li şablon paketleri arasında tek tıkla geçiş yapabilirsiniz:
+            </p>
+            <div id="izgara-kayitli-kurum-sablonlari" class="sablon-kart-izgara"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
   <!-- ÖĞRENCİ ONLİNE SINAV TAM KARANTİNA (KİOSK) EKRANI -->
   <section id="kiosk-sinav-alani" class="kiosk-ekran" style="display:none;">
@@ -1952,6 +2209,11 @@
       <!-- Sınav Kağıdında ÖÇ Listeleme Açıldığında Dersin ÖÇ Kaydı Yoksa Gösterilen Uyarı -->
       <div id="uyari-oc-kayit-gerekli" style="display:none; padding:0.6rem 0.75rem; margin-bottom:0.65rem; background:#fffbeb; border:1.5px solid #f59e0b; border-radius:8px; color:#92400e; font-size:0.8rem; font-weight:700;">
         ⚠️ <strong>Önce Bologna Öğrenim Çıktısı (ÖÇ) Kaydı Gerekiyor:</strong> Sınav kağıdında ÖÇ gösterimini veya Bologna ÖÇ kuralını seçtiniz ancak aktif ders için henüz ÖÇ maddeleri kaydedilmemiş. Lütfen aşağıdan dersin ÖÇ maddelerini (4 madde, 5 madde vb.) girip kaydedin.
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:0.45rem; flex-wrap:wrap; padding:0.5rem 0.65rem; margin-bottom:0.65rem; background:#f5f3ff; border:1px solid #c4b5fd; border-radius:8px;">
+        <span style="font-size:0.78rem; color:#4c1d95;"><strong>🤖 Hızlı Bologna Kurulumu:</strong> Proliz / ÜBYS sayfasını yapıştırarak ders kodu, ÖÇ, 14 hafta ve PÇ tablosunu tek tıkla doldurun:</span>
+        <button type="button" class="btn btn-mor btn-kucuk" id="btn-modal-ders-bologna-ac">📥 Bologna Sayfasından Doldur</button>
       </div>
 
       <div class="form-satir">
@@ -2400,6 +2662,67 @@
             📋 QR Bağlantısını / Paketi Kopyala
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FAZ 2 MODAL 1: ÇOK KANALLI BOLOGNA BİLGİ PAKETİ (PROLİZ / HTML TABLO / GÖRSEL) İÇE AKTARICI -->
+  <div id="modal-bologna-ice-aktar" role="dialog" aria-modal="true" aria-label="Bologna Ders Bilgi Paketi İçe Aktarıcı" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.62); z-index:1010; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
+    <div class="kart" style="max-width:860px; width:100%; margin:0; max-height:92vh; overflow-y:auto;">
+      <div class="kart-baslik">
+        <span>🤖 Bologna Ders Bilgi Paketi Çözümleyici (ÖÇ + PÇ + 14 Hafta + Değerlendirme %)</span>
+        <button type="button" class="btn btn-kucuk" id="btn-modal-bologna-kapat">✕</button>
+      </div>
+      <p style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.55rem;">
+        Üniversitenizin Bologna / Proliz OİBS / ÜBYS sayfasında <code>Ctrl+A → Ctrl+C</code> yapıp aşağıdaki kutuya <code>Ctrl+V</code> ile yapıştırın (zengin HTML tablo yapısı ve boş PÇ hücreleri otomatik korunur) veya ekran görüntüsü yükleyin:
+      </p>
+      <div style="display:flex; gap:0.45rem; flex-wrap:wrap; align-items:center; margin-bottom:0.5rem;">
+        <button type="button" class="btn btn-mor btn-kucuk" id="btn-bologna-ornek-yukle">
+          ⚡ Gerçek Proliz Örneğini Yükle (74161101 — Ağ Teknolojilerine Giriş)
+        </button>
+        <label for="input-bologna-gorsel" class="btn btn-kucuk" style="cursor:pointer; margin:0;">🖼️ Bologna Ekran Görüntüsü Seç</label>
+        <input type="file" id="input-bologna-gorsel" accept="image/*" style="display:none;" />
+        <span id="etiket-bologna-gorsel-ad" style="font-size:0.74rem; color:var(--metin-ikincil);"></span>
+      </div>
+      <textarea id="girdi-bologna-ham" rows="6" placeholder="Dersin Ayrıntıları, Değerlendirme Ölçütleri, Dersin Öğrenme Çıktıları, 1-14 Hafta Ders Konuları ve Program Çıktılarına Katkı tablosunu buraya yapıştırın..."></textarea>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.5rem; margin-bottom:0.65rem;">
+        <button type="button" class="btn btn-birincil" id="btn-bologna-cozumle">🔍 Bologna Verisini Çözümle ve ÖÇ×PÇ Analiz Et</button>
+        <button type="button" class="btn btn-basari" id="btn-bologna-uygula" disabled>✅ Aktif Derse / Yeni Derse Uygula ve Kaydet</button>
+      </div>
+      <div id="kutu-bologna-onizleme" style="display:none; padding:0.75rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; font-size:0.79rem;"></div>
+    </div>
+  </div>
+
+  <!-- FAZ 2 MODAL 2: SORU BAZLI OTOMATİK ÖÇ + HAFTA + BLOOM + ZORLUK HOCA ONAY MASASI -->
+  <div id="modal-ai-oc-onay" role="dialog" aria-modal="true" aria-label="Soru Bazlı Otomatik ÖÇ ve Bloom Onay Masası" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.62); z-index:1015; align-items:center; justify-content:center; padding:1rem; overflow-y:auto;">
+    <div class="kart" style="max-width:940px; width:100%; margin:0; max-height:92vh; overflow-y:auto;">
+      <div class="kart-baslik">
+        <span>🎯 Soru Bazlı Otomatik <code class="mono">ÖÇ · Hafta · Bloom · Zorluk</code> Hoca Onay Masası</span>
+        <button type="button" class="btn btn-kucuk" id="btn-modal-ai-oc-kapat">✕</button>
+      </div>
+      <p style="font-size:0.79rem; color:var(--metin-ikincil); margin-bottom:0.55rem;">
+        Tüm öneriler halüsinasyon kilidiyle yalnız aktif dersin kayıtlı <strong>Bologna Öğrenme Çıktıları (ÖÇ)</strong> arasından seçilmiştir. İstediğiniz satırı değiştirebilir veya tek tıkla tamamını mühürleyebilirsiniz:
+      </p>
+      <div class="tablo-sarmal" style="max-height:56vh; overflow-y:auto; margin-bottom:0.65rem;">
+        <table class="veri-tablo">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Soru Özeti</th>
+              <th>Birincil ÖÇ</th>
+              <th>İkincil ÖÇ</th>
+              <th>Hafta</th>
+              <th>Bloom Basamağı</th>
+              <th>Zorluk</th>
+              <th>Güven</th>
+            </tr>
+          </thead>
+          <tbody id="tablo-ai-oc-onay"></tbody>
+        </table>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem; flex-wrap:wrap;">
+        <button type="button" class="btn" id="btn-ai-oc-iptal">Vazgeç</button>
+        <button type="button" class="btn btn-basari" id="btn-ai-oc-tumunu-onayla">✅ Tüm Eşleşmeleri Onayla ve Soru Bankasına Kaydet</button>
       </div>
     </div>
   </div>

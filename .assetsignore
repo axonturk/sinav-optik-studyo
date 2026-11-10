@@ -1,11 +1,16 @@
+# Cloudflare Workers Static Assets Ignore List
+.git/
+.wrangler/
+node_modules/
+test-artifacts/
+ornek-dosyalar/
+*-test.js
+test-suite.js
+omr-geometri-denetim.js
 server.js
 worker.js
 package.json
 package-lock.json
+wrangler.toml
 wrangler.jsonc
-omr-geometri-denetim.js
-*test.js
-ornek-dosyalar/
-node_modules/
-.git/
-.wrangler/
+*.log
