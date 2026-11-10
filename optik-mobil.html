@@ -726,10 +726,17 @@
           return;
         }
         try {
+          let hocaToken = '';
+          try {
+            const hOturum = JSON.parse(sessionStorage.getItem('HOCA_AKTIF_OTURUM_V1') || 'null');
+            if (hOturum && hOturum.token) hocaToken = hOturum.token;
+          } catch (_) {}
+          const basliklar = { 'Content-Type': 'application/json' };
+          if (hocaToken) basliklar.Authorization = `Bearer ${hocaToken}`;
           const y = await fetch('/api/ogrenci-qr-senkron', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ oturumKodu, ogrenciler: mobilDurum.ogrenciler })
+            headers: basliklar,
+            body: JSON.stringify({ oturumKodu, ogrenciler: mobilDurum.ogrenciler, token: hocaToken || undefined })
           });
           const v = await y.json();
           if (y.ok && v && v.basarili) {
@@ -1220,6 +1227,7 @@
         });
 
         document.getElementById('btn-mobil-kamera-ac').addEventListener('click', async (e) => {
+          const kameraBtn = (e && e.currentTarget) || document.getElementById('btn-mobil-kamera-ac');
           const vizorBtn = document.getElementById('btn-vizor-ustu-oku');
           if (kameraStream) {
             kameraStream.getTracks().forEach((t) => t.stop());
@@ -1230,7 +1238,7 @@
             document.getElementById('mobil-video').style.display = 'none';
             document.getElementById('mobil-canvas-vizor').style.display = 'block';
             if (vizorBtn) vizorBtn.style.display = 'none';
-            e.currentTarget.textContent = '📷 Arka Kamerayı Aç';
+            if (kameraBtn) kameraBtn.textContent = '📷 Arka Kamerayı Aç';
             return;
           }
           try {
@@ -1243,7 +1251,7 @@
             v.style.display = 'block';
             document.getElementById('mobil-canvas-vizor').style.display = 'none';
             if (vizorBtn) vizorBtn.style.display = 'inline-flex';
-            e.currentTarget.textContent = '⏹️ Kamerayı Kapat';
+            if (kameraBtn) kameraBtn.textContent = '⏹️ Kamerayı Kapat';
             // Kamera açıldığında otomatik seri taramayı da başlat (kullanıcı düğme aramadan optik kutuyu tuttuğunda otomatik okusun)
             seriTaramaAktif = true;
             document.getElementById('btn-mobil-seri-tara').textContent = '⏹️ Seri Tarama: Açık';
@@ -1449,14 +1457,41 @@
           btnMobilPcAgGonder.addEventListener('click', () => gonderMobilOgrenciListesiBilgisayara());
         }
 
+        const kopyalaPanoyaGuvenli = async (metin) => {
+          const temiz = String(metin || '');
+          if (!temiz) return false;
+          window.__sonKopyalananMetin = temiz;
+          window.__sonKopyalananOmrMetni = temiz;
+          try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+              await navigator.clipboard.writeText(temiz);
+              return true;
+            }
+          } catch (_) {}
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = temiz;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            return true;
+          } catch (_) {
+            return false;
+          }
+        };
+
         const btnMobilQrKodKopyala = document.getElementById('btn-mobil-qr-kod-kopyala');
         if (btnMobilQrKodKopyala) {
-          btnMobilQrKodKopyala.addEventListener('click', () => {
+          btnMobilQrKodKopyala.addEventListener('click', async () => {
             const taban = location.protocol.startsWith('http') ? location.origin : 'https://sinav.axonturk.workers.dev';
             const paket = C.uretOgrenciQrPaketi(mobilDurum.ogrenciler, { tabanAdres: taban, hedefSayfa: 'index.html' });
             const aktifParca = paket.parcalar[mobilQrParcaIdx] || paket.parcalar[0];
             const kopyalanacak = (aktifParca && aktifParca.kod) || paket.tekUrl || '';
-            if (navigator.clipboard && kopyalanacak) navigator.clipboard.writeText(kopyalanacak);
+            await kopyalaPanoyaGuvenli(kopyalanacak);
             const bilgi = document.getElementById('etiket-mobil-qr-bilgi');
             if (bilgi) bilgi.textContent = '📋 Öğrenci QR paketi panoya kopyalandı; bilgisayarda "Yöntem 3" kutusuna yapıştırabilirsiniz.';
           });
@@ -1485,12 +1520,12 @@
 
         const btnMobilSonucKodKopyala = document.getElementById('btn-mobil-sonuc-kod-kopyala');
         if (btnMobilSonucKodKopyala) {
-          btnMobilSonucKodKopyala.addEventListener('click', () => {
+          btnMobilSonucKodKopyala.addEventListener('click', async () => {
             const taban = location.protocol.startsWith('http') ? location.origin : 'https://sinav.axonturk.workers.dev';
             const paket = C.uretOmrSonucPaketi(mobilDurum.okumaSonuclari, mobilDurum.sinavYapisi, { tabanAdres: taban });
-            if (navigator.clipboard && paket.kod) navigator.clipboard.writeText(paket.kod);
+            await kopyalaPanoyaGuvenli(paket.paketKodu || paket.kod);
             const bilgi = document.getElementById('etiket-mobil-sonuc-aktar-bilgi');
-            if (bilgi) bilgi.textContent = `📋 ${paket.toplamOkuma} kağıtlık detaylı sonuç paketi panoya kopyalandı. Bilgisayar stüdyosunda "OMR Sonuç Paketi İçe Aktar" alanına yapıştırabilirsiniz.`;
+            if (bilgi) bilgi.textContent = `📋 ${paket.kayitSayisi} kağıtlık detaylı sonuç paketi panoya kopyalandı. Bilgisayar stüdyosunda "OMR Sonuç Paketi İçe Aktar" alanına yapıştırabilirsiniz.`;
           });
         }
 
@@ -1509,11 +1544,16 @@
               const y = await fetch('/api/omr-sonuc-senkron', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ oturumKodu, okumaSonuclari: paket.okumaSonuclari, sinavKodu: paket.sinavKodu })
+                body: JSON.stringify({
+                  oturumKodu,
+                  paket: paket.paketKodu,
+                  okumaSonuclari: paket.okumaSonuclari,
+                  sinavKodu: paket.sinavKodu
+                })
               });
               const v = await y.json();
               if (y.ok && v && v.basarili) {
-                if (bilgi) bilgi.textContent = `✅ ${v.adet} kağıtlık detaylı sonuç (${oturumKodu}) bilgisayar stüdyosuna gönderildi!`;
+                if (bilgi) bilgi.textContent = `✅ ${v.adet || v.aktarilanSayi || paket.kayitSayisi} kağıtlık detaylı sonuç (${oturumKodu}) bilgisayar stüdyosuna gönderildi!`;
                 bipCal(true);
                 return;
               }

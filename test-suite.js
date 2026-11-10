@@ -907,7 +907,7 @@ async function calistirTumTestler() {
 
       const logKaydetYanit = await fetch(`http://127.0.0.1:${port}/api/kiosk-log-kaydet`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
         body: JSON.stringify(Object.assign({}, log2, { zamanDamgasi: '2000-01-01T00:00:00.000Z' }))
       });
       assert.strictEqual(logKaydetYanit.status, 201);
@@ -1099,9 +1099,18 @@ async function calistirTumTestler() {
     const server = await baslatSunucu(0);
     try {
       const port = server.address().port;
-      const gonderYanit = await fetch(`http://127.0.0.1:${port}/api/ogrenci-qr-senkron`, {
+      const hocaGirisYanit = await fetch(`http://127.0.0.1:${port}/api/hoca-giris`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kullaniciAdi: Cekirdek.VARSAYILAN_HOCA_HESAP.kullaniciAdi,
+          sifre: Cekirdek.VARSAYILAN_HOCA_HESAP.sifre
+        })
+      });
+      const { token: hocaToken } = await hocaGirisYanit.json();
+      const gonderYanit = await fetch(`http://127.0.0.1:${port}/api/ogrenci-qr-senkron`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
         body: JSON.stringify({
           oturumKodu: 'KMYO99',
           ogrenciler: ornekOgrenciler
@@ -1112,7 +1121,9 @@ async function calistirTumTestler() {
       assert.strictEqual(gonderJson.basarili, true);
       assert.strictEqual(gonderJson.aktarilanSayi, 3);
 
-      const alYanit = await fetch(`http://127.0.0.1:${port}/api/ogrenci-qr-senkron?oturum=KMYO99&tuket=1`);
+      const alYanit = await fetch(`http://127.0.0.1:${port}/api/ogrenci-qr-senkron?oturum=KMYO99&tuket=1`, {
+        headers: { Authorization: `Bearer ${hocaToken}` }
+      });
       assert.strictEqual(alYanit.status, 200);
       const alJson = await alYanit.json();
       assert.strictEqual(alJson.varMi, true);
@@ -1226,6 +1237,24 @@ async function calistirTumTestler() {
       [{ ogrNo: '2026001', toplamPuan: 85 }]
     );
     assert.ok(csvGuvenli.includes("'=cmd|"), 'CSV formül enjeksiyonu tek tırnak ile etkisizleştirilmelidir');
+
+    // 16.5 D/Y A grubu ardışıklık sınırı (enUzunDySerisi <= 3), KR-20 = 1.00, ocHucreler, OMR paket doğrulaması
+    for (const grup of ['A', 'B', 'C', 'D']) {
+      const dySeri = Cekirdek.hesaplaEnUzunDySerisi(kitapciklar[grup].dy);
+      assert.ok(dySeri <= 3, `${grup} kitapçığında D/Y ardışık aynı yanıt serisi <= 3 olmalıdır (Bulunan: ${dySeri})`);
+    }
+    assert.ok(
+      kazanimAnalizB.ogrenciOcMatrisi[0].ocHucreler &&
+      kazanimAnalizB.ogrenciOcMatrisi[0].ocHucreler['ÖÇ-1'] &&
+      kazanimAnalizB.ogrenciOcMatrisi[0].ocHucreler['ÖÇ-1'].yuzde === 100,
+      'ogrenciOcMatrisi içinde ocHucreler[ÖÇ-1] dolu olmalıdır'
+    );
+    const omrUretilen = Cekirdek.uretOmrSonucPaketi([
+      { ogrNo: '2024101001', adSoyad: 'Test Öğrenci', grup: 'A', toplamPuan: 85, klasikToplamPuan: 0 }
+    ]);
+    assert.strictEqual(Cekirdek.cozOmrSonucPaketi(omrUretilen.kod).gecerli, true, 'Üretilen OMR kompakt kod geçerli çözülmelidir');
+    assert.strictEqual(Cekirdek.cozOmrSonucPaketi(omrUretilen.jsonMetin).gecerli, true, 'Üretilen OMR JSON metni geçerli çözülmelidir');
+    assert.strictEqual(Cekirdek.cozOmrSonucPaketi({ sonuclar: [{ ogrNo: '', grup: 'Z', toplamPuan: 999 }] }).gecerli, false, 'Bozuk OMR paketi reddedilmelidir');
   });
 
   console.log(`\n=== TÜM TESTLER BAŞARIYLA TAMAMLANDI (${gecen}/${gecen} GEÇTİ · 0 HATA) ===`);

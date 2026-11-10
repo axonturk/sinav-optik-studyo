@@ -1660,99 +1660,165 @@
   }
 
   /* A4 Sayfa Taşma Önleyici ve Otomatik Sıkıştırma/Dengeleme Motoru:
-     Uzun soru/şık metinlerinde .a4-sayfa yüksekliği (1123px) aşılırsa önce Sayfa 1 -> Sayfa 2
-     blok aktarımını dengeler, ardından kademeli tipografik sıkıştırma ve çift sütunlu şık
-     düzeni uygulayarak scrollHeight <= clientHeight koşulunu garanti altına alır. */
+     Uzun soru/şık metinlerinde .a4-sayfa yüksekliği (1123px) aşılırsa Sayfa 1 <-> Sayfa 2
+     blok aktarımını ve kademeli tipografik sıkıştırmayı birlikte yürüterek
+     scrollHeight <= clientHeight ve 1 A4 (Ön/Arka 2 sayfa) hedefini garanti altına alır. */
   function dengeleVeSigdirA4Sayfalari(kapsayiciEl) {
     if (!kapsayiciEl) return;
-    const sayfalar = Array.from(kapsayiciEl.querySelectorAll('.a4-sayfa'));
-    if (sayfalar.length === 0) return;
+    const ilkSayfalar = Array.from(kapsayiciEl.querySelectorAll('.a4-sayfa'));
+    if (ilkSayfalar.length === 0) return;
 
-    // 1. Adım: Sayfa 1 taşmışsa ve hemen ardından Sayfa 2 geliyorsa fazla soru bloklarını Sayfa 2'nin başına aktar
-    for (let i = 0; i < sayfalar.length - 1; i++) {
-      const s1 = sayfalar[i];
-      const s2 = sayfalar[i + 1];
-      const etiket1 = (s1.querySelector('.a4-sayfa-etiket') || {}).textContent || '';
-      const etiket2 = (s2.querySelector('.a4-sayfa-etiket') || {}).textContent || '';
-      if (!etiket1.includes('SAYFA 1') || !etiket2.includes('SAYFA 2')) continue;
+    const kademeler = [
+      { font: '8.5pt', lh: '1.18', mb: '3px', sikIkiSutun: false, optikMaxMm: '', pad: '' },
+      { font: '8.1pt', lh: '1.14', mb: '2.5px', sikIkiSutun: false, optikMaxMm: '', pad: '' },
+      { font: '7.6pt', lh: '1.10', mb: '1.8px', sikIkiSutun: true, optikMaxMm: '58mm', pad: '' },
+      { font: '7.1pt', lh: '1.06', mb: '1.2px', sikIkiSutun: true, optikMaxMm: '52mm', pad: '5.5mm 6.5mm' },
+      { font: '6.6pt', lh: '1.03', mb: '0.8px', sikIkiSutun: true, optikMaxMm: '48mm', pad: '4.5mm 6mm' },
+      { font: '6.1pt', lh: '1.00', mb: '0.5px', sikIkiSutun: true, optikMaxMm: '44mm', pad: '4mm 5.5mm' },
+      { font: '5.6pt', lh: '0.98', mb: '0.4px', sikIkiSutun: true, optikMaxMm: '40mm', pad: '3.5mm 5mm', klasikMinYuk: '14mm' },
+      { font: '5.1pt', lh: '0.95', mb: '0.3px', sikIkiSutun: true, optikMaxMm: '37mm', pad: '3mm 4.5mm', klasikMinYuk: '11mm' },
+      { font: '4.7pt', lh: '0.93', mb: '0.2px', sikIkiSutun: true, optikMaxMm: '35mm', pad: '2.5mm 4mm', klasikMinYuk: '9mm' }
+    ];
+
+    const uygulaSayfaKademesi = (sayfaEl, k) => {
+      if (!sayfaEl || !k) return;
+      if (k.pad) sayfaEl.style.padding = k.pad;
+      const govde = sayfaEl.querySelector('.sorular-govde');
+      if (!govde) return;
+      govde.style.fontSize = k.font;
+      govde.style.lineHeight = k.lh;
+      govde.style.columnGap = '3.5mm';
+      govde.querySelectorAll('.soru-kutu, .dy-soru-satir').forEach((el) => {
+        el.style.marginBottom = k.mb;
+        el.style.paddingBottom = '1px';
+      });
+      govde.querySelectorAll('.bolum-baslik-serit').forEach((el) => {
+        el.style.margin = '2px 0 2px 0';
+        el.style.padding = '1px 4px';
+        el.style.fontSize = k.font;
+      });
+      if (k.sikIkiSutun) {
+        govde.querySelectorAll('.siklar-alt-alta').forEach((el) => {
+          el.style.display = 'grid';
+          el.style.gridTemplateColumns = '1fr 1fr';
+          el.style.gap = '0.5px 4px';
+        });
+      }
+      if (k.optikMaxMm) {
+        const optikSvg = sayfaEl.querySelector('svg.optik-form-svg');
+        if (optikSvg) optikSvg.style.maxHeight = k.optikMaxMm;
+      }
+      if (k.klasikMinYuk) {
+        govde.querySelectorAll('.klasik-cevap-kutusu, .klasik-alan').forEach((el) => {
+          el.style.minHeight = k.klasikMinYuk;
+          el.style.height = k.klasikMinYuk;
+        });
+      }
+    };
+
+    const dengeleCiftSayfa = (s1, s2) => {
       const govde1 = s1.querySelector('.sorular-govde');
       const govde2 = s2.querySelector('.sorular-govde');
-      if (!govde1 || !govde2) continue;
+      if (!govde1 || !govde2) return;
 
+      // s1 taşıyorsa son blokları s2'nin başına aktar
       let emniyet = 0;
-      while (s1.scrollHeight > s1.clientHeight && govde1.children.length > 2 && emniyet < 20) {
+      while (s1.scrollHeight > s1.clientHeight && govde1.children.length > 2 && emniyet < 30) {
         emniyet++;
         const sonEl = govde1.lastElementChild;
         if (!sonEl) break;
         govde2.insertBefore(sonEl, govde2.firstChild);
-        // Eğer Sayfa 1'in sonunda tek başına bölüm başlığı kaldıysa onu da Sayfa 2'nin başına taşı
         const yeniSon = govde1.lastElementChild;
         if (yeniSon && yeniSon.classList.contains('bolum-baslik-serit')) {
           govde2.insertBefore(yeniSon, govde2.firstChild);
         }
       }
+
+      // s2 taşıyorsa ve s1'de boş yer varsa s2'nin başındaki (klasik olmayan) blokları s1'in sonuna geri al
+      let geriEmniyet = 0;
+      while (s2.scrollHeight > s2.clientHeight && s1.scrollHeight < s1.clientHeight && govde2.children.length > 2 && geriEmniyet < 30) {
+        geriEmniyet++;
+        const ilkEl = govde2.firstElementChild;
+        if (!ilkEl) break;
+        if (ilkEl.textContent && ilkEl.textContent.includes('BÖLÜM 3')) break;
+        govde1.appendChild(ilkEl);
+        if (ilkEl.classList.contains('bolum-baslik-serit') && govde2.firstElementChild) {
+          const ikinciEl = govde2.firstElementChild;
+          govde1.appendChild(ikinciEl);
+          if (s1.scrollHeight > s1.clientHeight) {
+            govde2.insertBefore(ikinciEl, govde2.firstChild);
+            govde2.insertBefore(ilkEl, govde2.firstChild);
+            break;
+          }
+        } else if (s1.scrollHeight > s1.clientHeight) {
+          govde2.insertBefore(ilkEl, govde2.firstChild);
+          break;
+        }
+      }
+    };
+
+    // 1. Adım: Çift sayfalı (Sayfa 1 + Sayfa 2) kitapçıkları birlikte dengele ve sıkıştır
+    for (let i = 0; i < ilkSayfalar.length; i++) {
+      const s1 = ilkSayfalar[i];
+      const s2 = ilkSayfalar[i + 1];
+      const etiket1 = (s1.querySelector('.a4-sayfa-etiket') || {}).textContent || '';
+      const etiket2 = s2 ? ((s2.querySelector('.a4-sayfa-etiket') || {}).textContent || '') : '';
+      if (s2 && etiket1.includes('SAYFA 1') && etiket2.includes('SAYFA 2')) {
+        dengeleCiftSayfa(s1, s2);
+        for (const k of kademeler) {
+          if (s1.scrollHeight <= s1.clientHeight && s2.scrollHeight <= s2.clientHeight) break;
+          uygulaSayfaKademesi(s1, k);
+          uygulaSayfaKademesi(s2, k);
+          dengeleCiftSayfa(s1, s2);
+        }
+        i++;
+      } else if (s1.scrollHeight > s1.clientHeight) {
+        for (const k of kademeler) {
+          if (s1.scrollHeight <= s1.clientHeight) break;
+          uygulaSayfaKademesi(s1, k);
+        }
+      }
     }
 
-    // 2. Adım: Her A4 sayfası için kademeli sıkıştırma (scrollHeight <= clientHeight garantisi)
-    const kademeler = [
-      { font: '8.1pt', lh: '1.14', mb: '2.5px', sikIkiSutun: false, optikMaxMm: '' },
-      { font: '7.6pt', lh: '1.10', mb: '1.8px', sikIkiSutun: true, optikMaxMm: '58mm' },
-      { font: '7.1pt', lh: '1.06', mb: '1.2px', sikIkiSutun: true, optikMaxMm: '52mm' },
-      { font: '6.6pt', lh: '1.03', mb: '0.8px', sikIkiSutun: true, optikMaxMm: '48mm' },
-      { font: '6.1pt', lh: '1.00', mb: '0.5px', sikIkiSutun: true, optikMaxMm: '44mm' }
-    ];
-
+    // 2. Adım: Hâlâ taşan sayfa kaldıysa devam sayfası oluştur ve sayfa numaralarını ("Sayfa k / N") güncelle
     for (const sayfaEl of Array.from(kapsayiciEl.querySelectorAll('.a4-sayfa'))) {
       if (sayfaEl.scrollHeight <= sayfaEl.clientHeight) continue;
       const govde = sayfaEl.querySelector('.sorular-govde');
-      if (!govde) continue;
+      if (!govde || govde.children.length <= 2) continue;
 
-      for (const k of kademeler) {
-        if (sayfaEl.scrollHeight <= sayfaEl.clientHeight) break;
-        govde.style.fontSize = k.font;
-        govde.style.lineHeight = k.lh;
-        govde.style.columnGap = '3.5mm';
-        govde.querySelectorAll('.soru-kutu, .dy-soru-satir').forEach((el) => {
-          el.style.marginBottom = k.mb;
-          el.style.paddingBottom = '1px';
-        });
-        govde.querySelectorAll('.bolum-baslik-serit').forEach((el) => {
-          el.style.margin = '2px 0 2px 0';
-          el.style.padding = '1px 4px';
-          el.style.fontSize = k.font;
-        });
-        if (k.sikIkiSutun) {
-          govde.querySelectorAll('.siklar-alt-alta').forEach((el) => {
-            el.style.display = 'grid';
-            el.style.gridTemplateColumns = '1fr 1fr';
-            el.style.gap = '0.5px 4px';
-          });
+      const devamSayfa = document.createElement('div');
+      devamSayfa.className = 'a4-sayfa';
+      if (sayfaEl.style.padding) devamSayfa.style.padding = sayfaEl.style.padding;
+      const mevcutEtiket = (sayfaEl.querySelector('.a4-sayfa-etiket') || {}).textContent || 'SINAV KAĞIDI';
+      devamSayfa.innerHTML = `
+        <div class="a4-sayfa-etiket">${C.kacisHTML(mevcutEtiket)} (DEVAM SAYFASI)</div>
+        <div class="sorular-govde" style="font-size:${govde.style.fontSize || '6.6pt'}; line-height:${govde.style.lineHeight || '1.03'}; column-gap:3.5mm;"></div>
+      `;
+      const devamGovde = devamSayfa.querySelector('.sorular-govde');
+      let koruma = 0;
+      while (sayfaEl.scrollHeight > sayfaEl.clientHeight && govde.children.length > 1 && koruma < 40) {
+        koruma++;
+        devamGovde.insertBefore(govde.lastElementChild, devamGovde.firstChild);
+      }
+      sayfaEl.insertAdjacentElement('afterend', devamSayfa);
+    }
+
+    // 3. Adım: Sayfa sayısı 2'yi aştıysa etiketlerdeki ve alt bilgideki "Sayfa X / Y" numaralarını gerçek sayfa sayısıyla senkronize et
+    const sonSayfalar = Array.from(kapsayiciEl.querySelectorAll('.a4-sayfa'));
+    if (sonSayfalar.length > 2) {
+      const toplamN = sonSayfalar.length;
+      sonSayfalar.forEach((sf, idx) => {
+        const sayfaNo = idx + 1;
+        const etEl = sf.querySelector('.a4-sayfa-etiket');
+        if (etEl && /SAYFA\s+\d+\s*\/\s*\d+/i.test(etEl.textContent)) {
+          etEl.textContent = etEl.textContent.replace(/SAYFA\s+\d+\s*\/\s*\d+/gi, `SAYFA ${sayfaNo} / ${toplamN}`);
         }
-        if (k.optikMaxMm) {
-          const optikSvg = sayfaEl.querySelector('svg.optik-form-svg');
-          if (optikSvg) {
-            optikSvg.style.maxHeight = k.optikMaxMm;
+        sf.querySelectorAll('span, div').forEach((sp) => {
+          if (sp.children.length === 0 && /Sayfa\s*\d+\s*\/\s*\d+/i.test(sp.textContent)) {
+            sp.textContent = sp.textContent.replace(/Sayfa\s*\d+\s*\/\s*\d+/gi, `Sayfa ${sayfaNo} / ${toplamN}`);
           }
-        }
-      }
-
-      // Hâlâ taşıyorsa (aşırı yoğun soru sayısı durumunda) taşan son blokları ek devam sayfasına aktar
-      if (sayfaEl.scrollHeight > sayfaEl.clientHeight && govde.children.length > 2) {
-        const devamSayfa = document.createElement('div');
-        devamSayfa.className = 'a4-sayfa';
-        const mevcutEtiket = (sayfaEl.querySelector('.a4-sayfa-etiket') || {}).textContent || 'SINAV KAĞIDI';
-        devamSayfa.innerHTML = `
-          <div class="a4-sayfa-etiket">${C.kacisHTML(mevcutEtiket)} (DEVAM SAYFASI)</div>
-          <div class="sorular-govde" style="font-size:${govde.style.fontSize || '7.6pt'}; line-height:${govde.style.lineHeight || '1.1'};"></div>
-        `;
-        const devamGovde = devamSayfa.querySelector('.sorular-govde');
-        let koruma = 0;
-        while (sayfaEl.scrollHeight > sayfaEl.clientHeight && govde.children.length > 1 && koruma < 40) {
-          koruma++;
-          devamGovde.insertBefore(govde.lastElementChild, devamGovde.firstChild);
-        }
-        sayfaEl.insertAdjacentElement('afterend', devamSayfa);
-      }
+        });
+      });
     }
   }
 
@@ -2815,7 +2881,7 @@
     const klasikAdet = onl.klasikSayisi !== undefined ? Number(onl.klasikSayisi) : 0;
 
     // Öğrenciye özel sınav üretimi:
-    const kisiyeOzelSorular = C.uretKisiyeOzelOnlineSinav(
+    let kisiyeOzelSorular = C.uretKisiyeOzelOnlineSinav(
       dersHavuzSorulari,
       dyAdet,
       testAdet,
@@ -2836,9 +2902,14 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ogrNo, adSoyad, ...(girilenSalonKodu ? { erisimKodu: girilenSalonKodu } : {}) })
         });
-        if (yanit.status === 401 || yanit.status === 403) {
+        if (yanit.status === 401 || yanit.status === 403 || yanit.status === 409) {
           sessionStorage.removeItem('kiosk_token');
-          hataKutu.textContent = 'Sunucu yetki hatası (401/403): Kayıtlı öğrenci bulunamadı veya sınav aktif değil.';
+          let sunucuHata = 'Sunucu yetki hatası (401/403): Kayıtlı öğrenci bulunamadı veya sınav aktif değil.';
+          try {
+            const hVeri = await yanit.json();
+            if (hVeri && hVeri.hata) sunucuHata = hVeri.hata;
+          } catch (_) {}
+          hataKutu.textContent = sunucuHata;
           hataKutu.hidden = false;
           return;
         }
@@ -2849,6 +2920,9 @@
           }
           if (veri && Number(veri.bitisMs) > Date.now()) {
             onl.__sunucuBitisMs = Number(veri.bitisMs);
+          }
+          if (veri && Array.isArray(veri.sorular) && veri.sorular.length > 0) {
+            kisiyeOzelSorular = veri.sorular;
           }
         }
       } catch (_) {
@@ -3163,10 +3237,13 @@
     guncelleDelilLogPaneliUI();
 
     if (location.protocol === 'http:' || location.protocol === 'https:') {
+      const aktifToken = sessionStorage.getItem('kiosk_token') || sessionStorage.getItem('hoca_token') || sessionStorage.getItem('omr_hoca_token') || '';
+      const basliklar = { 'Content-Type': 'application/json' };
+      if (aktifToken) basliklar.Authorization = `Bearer ${aktifToken}`;
       fetch('/api/kiosk-log-kaydet', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(logNesnesi)
+        headers: basliklar,
+        body: JSON.stringify(Object.assign({}, logNesnesi, aktifToken ? { token: aktifToken } : {}))
       }).catch(() => {});
     }
     return logNesnesi;
@@ -3195,7 +3272,19 @@
   function kaydetAktifKioskOturumYerel() {
     try {
       if (durum.kioskOturum) {
-        sessionStorage.setItem('AKTIF_KIOSK_OTURUM_V1', JSON.stringify(durum.kioskOturum));
+        const temizKopya = Object.assign({}, durum.kioskOturum, {
+          __sonCevapSozu: undefined,
+          sorular: (durum.kioskOturum.sorular || []).map((s) => ({
+            no: s.no,
+            id: s.id,
+            tur: s.tur,
+            metin: s.metin,
+            siklar: Array.isArray(s.siklar) ? s.siklar.slice() : [],
+            ocKodu: s.ocKodu || 'ÖÇ-1',
+            hafta: s.hafta
+          }))
+        });
+        sessionStorage.setItem('AKTIF_KIOSK_OTURUM_V1', JSON.stringify(temizKopya));
       } else {
         sessionStorage.removeItem('AKTIF_KIOSK_OTURUM_V1');
       }
@@ -3251,42 +3340,51 @@
     const ot = durum.kioskOturum;
     if (!ot) return;
 
+    const aktifYapi = okuAktifSinavYapisi();
+    const tumKaynakSorular = [
+      ...(Array.isArray(durum.sorular) ? durum.sorular : []),
+      ...(aktifYapi && Array.isArray(aktifYapi.tumSeciliSorular) ? aktifYapi.tumSeciliSorular : []),
+      ...(Array.isArray(C.VARSAYILAN_SORULAR) ? C.VARSAYILAN_SORULAR : [])
+    ];
     let dogru = 0;
+    const siraliCevaplar = [];
     ot.sorular.forEach((s, idx) => {
       const verilen = ot.cevaplar[idx];
+      siraliCevaplar.push(verilen !== undefined && verilen !== null ? String(verilen) : '');
       if (s.tur === 'klasik') {
         if (verilen && String(verilen).trim().length >= 5) dogru++;
+      } else if (s.tur === 'dy') {
+        const kaynak = tumKaynakSorular.find((ks) => String(ks.id) === String(s.id));
+        const beklenen = s.dogruDY || (kaynak && kaynak.dogruDY);
+        if (verilen && beklenen && verilen === beklenen) dogru++;
       } else {
-        const beklenen = s.tur === 'dy' ? s.dogruDY : s.dogruHarf;
-        if (verilen === beklenen) dogru++;
+        let dogruMu = false;
+        if (s.dogruHarf) {
+          dogruMu = verilen === s.dogruHarf;
+        } else if (verilen) {
+          const kaynak = tumKaynakSorular.find((ks) => String(ks.id) === String(s.id));
+          if (kaynak && Array.isArray(kaynak.siklar) && kaynak.dogruHarf) {
+            const orjIdx = ['A', 'B', 'C', 'D', 'E'].indexOf(String(kaynak.dogruHarf).toUpperCase());
+            const secIdx = ['A', 'B', 'C', 'D', 'E'].indexOf(String(verilen).toUpperCase());
+            const dogruSikMetni = orjIdx >= 0 ? kaynak.siklar[orjIdx] : null;
+            const secilenSikMetni = (Array.isArray(s.siklar) && secIdx >= 0) ? s.siklar[secIdx] : null;
+            if (dogruSikMetni && secilenSikMetni && dogruSikMetni === secilenSikMetni) {
+              dogruMu = true;
+            }
+          }
+        }
+        if (dogruMu) dogru++;
       }
     });
-    const puan = Math.round((dogru / Math.max(1, ot.sorular.length)) * 100);
+    let puan = Math.round((dogru / Math.max(1, ot.sorular.length)) * 100);
 
-    const teslimKodHash = C.uretDelilLogHash(`${ot.sinavId}|${ot.ogrNo}|${puan}|${ot.cevaplar.join(',')}`, 'TESLIM-FIS').slice(0, 12);
-    const teslimFisKodu = `#TESLIM-${teslimKodHash}`;
+    let teslimKodHash = C.uretDelilLogHash(`${ot.sinavId}|${ot.ogrNo}|${puan}|${siraliCevaplar.join(',')}`, 'TESLIM-FIS').slice(0, 12);
+    let teslimFisKodu = `#TESLIM-${teslimKodHash}`;
 
     const bitisLog = ekleKioskDelilLog(
       'OTURUM_BITTI',
       `Sınav oturumu sonlandırıldı. Bitiş durumu: ${bitisDurumu}. Doğru: ${dogru}/${ot.sorular.length}, Puan: ${puan}, Toplam İhlal: ${ot.ihlalSayisi}, Teslim Fişi: ${teslimFisKodu}.`
     );
-
-    if (location.protocol === 'http:' || location.protocol === 'https:') {
-      const token = sessionStorage.getItem('kiosk_token') || '';
-      fetch('/api/ogrenci-sinav-bitir', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          token,
-          ogrNo: ot.ogrNo,
-          bitisDurumu,
-          ihlalSayisi: ot.ihlalSayisi
-        })
-      }).catch(() => {});
-    }
 
     const oturumKaydi = {
       ogrNo: ot.ogrNo,
@@ -3297,11 +3395,20 @@
       puan,
       teslimFisKodu
     };
-    durum.onlineSinav.oturumlar.push(oturumKaydi);
+    const mevcutOtIdx = durum.onlineSinav.oturumlar.findIndex(
+      (x) => x && x.ogrNo === oturumKaydi.ogrNo && (x.sinavId || '') === (oturumKaydi.sinavId || '')
+    );
+    if (mevcutOtIdx >= 0) durum.onlineSinav.oturumlar[mevcutOtIdx] = oturumKaydi;
+    else durum.onlineSinav.oturumlar.push(oturumKaydi);
+
     const aktifListeKaydi = durum.onlineSinavListesi.find((x) => x.sinavId === oturumKaydi.sinavId);
     if (aktifListeKaydi) {
       if (!Array.isArray(aktifListeKaydi.oturumlar)) aktifListeKaydi.oturumlar = [];
-      aktifListeKaydi.oturumlar.push(oturumKaydi);
+      const lIdx = aktifListeKaydi.oturumlar.findIndex(
+        (x) => x && x.ogrNo === oturumKaydi.ogrNo && (x.sinavId || '') === (oturumKaydi.sinavId || '')
+      );
+      if (lIdx >= 0) aktifListeKaydi.oturumlar[lIdx] = oturumKaydi;
+      else aktifListeKaydi.oturumlar.push(oturumKaydi);
     }
     verileriKaydet();
 
@@ -3311,16 +3418,22 @@
     gizleKioskKarantinaPerdesi();
 
     const icerik = document.getElementById('kiosk-soru-icerik');
-    icerik.innerHTML = `
-      <div style="text-align:center; padding:1rem;">
-        <h3 style="color:var(--basari); margin-bottom:0.4rem;">✅ Sınavınız Güvenle Tamamlandı (${C.kacisHTML(bitisDurumu)})</h3>
-        <p>Öğrenci: <strong>${C.kacisHTML(ot.adSoyad)} (${C.kacisHTML(ot.ogrNo)})</strong></p>
-        <p style="margin-top:0.35rem;">Doğru: <strong>${dogru} / ${ot.sorular.length}</strong> · Puan: <strong>${puan}</strong> · Sekme İhlali: <strong>${ot.ihlalSayisi}</strong></p>
-        <div style="margin-top:0.5rem; font-family:var(--font-mono); font-size:0.78rem; padding:6px 10px; border:1px dashed var(--basari); border-radius:6px; display:inline-block;">
-          🛡️ Mühürlü Teslim Fişi: <strong>${C.kacisHTML(teslimFisKodu)}</strong> · Zincir SHA-256: <strong>#${C.kacisHTML((bitisLog && bitisLog.olayHash ? bitisLog.olayHash.slice(0, 16) : teslimKodHash))}</strong>
+    const cizBitisEkrani = (gosterilenDogru, gosterilenPuan, gosterilenFisKodu) => {
+      if (!icerik) return;
+      icerik.innerHTML = `
+        <div style="text-align:center; padding:1rem;">
+          <h3 style="color:var(--basari); margin-bottom:0.4rem;">✅ Sınavınız Güvenle Tamamlandı (${C.kacisHTML(bitisDurumu)})</h3>
+          <p>Öğrenci: <strong>${C.kacisHTML(ot.adSoyad)} (${C.kacisHTML(ot.ogrNo)})</strong></p>
+          <p style="margin-top:0.35rem;">Doğru: <strong>${gosterilenDogru} / ${ot.sorular.length}</strong> · Puan: <strong>${gosterilenPuan}</strong> · Sekme İhlali: <strong>${ot.ihlalSayisi}</strong></p>
+          <div style="margin-top:0.5rem; font-family:var(--font-mono); font-size:0.78rem; padding:6px 10px; border:1px dashed var(--basari); border-radius:6px; display:inline-block;">
+            🛡️ Mühürlü Teslim Fişi: <strong>${C.kacisHTML(gosterilenFisKodu)}</strong> · Zincir SHA-256: <strong>#${C.kacisHTML((bitisLog && bitisLog.olayHash ? bitisLog.olayHash.slice(0, 16) : teslimKodHash))}</strong>
+          </div>
         </div>
-      </div>
-    `;
+      `;
+    };
+    cizBitisEkrani(dogru, puan, teslimFisKodu);
+
+    const bekleyenCevapSozu = ot.__sonCevapSozu || Promise.resolve();
     document.getElementById('btn-kiosk-cevap-kilitle').style.display = 'none';
     document.getElementById('kiosk-giris-formu').style.display = 'block';
     document.body.classList.remove('kiosk-aktif');
@@ -3329,6 +3442,45 @@
     guncelleOnlineOturumTablosu();
     guncelleDelilLogPaneliUI();
     guncelleKioskOgrenciSinavListesiUI();
+
+    if (location.protocol === 'http:' || location.protocol === 'https:') {
+      const token = sessionStorage.getItem('kiosk_token') || '';
+      Promise.resolve(bekleyenCevapSozu)
+        .catch(() => {})
+        .then(() =>
+          fetch('/api/ogrenci-sinav-bitir', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
+              token,
+              ogrNo: ot.ogrNo,
+              bitisDurumu,
+              ihlalSayisi: ot.ihlalSayisi
+            })
+          })
+        )
+        .then((r) => (r && r.ok ? r.json() : null))
+        .then((veri) => {
+          if (!veri || typeof veri !== 'object') return;
+          if (typeof veri.dogruSayisi === 'number') dogru = veri.dogruSayisi;
+          if (typeof veri.puan === 'number') {
+            puan = veri.puan;
+            oturumKaydi.puan = veri.puan;
+          }
+          if (veri.teslimKodu) {
+            teslimFisKodu = String(veri.teslimKodu).startsWith('#') ? String(veri.teslimKodu) : `#TESLIM-${veri.teslimKodu}`;
+            oturumKaydi.teslimFisKodu = teslimFisKodu;
+          }
+          verileriKaydet();
+          cizBitisEkrani(dogru, puan, teslimFisKodu);
+          guncelleOnlineOturumTablosu();
+          guncelleKioskOgrenciSinavListesiUI();
+        })
+        .catch(() => {});
+    }
   }
 
   function guncelleDelilLogPaneliUI() {
@@ -3406,8 +3558,9 @@
           <td><span class="rozet ${String(o.durum).includes('İhlal') ? 'rozet-kirmizi' : 'rozet-yesil'}">${C.kacisHTML(o.durum)}</span></td>
           <td><span class="rozet ${o.ihlalSayisi > 0 ? 'rozet-kirmizi' : 'rozet-yesil'}">${o.ihlalSayisi} İhlal</span></td>
           <td>
-            <div style="display:flex; align-items:center; gap:0.35rem; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:0.35rem; justify-content:space-between; flex-wrap:wrap;">
               <strong>${o.puan}</strong>
+              ${o.teslimFisKodu ? `<span class="mono" style="font-size:0.7rem; color:var(--metin-ikincil);">${C.kacisHTML(o.teslimFisKodu)}</span>` : ''}
               <button type="button" class="btn btn-kucuk" data-indir-ogr-delil="${C.kacisHTML(o.ogrNo)}" data-indir-sinav-id="${C.kacisHTML(o.sinavId || durum.onlineSinav.sinavId || '')}" title="Bu öğrencinin zaman damgalı ve mühürlü delil log raporunu indir (.txt)">📜 Delil İndir</button>
             </div>
           </td>
@@ -3522,7 +3675,31 @@
   async function senkronizeEtOnlineSinavSunucu(sinavTanimi) {
     if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
     try {
-      const dersSorulari = durum.sorular.filter((s) => !s.arsivde && (s.dersId === sinavTanimi.dersId || s.dersId === 'genel'));
+      const yapi = okuAktifSinavYapisi();
+      const hedefDersId = sinavTanimi.dersId || (yapi && yapi.ders && yapi.ders.id) || durum.aktifDersId;
+      let dersSorulari = durum.sorular.filter((s) => !s.arsivde && (s.dersId === hedefDersId || s.dersId === 'genel'));
+      if (dersSorulari.length === 0 && yapi && Array.isArray(yapi.tumSeciliSorular) && yapi.tumSeciliSorular.length > 0) {
+        dersSorulari = yapi.tumSeciliSorular;
+      }
+      if (sinavTanimi.haftaKapsam === 'vize') {
+        const vizeSorular = dersSorulari.filter((s) => C.normalizeHaftaNo(s.hafta, 1) <= 7);
+        if (vizeSorular.length >= 2) dersSorulari = vizeSorular;
+      }
+      const dyAdet = sinavTanimi.dySayisi !== undefined ? Number(sinavTanimi.dySayisi) : (yapi ? yapi.dySayisi : 10);
+      const testAdet = sinavTanimi.testSayisi !== undefined ? Number(sinavTanimi.testSayisi) : (yapi ? yapi.testSayisi : 10);
+      const klasikAdet = sinavTanimi.klasikSayisi !== undefined ? Number(sinavTanimi.klasikSayisi) : 0;
+      const havuzSorulari = dersSorulari.length > 0 ? dersSorulari : (C.VARSAYILAN_SORULAR || []);
+      const seciliSorular = C.uretKisiyeOzelOnlineSinav(
+        havuzSorulari,
+        dyAdet,
+        testAdet,
+        'SABIT',
+        sinavTanimi.sinavId || 'SINAV-2026-VIZE'
+      );
+      if (klasikAdet > 0) {
+        const klasikler = havuzSorulari.filter((s) => s.tur === 'klasik').slice(0, klasikAdet);
+        seciliSorular.push(...klasikler);
+      }
       const hocaToken = sessionStorage.getItem('hoca_token') || sessionStorage.getItem('omr_hoca_token') || '';
       const basliklar = { 'Content-Type': 'application/json' };
       if (hocaToken) basliklar.Authorization = `Bearer ${hocaToken}`;
@@ -3532,9 +3709,13 @@
         body: JSON.stringify({
           sinav: {
             ...sinavTanimi,
-            sorular: dersSorulari.slice(0, Math.max(1, (sinavTanimi.dySayisi || 0) + (sinavTanimi.testSayisi || 0) + (sinavTanimi.klasikSayisi || 0)))
+            havuzSorulari,
+            sorular: seciliSorular
           },
-          ogrenciler: durum.ogrenciKayitlari
+          ogrenciler: [
+            ...(Array.isArray(durum.ogrenciler) ? durum.ogrenciler : []),
+            ...(Array.isArray(durum.ogrenciKayitlari) ? durum.ogrenciKayitlari : [])
+          ]
         })
       });
     } catch (_) {}
@@ -3732,13 +3913,18 @@
       const el = document.getElementById(id);
       return el ? Boolean(el.checked) : varsayilan;
     };
+    const bugunStr = new Date().toISOString().slice(0, 10);
+    const hamBas = al('online-baslangic', '');
+    const hamBit = al('online-bitis', '');
+    const baslangic = (!hamBas || hamBas === '2026-11-07T09:00') ? `${bugunStr}T00:00` : hamBas;
+    const bitis = (!hamBit || hamBit === '2026-11-07T18:00') ? `${bugunStr}T23:59` : hamBit;
     return {
       dersId: al('online-ders-sec', durum.aktifDersId) || durum.aktifDersId || 'genel',
       sinavTuru: al('online-sinav-turu', 'Vize (Ara Sınav)') || 'Vize (Ara Sınav)',
       baslik: al('online-sinav-baslik', 'Online Sınav') || 'Online Sınav',
       sinavId: al('online-sinav-kodu', '') || ('SINAV-' + Date.now()),
-      baslangic: al('online-baslangic', '2026-11-07T09:00'),
-      bitis: al('online-bitis', '2026-11-07T18:00'),
+      baslangic,
+      bitis,
       sureDk: Math.max(5, parseInt(al('online-sure-dk', '40'), 10) || 40),
       dySayisi: Math.max(0, parseInt(al('online-dy-sayisi', '10'), 10) || 0),
       testSayisi: Math.max(0, parseInt(al('online-test-sayisi', '10'), 10) || 0),
@@ -4757,11 +4943,16 @@
       C.temizleGuvenliInterval('kiosk-sayac');
       document.body.classList.remove('kiosk-aktif');
       document.getElementById('kiosk-sinav-alani').style.display = 'none';
-      document.getElementById('ana-icerik-alani').style.display = 'block';
+      const anaAlani = document.getElementById('ana-icerik-alani');
+      const ustNav = document.getElementById('ust-sekme-nav');
+      anaAlani.style.display = 'block';
       if (!durum.hocaOturumAcik) {
-        document.getElementById('ana-icerik-alani').style.filter = 'blur(8px)';
-        document.getElementById('ana-icerik-alani').style.pointerEvents = 'none';
-        document.getElementById('ana-icerik-alani').style.userSelect = 'none';
+        anaAlani.style.filter = 'blur(8px)';
+        anaAlani.style.pointerEvents = 'none';
+        anaAlani.style.userSelect = 'none';
+        anaAlani.inert = true;
+        anaAlani.setAttribute('inert', '');
+        if (ustNav) { ustNav.inert = true; ustNav.setAttribute('inert', ''); }
         guncelleHocaYonetimPaneliUI();
         document.getElementById('modal-hoca-giris').style.display = 'flex';
       }
@@ -4783,10 +4974,14 @@
     const btnHocaModalAc = document.getElementById('btn-hoca-giris-ac');
     if (btnHocaModalAc) {
       btnHocaModalAc.addEventListener('click', () => {
+        const anaAlani = document.getElementById('ana-icerik-alani');
+        const ustNav = document.getElementById('ust-sekme-nav');
         if (!durum.kioskOturum) {
           document.getElementById('kiosk-sinav-alani').style.display = 'none';
-          document.getElementById('ana-icerik-alani').style.display = 'block';
+          anaAlani.style.display = 'block';
         }
+        if (anaAlani) { anaAlani.inert = true; anaAlani.setAttribute('inert', ''); }
+        if (ustNav) { ustNav.inert = true; ustNav.setAttribute('inert', ''); }
         guncelleHocaYonetimPaneliUI();
         document.getElementById('modal-hoca-giris').style.display = 'flex';
       });
@@ -4801,6 +4996,10 @@
           hataKutu.hidden = false;
           return;
         }
+        const anaAlani = document.getElementById('ana-icerik-alani');
+        const ustNav = document.getElementById('ust-sekme-nav');
+        if (anaAlani) { anaAlani.inert = false; anaAlani.removeAttribute('inert'); }
+        if (ustNav) { ustNav.inert = false; ustNav.removeAttribute('inert'); }
         document.getElementById('modal-hoca-giris').style.display = 'none';
       });
     }
@@ -6727,7 +6926,7 @@
       }
       let adres = (location.protocol.startsWith('http') && !yerelGelistirmeMi)
         ? location.origin
-        : 'https://sinav.axonturk.workers.dev';
+        : (yerelGelistirmeMi ? `http://127.0.0.1:${location.port || 80}` : 'https://sinav.axonturk.workers.dev');
       if (yerelGelistirmeMi) {
         try {
           const y = await fetch('/api/ag-adresi');
@@ -6832,7 +7031,10 @@
             return;
           }
           try {
-            const y = await fetch(`/api/ogrenci-qr-senkron?oturumKodu=${encodeURIComponent(durum.pcQrEslesmeKodu)}&tuket=1`);
+            const hocaToken = sessionStorage.getItem('hoca_token') || '';
+            const y = await fetch(`/api/ogrenci-qr-senkron?oturumKodu=${encodeURIComponent(durum.pcQrEslesmeKodu)}&tuket=1`, {
+              headers: hocaToken ? { Authorization: `Bearer ${hocaToken}` } : {}
+            });
             if (y.ok) {
               const v = await y.json();
               if (v && v.bulundu && Array.isArray(v.ogrenciler) && v.ogrenciler.length > 0) {
@@ -6854,9 +7056,11 @@
             if (yOmr.ok) {
               const vOmr = await yOmr.json();
               if (vOmr && vOmr.bulundu && Array.isArray(vOmr.sonuclar) && vOmr.sonuclar.length > 0) {
-                aktarOmrSonucPaketiBilgisayara({ sonuclar: vOmr.sonuclar }, 'Canlı Mobil OMR Senkronu');
-                const durumEl = document.getElementById('etiket-pc-eslesme-durum');
-                if (durumEl) durumEl.textContent = `✅ Telefondan ${vOmr.sonuclar.length} optik okuma sonucu alındı ve kaydedildi!`;
+                const akt = aktarOmrSonucPaketiBilgisayara({ sonuclar: vOmr.sonuclar }, 'Canlı Mobil OMR Senkronu');
+                if (akt.basarili && akt.eklenenSayi > 0) {
+                  const durumEl = document.getElementById('etiket-pc-eslesme-durum');
+                  if (durumEl) durumEl.textContent = `✅ Telefondan ${akt.eklenenSayi} optik okuma sonucu alındı ve kaydedildi!`;
+                }
               }
             }
           } catch (_) {}
@@ -7001,7 +7205,14 @@
       btnPcQrPaketAktar.addEventListener('click', () => {
         const girdiEl = document.getElementById('girdi-pc-qr-paket');
         const metin = (girdiEl && girdiEl.value ? girdiEl.value : '').trim();
-        if (metin.includes('OMR-SONUC-V1|') || metin.includes('MOBIL_OMR_SONUC_PAKETI_V1')) {
+        const omrPaketAdayiMi =
+          metin.includes('OMR-SONUC|') ||
+          metin.includes('OMR-SONUC-V1|') ||
+          metin.includes('#omr-sonuc=') ||
+          metin.includes('OMR_DETAYLI_SONUC_PAKETI') ||
+          metin.includes('MOBIL_OMR_SONUC_PAKETI_V1') ||
+          metin.includes('"okumaSonuclari"');
+        if (omrPaketAdayiMi) {
           const omrSonuc = aktarOmrSonucPaketiBilgisayara(metin, 'Yapıştırılan Mobil OMR Paketi');
           const sonucEl = document.getElementById('etiket-pc-qr-aktarim-sonuc');
           if (omrSonuc.basarili) {
@@ -7012,6 +7223,11 @@
             }
             return;
           }
+          if (sonucEl) {
+            sonucEl.style.color = 'var(--tehlike)';
+            sonucEl.textContent = '⚠️ Geçersiz veya şema dışı Mobil OMR sonuç paketi reddedildi.';
+          }
+          return;
         }
         const sonuc = aktarOgrenciQrPaketiBilgisayara(metin, 'Yapıştırılan QR Paketi');
         if (sonuc.basarili && girdiEl) girdiEl.value = '';
@@ -7488,27 +7704,31 @@
         const oturumlar = durum.onlineSinav.oturumlar || [];
         if (oturumlar.length === 0) return;
         oturumlar.forEach((ot) => {
+          const mIdx = durum.okumaSonuclari.findIndex((s) => s.ogrNo === ot.ogrNo);
+          const mevcut = mIdx >= 0 ? durum.okumaSonuclari[mIdx] : null;
           const kayit = {
-            id: 'ONL-' + ot.ogrNo + '-' + Date.now(),
+            id: (mevcut && mevcut.id) ? mevcut.id : ('ONL-' + ot.ogrNo + '-' + Date.now()),
             ogrNo: ot.ogrNo,
             okunanNoKod: String(ot.ogrNo).slice(-2),
             adSoyad: ot.adSoyad,
-            grup: 'ONL',
-            dyDogru: ot.dyDogru || 0,
-            dyYanlis: ot.dyYanlis || 0,
-            dyBos: ot.dyBos || 0,
-            testDogru: ot.testDogru || 0,
-            testYanlis: ot.testYanlis || 0,
-            testBos: ot.testBos || 0,
-            klasikToplamPuan: 0,
-            toplamPuan: ot.puan || 0,
+            grup: (mevcut && mevcut.grup) ? mevcut.grup : 'ONL',
+            dyDogru: (mevcut && Number.isFinite(mevcut.dyDogru)) ? mevcut.dyDogru : (ot.dyDogru || 0),
+            dyYanlis: (mevcut && Number.isFinite(mevcut.dyYanlis)) ? mevcut.dyYanlis : (ot.dyYanlis || 0),
+            dyBos: (mevcut && Number.isFinite(mevcut.dyBos)) ? mevcut.dyBos : (ot.dyBos || 0),
+            dyNet: (mevcut && Number.isFinite(mevcut.dyNet)) ? mevcut.dyNet : (ot.dyDogru || 0),
+            testDogru: (mevcut && Number.isFinite(mevcut.testDogru)) ? mevcut.testDogru : (ot.testDogru || 0),
+            testYanlis: (mevcut && Number.isFinite(mevcut.testYanlis)) ? mevcut.testYanlis : (ot.testYanlis || 0),
+            testBos: (mevcut && Number.isFinite(mevcut.testBos)) ? mevcut.testBos : (ot.testBos || 0),
+            testNet: (mevcut && Number.isFinite(mevcut.testNet)) ? mevcut.testNet : (ot.testDogru || 0),
+            klasikToplamPuan: (mevcut && Number.isFinite(mevcut.klasikToplamPuan)) ? mevcut.klasikToplamPuan : 0,
+            toplamPuan: ot.puan || (mevcut ? mevcut.toplamPuan : 0) || 0,
             ortalamaGuven: 1,
             supheliMi: false,
             incelemeKuyrugu: [],
-            dyDetay: [],
-            testDetay: []
+            dyDetay: (mevcut && Array.isArray(mevcut.dyDetay) && mevcut.dyDetay.length > 0) ? mevcut.dyDetay : [],
+            testDetay: (mevcut && Array.isArray(mevcut.testDetay) && mevcut.testDetay.length > 0) ? mevcut.testDetay : [],
+            klasikDetay: (mevcut && Array.isArray(mevcut.klasikDetay) && mevcut.klasikDetay.length > 0) ? mevcut.klasikDetay : []
           };
-          const mIdx = durum.okumaSonuclari.findIndex((s) => s.ogrNo === ot.ogrNo);
           if (mIdx >= 0) durum.okumaSonuclari[mIdx] = kayit;
           else durum.okumaSonuclari.unshift(kayit);
         });
@@ -7546,11 +7766,16 @@
       C.temizleGuvenliInterval('kiosk-sayac');
       document.body.classList.remove('kiosk-aktif');
       document.getElementById('kiosk-sinav-alani').style.display = 'none';
-      document.getElementById('ana-icerik-alani').style.display = 'block';
+      const anaAlani = document.getElementById('ana-icerik-alani');
+      const ustNav = document.getElementById('ust-sekme-nav');
+      anaAlani.style.display = 'block';
       if (!durum.hocaOturumAcik) {
-        document.getElementById('ana-icerik-alani').style.filter = 'blur(8px)';
-        document.getElementById('ana-icerik-alani').style.pointerEvents = 'none';
-        document.getElementById('ana-icerik-alani').style.userSelect = 'none';
+        anaAlani.style.filter = 'blur(8px)';
+        anaAlani.style.pointerEvents = 'none';
+        anaAlani.style.userSelect = 'none';
+        anaAlani.inert = true;
+        anaAlani.setAttribute('inert', '');
+        if (ustNav) { ustNav.inert = true; ustNav.setAttribute('inert', ''); }
         document.getElementById('modal-hoca-giris').style.display = 'flex';
       }
     });
@@ -7580,7 +7805,7 @@
       );
       if ((location.protocol === 'http:' || location.protocol === 'https:') && s) {
         const token = sessionStorage.getItem('kiosk_token') || '';
-        fetch('/api/ogrenci-cevap', {
+        ot.__sonCevapSozu = fetch('/api/ogrenci-cevap', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

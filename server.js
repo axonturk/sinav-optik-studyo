@@ -18,6 +18,7 @@ const KOK_DIZIN = __dirname;
 const sunucuDurumu = {
   aktifSinav: {
     sinavId: 'SINAV-2026-GUZ',
+    sinavSurumId: 'SURUM-BASLANGIC-1',
     aktif: true,
     sureDk: 40,
     sorular: Cekirdek.VARSAYILAN_SORULAR.slice(0, 10)
@@ -169,7 +170,7 @@ function istekIsleyici(req, res) {
     return gonderJson(res, 200, { adresler: ipler.map((ip) => `http://${ip}:${port}`) });
   }
 
-  // 0a-QR. Telefondan -> Bilgisayara Öğrenci Listesi QR / Ağ Senkronizasyon Köprüsü
+  // 0a-QR. Telefondan -> Bilgisayara Öğrenci Listesi QR / Ağ Senkronizasyon Köprüsü (Öğretmen Oturumu Zorunlu)
   if (yol === '/api/ogrenci-qr-senkron') {
     if (!sunucuDurumu.ogrenciQrKuyrugu) {
       sunucuDurumu.ogrenciQrKuyrugu = new Map();
@@ -177,6 +178,10 @@ function istekIsleyici(req, res) {
     if (req.method === 'POST') {
       okuJsonGovde(req, 524288)
         .then((govde) => {
+          const hocaToken = cozHocaTokenIstekten(req, govde, urlNesne);
+          if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
+            return gonderJson(res, 401, { hata: 'Öğrenci listesi QR senkronizasyonu için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+          }
           const oturumKodu = String((govde && govde.oturumKodu) || 'GENEL').trim().toUpperCase() || 'GENEL';
           let ogrenciler = [];
           if (Array.isArray(govde && govde.ogrenciler)) {
@@ -215,6 +220,10 @@ function istekIsleyici(req, res) {
       return;
     }
     if (req.method === 'GET') {
+      const hocaToken = cozHocaTokenIstekten(req, null, urlNesne);
+      if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
+        return gonderJson(res, 401, { hata: 'Öğrenci listesi QR kuyruğunu okumak için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+      }
       const oturumKodu = String(urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || 'GENEL').trim().toUpperCase() || 'GENEL';
       const tuket = urlNesne.searchParams.get('tuket') === '1';
       const kayit = sunucuDurumu.ogrenciQrKuyrugu.get(oturumKodu) || null;
@@ -242,22 +251,25 @@ function istekIsleyici(req, res) {
         .then((govde) => {
           const oturumKodu = String((govde && govde.oturumKodu) || 'GENEL').trim().toUpperCase() || 'GENEL';
           const cozum = Cekirdek.cozOmrSonucPaketi(govde && govde.paket ? govde.paket : govde);
-          if (!cozum.gecerli || cozum.sonuclar.length === 0) {
+          const okunanListe = cozum.okumaSonuclari || cozum.sonuclar || [];
+          if (!cozum.gecerli || okunanListe.length === 0) {
             return gonderJson(res, 400, { hata: cozum.hata || 'Aktarılacak geçerli OMR okuma sonucu bulunamadı.' });
           }
           const kayit = {
             oturumKodu,
-            sonuclar: cozum.sonuclar,
-            adet: cozum.sonuclar.length,
+            sonuclar: okunanListe,
+            okumaSonuclari: okunanListe,
+            adet: okunanListe.length,
             zamanMs: Date.now()
           };
           sunucuDurumu.omrSonucKuyrugu.set(oturumKodu, kayit);
-          sunucuDurumu.omrSonuclari = cozum.sonuclar;
+          sunucuDurumu.omrSonuclari = okunanListe;
           return gonderJson(res, 200, {
             basarili: true,
             oturumKodu,
-            aktarilanSayi: cozum.sonuclar.length,
-            adet: cozum.sonuclar.length
+            aktarilanSayi: okunanListe.length,
+            kayitSayisi: okunanListe.length,
+            adet: okunanListe.length
           });
         })
         .catch((err) => gonderJson(res, 400, { hata: err.message }));
@@ -276,6 +288,7 @@ function istekIsleyici(req, res) {
         bulundu: varMi,
         oturumKodu,
         sonuclar: kayit ? kayit.sonuclar : [],
+        okumaSonuclari: kayit ? kayit.sonuclar : [],
         zamanMs: kayit ? kayit.zamanMs : 0
       });
     }
@@ -525,8 +538,10 @@ function istekIsleyici(req, res) {
           return gonderJson(res, 400, { hata: 'Geçersiz sınav tanım gövdesi.' });
         }
         const sinav = govde.sinav || govde;
+        const yeniSurumId = `SURUM-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
         sunucuDurumu.aktifSinav = {
           sinavId: String(sinav.sinavId || sinav.kod || 'SINAV-2026-GUZ').slice(0, 80),
+          sinavSurumId: yeniSurumId,
           baslik: String(sinav.baslik || 'Online Sınav').slice(0, 140),
           sinavTuru: String(sinav.sinavTuru || 'Vize (Ara Sınav)').slice(0, 60),
           dersId: String(sinav.dersId || 'ders-ag-guvenlik').slice(0, 80),
@@ -542,6 +557,9 @@ function istekIsleyici(req, res) {
           maksIhlal: Math.max(0, parseInt(sinav.maksIhlal, 10) || 0),
           kisiyeOzel: sinav.kisiyeOzel !== false,
           geriDonusKilit: sinav.geriDonusKilit !== false,
+          havuzSorulari: Array.isArray(sinav.havuzSorulari) && sinav.havuzSorulari.length > 0
+            ? sinav.havuzSorulari
+            : null,
           sorular: Array.isArray(sinav.sorular) && sinav.sorular.length > 0
             ? sinav.sorular
             : sunucuDurumu.aktifSinav.sorular
@@ -593,6 +611,20 @@ function istekIsleyici(req, res) {
           return gonderJson(res, 403, { hata: 'Aktif bir online sınav bulunmuyor.' });
         }
 
+        const simdiMs = Date.now();
+        if (sunucuDurumu.aktifSinav.baslangic) {
+          const basMs = Date.parse(sunucuDurumu.aktifSinav.baslangic);
+          if (Number.isFinite(basMs) && simdiMs < basMs) {
+            return gonderJson(res, 403, { hata: 'Online sınav başlangıç zamanı henüz gelmemiştir.' });
+          }
+        }
+        if (sunucuDurumu.aktifSinav.bitis) {
+          const bitMs = Date.parse(sunucuDurumu.aktifSinav.bitis);
+          if (Number.isFinite(bitMs) && simdiMs > bitMs) {
+            return gonderJson(res, 403, { hata: 'Online sınav bitiş süresi sona ermiştir.' });
+          }
+        }
+
         if (sunucuDurumu.aktifSinav.erisimKodu) {
           const girilenKod = String(govde.erisimKodu || govde.salonKodu || '').trim();
           if (girilenKod !== String(sunucuDurumu.aktifSinav.erisimKodu).trim()) {
@@ -607,35 +639,66 @@ function istekIsleyici(req, res) {
 
         const ogr = sunucuDurumu.kayitliOgrenciler.get(ogrNo);
         const aktifSinavId = sunucuDurumu.aktifSinav.sinavId;
+        const aktifSinavSurumId = sunucuDurumu.aktifSinav.sinavSurumId || 'SURUM-BASLANGIC-1';
 
-        // Cevap anahtarı (dogruHarf / dogruDY) istemciye ASLA gönderilmez!
-        const istemciSorulari = sunucuDurumu.aktifSinav.sorular.map((s, idx) => ({
-          no: idx + 1,
-          id: s.id || `S-${idx + 1}`,
-          tur: s.tur,
-          metin: s.metin,
-          siklar: s.siklar || []
-        }));
+        const hazirlaIstemciSorulari = (soruListesi) =>
+          (Array.isArray(soruListesi) ? soruListesi : []).map((s, idx) => ({
+            no: idx + 1,
+            id: s.id || `S-${idx + 1}`,
+            tur: s.tur,
+            metin: s.metin,
+            siklar: s.siklar || [],
+            ocKodu: s.ocKodu || 'ÖÇ-1'
+          }));
 
         // Aynı öğrenci ve sınav için mevcut oturum kontrolü (Tekrar oturum açma / süre sıfırlama engeli)
         for (const [mevcutToken, mevcutOt] of sunucuDurumu.aktifTokenlar.entries()) {
-          if (mevcutOt.ogrNo === ogr.ogrNo && mevcutOt.sinavId === aktifSinavId) {
+          if (
+            mevcutOt.ogrNo === ogr.ogrNo &&
+            mevcutOt.sinavId === aktifSinavId &&
+            (mevcutOt.sinavSurumId || 'SURUM-BASLANGIC-1') === aktifSinavSurumId
+          ) {
             if (mevcutOt.bitti) {
               return gonderJson(res, 409, { hata: 'Bu sınav oturumu daha önce tamamlanmış ve teslim edilmiştir; tekrar başlatılamaz.' });
             }
-            if (Date.now() < mevcutOt.bitisMs) {
-              return gonderJson(res, 200, {
-                token: mevcutToken,
-                ogrNo: mevcutOt.ogrNo,
-                adSoyad: mevcutOt.adSoyad,
-                bitisMs: mevcutOt.bitisMs,
-                soruSayisi: istemciSorulari.length,
-                sorular: istemciSorulari,
-                mevcutOturumDevam: true
-              });
+            if (Date.now() >= mevcutOt.bitisMs) {
+              return gonderJson(res, 403, { hata: 'Sınav oturum süreniz dolmuştur; süre sıfırlanamaz veya yeniden başlatılamaz.' });
             }
+            const mevcutSorular = hazirlaIstemciSorulari(mevcutOt.sorular || sunucuDurumu.aktifSinav.sorular);
+            return gonderJson(res, 200, {
+              token: mevcutToken,
+              ogrNo: mevcutOt.ogrNo,
+              adSoyad: mevcutOt.adSoyad,
+              bitisMs: mevcutOt.bitisMs,
+              soruSayisi: mevcutSorular.length,
+              sorular: mevcutSorular,
+              mevcutOturumDevam: true
+            });
           }
         }
+
+        let oturumSorulari = sunucuDurumu.aktifSinav.sorular;
+        if (
+          Array.isArray(sunucuDurumu.aktifSinav.havuzSorulari) &&
+          sunucuDurumu.aktifSinav.havuzSorulari.length > 0
+        ) {
+          oturumSorulari = Cekirdek.uretKisiyeOzelOnlineSinav(
+            sunucuDurumu.aktifSinav.havuzSorulari,
+            sunucuDurumu.aktifSinav.dySayisi,
+            sunucuDurumu.aktifSinav.testSayisi,
+            sunucuDurumu.aktifSinav.kisiyeOzel !== false ? ogr.ogrNo : 'SABIT',
+            aktifSinavId
+          );
+          if (sunucuDurumu.aktifSinav.klasikSayisi > 0) {
+            const klasikler = sunucuDurumu.aktifSinav.havuzSorulari
+              .filter((s) => s.tur === 'klasik')
+              .slice(0, sunucuDurumu.aktifSinav.klasikSayisi);
+            oturumSorulari.push(...klasikler);
+          }
+        }
+
+        // Cevap anahtarı (dogruHarf / dogruDY) istemciye ASLA gönderilmez!
+        const istemciSorulari = hazirlaIstemciSorulari(oturumSorulari);
 
         const token = crypto.randomBytes(24).toString('hex');
         const bitisMs = Date.now() + sunucuDurumu.aktifSinav.sureDk * 60 * 1000;
@@ -644,6 +707,8 @@ function istekIsleyici(req, res) {
           ogrNo: ogr.ogrNo,
           adSoyad: ogr.adSoyad,
           sinavId: aktifSinavId,
+          sinavSurumId: aktifSinavSurumId,
+          sorular: oturumSorulari,
           bitisMs,
           cevaplar: {},
           bitti: false
@@ -672,17 +737,30 @@ function istekIsleyici(req, res) {
         const token = cozHocaTokenIstekten(req, govde, urlNesne);
         const oturum = sunucuDurumu.aktifTokenlar.get(token);
         if (!oturum) return gonderJson(res, 401, { hata: 'Geçersiz veya süresi dolmuş oturum tokenı.' });
+        const aktifSurumId = (sunucuDurumu.aktifSinav && sunucuDurumu.aktifSinav.sinavSurumId) || 'SURUM-BASLANGIC-1';
+        if (
+          !sunucuDurumu.aktifSinav ||
+          !sunucuDurumu.aktifSinav.aktif ||
+          oturum.sinavId !== sunucuDurumu.aktifSinav.sinavId ||
+          (oturum.sinavSurumId || 'SURUM-BASLANGIC-1') !== aktifSurumId
+        ) {
+          return gonderJson(res, 403, { hata: 'Oturumunuz aktif sınav tanımıyla eşleşmiyor veya sınav kapatılmış.' });
+        }
         if (Date.now() > oturum.bitisMs || oturum.bitti) {
           return gonderJson(res, 403, { hata: 'Sınav süresi dolmuş veya sınav tamamlanmış.' });
         }
 
         const soruId = String(govde.soruId || '').trim();
         const secim = String(govde.secim !== undefined ? govde.secim : (govde.cevap !== undefined ? govde.cevap : '')).trim();
-        const sinavSorulari = Array.isArray(sunucuDurumu.aktifSinav.sorular) ? sunucuDurumu.aktifSinav.sorular : [];
-        const eslesenSoru = sinavSorulari.find((s, idx) => String(s.id || `S-${idx + 1}`) === soruId || `S-${idx + 1}` === soruId);
-        if (!soruId || !eslesenSoru) {
+        const sinavSorulari = Array.isArray(oturum.sorular) && oturum.sorular.length > 0
+          ? oturum.sorular
+          : (Array.isArray(sunucuDurumu.aktifSinav.sorular) ? sunucuDurumu.aktifSinav.sorular : []);
+        const eslesenIdx = sinavSorulari.findIndex((s, idx) => String(s.id || `S-${idx + 1}`) === soruId);
+        if (!soruId || eslesenIdx < 0) {
           return gonderJson(res, 400, { hata: 'Geçersiz veya bu sınava ait olmayan soruId.' });
         }
+        const eslesenSoru = sinavSorulari[eslesenIdx];
+        const kanonikSoruId = String(eslesenSoru.id || `S-${eslesenIdx + 1}`);
 
         if (eslesenSoru.tur === 'test') {
           if (secim !== '' && !['A', 'B', 'C', 'D', 'E'].includes(secim)) {
@@ -694,12 +772,12 @@ function istekIsleyici(req, res) {
           }
         }
 
-        if (Object.prototype.hasOwnProperty.call(oturum.cevaplar, soruId)) {
+        if (Object.prototype.hasOwnProperty.call(oturum.cevaplar, kanonikSoruId)) {
           return gonderJson(res, 409, { hata: 'Kilitlenmiş soruya geri dönülemez ve yanıt değiştirilemez.' });
         }
 
-        oturum.cevaplar[soruId] = secim;
-        return gonderJson(res, 200, { kaydedildi: true, soruId });
+        oturum.cevaplar[kanonikSoruId] = secim;
+        return gonderJson(res, 200, { kaydedildi: true, soruId: kanonikSoruId });
       })
       .catch((err) => gonderJson(res, 400, { hata: err.message }));
     return;
@@ -715,6 +793,14 @@ function istekIsleyici(req, res) {
         const token = cozHocaTokenIstekten(req, govde, urlNesne);
         const oturum = sunucuDurumu.aktifTokenlar.get(token);
         if (!oturum) return gonderJson(res, 401, { hata: 'Geçersiz veya süresi dolmuş oturum tokenı.' });
+        const aktifSurumId = (sunucuDurumu.aktifSinav && sunucuDurumu.aktifSinav.sinavSurumId) || 'SURUM-BASLANGIC-1';
+        if (
+          !sunucuDurumu.aktifSinav ||
+          oturum.sinavId !== sunucuDurumu.aktifSinav.sinavId ||
+          (oturum.sinavSurumId || 'SURUM-BASLANGIC-1') !== aktifSurumId
+        ) {
+          return gonderJson(res, 403, { hata: 'Oturumunuz aktif sınav tanımıyla eşleşmiyor.' });
+        }
         if (oturum.bitti) {
           return gonderJson(res, 409, { hata: 'Bu sınav oturumu zaten teslim edilmiş.' });
         }
@@ -722,18 +808,22 @@ function istekIsleyici(req, res) {
         oturum.bitti = true;
         oturum.teslimZamani = new Date().toISOString();
 
-        const sinavSorulari = Array.isArray(sunucuDurumu.aktifSinav.sorular) ? sunucuDurumu.aktifSinav.sorular : [];
+        const sinavSorulari = Array.isArray(oturum.sorular) && oturum.sorular.length > 0
+          ? oturum.sorular
+          : (Array.isArray(sunucuDurumu.aktifSinav.sorular) ? sunucuDurumu.aktifSinav.sorular : []);
         let dogruSayisi = 0;
+        const siraliCevaplar = [];
         sinavSorulari.forEach((s, idx) => {
           const sId = String(s.id || `S-${idx + 1}`);
-          const verilen = oturum.cevaplar[sId] !== undefined ? oturum.cevaplar[sId] : oturum.cevaplar[`S-${idx + 1}`];
+          const verilen = oturum.cevaplar[sId];
+          siraliCevaplar.push(verilen !== undefined && verilen !== null ? String(verilen) : '');
           if (s.tur === 'dy' && verilen && verilen === s.dogruDY) dogruSayisi++;
           else if (s.tur === 'test' && verilen && verilen === s.dogruHarf) dogruSayisi++;
-          else if (s.tur === 'klasik' && String(verilen || '').trim().length >= 10) dogruSayisi++;
+          else if (s.tur === 'klasik' && String(verilen || '').trim().length >= 5) dogruSayisi++;
         });
         const toplamSoru = Math.max(1, sinavSorulari.length);
         const puan = Math.round((dogruSayisi / toplamSoru) * 100);
-        const teslimHash = Cekirdek.uretDelilLogHash(`${oturum.sinavId}|${oturum.ogrNo}|${puan}|${oturum.teslimZamani}`, 'TESLIM-FIS').slice(0, 12);
+        const teslimHash = Cekirdek.uretDelilLogHash(`${oturum.sinavId}|${oturum.ogrNo}|${puan}|${siraliCevaplar.join(',')}`, 'TESLIM-FIS').slice(0, 12);
         const teslimKodu = `#TESLIM-${teslimHash}`;
         oturum.puan = puan;
         oturum.dogruSayisi = dogruSayisi;
@@ -754,10 +844,16 @@ function istekIsleyici(req, res) {
     return;
   }
 
-  // 2b. Delil Niteliğinde Online Sınav Kiosk Log Kaydetme & Sorgulama
+  // 2b. Delil Niteliğinde Online Sınav Kiosk Log Kaydetme & Sorgulama (Öğrenci veya Hoca Oturumu Zorunlu)
   if (req.method === 'POST' && yol === '/api/kiosk-log-kaydet') {
     okuJsonGovde(req)
       .then((govde) => {
+        const token = cozHocaTokenIstekten(req, govde, urlNesne);
+        const ogrenciOturum = token ? sunucuDurumu.aktifTokenlar.get(token) : null;
+        const hocaYetkiliMi = Boolean(token && sunucuDurumu.aktifHocaTokenlar.has(token));
+        if (!ogrenciOturum && !hocaYetkiliMi) {
+          return gonderJson(res, 401, { hata: 'Kiosk delil logu kaydetmek için geçerli öğrenci veya öğretmen oturumu gereklidir (401 Unauthorized).' });
+        }
         const oncekiHash = sunucuDurumu.kioskDelilLoglari.length > 0
           ? sunucuDurumu.kioskDelilLoglari[sunucuDurumu.kioskDelilLoglari.length - 1].olayHash
           : 'GENESIS-00000000';
@@ -765,6 +861,10 @@ function istekIsleyici(req, res) {
         const sunucuSimdiIso = new Date().toISOString();
         const kayit = Cekirdek.olusturKioskDelilLogKaydi(
           Object.assign({}, govde, {
+            ogrNo: ogrenciOturum ? ogrenciOturum.ogrNo : govde.ogrNo,
+            adSoyad: ogrenciOturum ? ogrenciOturum.adSoyad : govde.adSoyad,
+            sinavId: ogrenciOturum ? ogrenciOturum.sinavId : govde.sinavId,
+            zamanIso: sunucuSimdiIso,
             zamanDamgasi: sunucuSimdiIso,
             cihazBilgisi: `${govde.cihazBilgisi || ''} [IP: ${ip}]`.trim()
           }),
@@ -874,6 +974,9 @@ function yerelAgAdresleri() {
     for (const a of arayuzler[ad] || []) {
       if (a.family === 'IPv4' && !a.internal) sonuc.push(a.address);
     }
+  }
+  if (sonuc.length === 0) {
+    sonuc.push('127.0.0.1');
   }
   return sonuc;
 }

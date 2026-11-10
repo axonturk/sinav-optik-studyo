@@ -430,21 +430,56 @@
     return dizi;
   }
 
-  /* Doğru/Yanlış (D/Y) sorularında 4+ ardışık aynı cevap (D,D,D,D veya Y,Y,Y,Y) yığılmasını önler */
+  function hesaplaEnUzunDySerisi(dyListesi) {
+    const dizi = Array.isArray(dyListesi) ? dyListesi : [];
+    let enUzun = 0;
+    let aktif = 0;
+    let onceki = '';
+    for (let i = 0; i < dizi.length; i++) {
+      const kalem = dizi[i];
+      const harf = typeof kalem === 'string'
+        ? (kalem.toUpperCase() === 'Y' ? 'Y' : 'D')
+        : (String((kalem && kalem.dogruDY) || 'D').toUpperCase() === 'Y' ? 'Y' : 'D');
+      if (harf === onceki) {
+        aktif++;
+      } else {
+        onceki = harf;
+        aktif = 1;
+      }
+      if (aktif > enUzun) enUzun = aktif;
+    }
+    return enUzun;
+  }
+
+  /* Doğru/Yanlış (D/Y) sorularında 4+ ardışık aynı cevap (D,D,D,D veya Y,Y,Y,Y) yığılmasını önler.
+     Hiçbir sorunun orijinal dogruDY cevabını değiştirmez; yalnız sıralamayı dengeler.
+     Havuzda karşıt cevap yetersizse (örn. 8 D, 0 Y) uyari/dyDengesizUyari bayrağı üretir. */
   function onleDyArdisikYigilma(dyListesi) {
     const dizi = Array.isArray(dyListesi) ? dyListesi.slice() : [];
-    if (dizi.length < 4) return dizi;
-    for (let tur = 0; tur < 3; tur++) {
+    const etiketle = (sonucDizi) => {
+      const enUzun = hesaplaEnUzunDySerisi(sonucDizi);
+      const dengesiz = enUzun > 3;
+      Object.defineProperty(sonucDizi, 'enUzunDySerisi', { value: enUzun, enumerable: false, configurable: true, writable: true });
+      Object.defineProperty(sonucDizi, 'dyDengesizUyari', { value: dengesiz, enumerable: false, configurable: true, writable: true });
+      Object.defineProperty(sonucDizi, 'uyari', {
+        value: dengesiz ? 'D/Y havuzunda yeterli D/Y çeşitliliği olmadığından ardışık yığılma yalnız sıralama ile çözülemedi.' : '',
+        enumerable: false,
+        configurable: true,
+        writable: true
+      });
+      return sonucDizi;
+    };
+    if (dizi.length < 4) return etiketle(dizi);
+
+    const harfAl = (s) => (String((s && s.dogruDY) || 'D').toUpperCase() === 'Y' ? 'Y' : 'D');
+
+    for (let tur = 0; tur < 4; tur++) {
       for (let i = 3; i < dizi.length; i++) {
-        const c = String(dizi[i].dogruDY || 'D').toUpperCase();
-        const c1 = String(dizi[i - 1].dogruDY || 'D').toUpperCase();
-        const c2 = String(dizi[i - 2].dogruDY || 'D').toUpperCase();
-        const c3 = String(dizi[i - 3].dogruDY || 'D').toUpperCase();
-        if (c === c1 && c === c2 && c === c3) {
+        const c = harfAl(dizi[i]);
+        if (c === harfAl(dizi[i - 1]) && c === harfAl(dizi[i - 2]) && c === harfAl(dizi[i - 3])) {
           for (let j = 0; j < dizi.length; j++) {
             const adayIdx = (i + 1 + j) % dizi.length;
-            const adayC = String(dizi[adayIdx].dogruDY || 'D').toUpperCase();
-            if (adayC !== c) {
+            if (harfAl(dizi[adayIdx]) !== c) {
               const gecici = dizi[i];
               dizi[i] = dizi[adayIdx];
               dizi[adayIdx] = gecici;
@@ -454,7 +489,36 @@
         }
       }
     }
-    return dizi;
+
+    if (hesaplaEnUzunDySerisi(dizi) <= 3) {
+      return etiketle(dizi);
+    }
+
+    // Basit takasla 3 altına inmediyse D ve Y gruplarını matematiksel en küçük bloklarla serpiştir
+    const dGrubu = dizi.filter((s) => harfAl(s) === 'D');
+    const yGrubu = dizi.filter((s) => harfAl(s) === 'Y');
+    if (dGrubu.length === 0 || yGrubu.length === 0) {
+      return etiketle(dizi);
+    }
+
+    const baskin = dGrubu.length >= yGrubu.length ? dGrubu.slice() : yGrubu.slice();
+    const azinlik = dGrubu.length >= yGrubu.length ? yGrubu.slice() : dGrubu.slice();
+    const kovaSayisi = azinlik.length + 1;
+    const tabanBoyut = Math.floor(baskin.length / kovaSayisi);
+    const fazlalik = baskin.length % kovaSayisi;
+
+    const yeniDizi = [];
+    let baskinImlec = 0;
+    for (let k = 0; k < kovaSayisi; k++) {
+      const buKovaAdet = tabanBoyut + (k < fazlalik ? 1 : 0);
+      for (let m = 0; m < buKovaAdet && baskinImlec < baskin.length; m++) {
+        yeniDizi.push(baskin[baskinImlec++]);
+      }
+      if (k < azinlik.length) {
+        yeniDizi.push(azinlik[k]);
+      }
+    }
+    return etiketle(yeniDizi);
   }
 
   /* A/B/C/D Kitapçık Üretici ve Simetrik Cevap Anahtarı Hesaplayıcı:
@@ -465,12 +529,16 @@
     const testSorular = seciliSorular.filter((s) => s.tur === 'test');
     const klasikSorular = seciliSorular.filter((s) => s.tur === 'klasik');
     const aktifGrup = String(grupHarfi || 'A').toUpperCase();
+    const bazDy = sikKaristir ? onleDyArdisikYigilma(dySorular) : dySorular.slice();
 
     if (aktifGrup === 'A') {
       const dengeliHarfA = sikKaristir
         ? uretDengeliHarfDizisi(testSorular.length, sikSayisi, `${sinavKodu}-DENGELI-A`)
         : [];
-      const grupADy = dySorular.map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1, orijinalNo: idx + 1 }));
+      const grupADy = bazDy.map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1, orijinalNo: idx + 1 }));
+      const grupADyAnahtar = grupADy.map((s) => (String(s.dogruDY || 'D').toUpperCase() === 'Y' ? 'Y' : 'D'));
+      const enUzunDyA = hesaplaEnUzunDySerisi(grupADyAnahtar);
+      const dyUyariA = enUzunDyA > 3;
       const grupATest = testSorular.map((s, idx) => {
         const korunan = karistirSoruSiklariVeKoru(
           s,
@@ -491,25 +559,33 @@
         dy: grupADy,
         test: grupATest,
         klasik: grupAKlasik,
+        enUzunDySerisi: enUzunDyA,
+        dyDengesizUyari: dyUyariA,
+        uyari: dyUyariA ? 'D/Y havuzunda yeterli D/Y çeşitliliği olmadığından ardışık yığılma yalnız sıralama ile çözülemedi.' : '',
         cevapAnahtari: {
-          dy: grupADy.map((s) => (String(s.dogruDY || 'D').toUpperCase() === 'Y' ? 'Y' : 'D')),
+          dy: grupADyAnahtar,
           test: grupATest.map((s) => String(s.dogruHarf || 'A').toUpperCase()),
           klasik: grupAKlasik.map((s, idx) => ({
             soruNo: idx + 1,
             orijinalNo: idx + 1,
             tamPuan: Number(s.puan || 10),
             rubrik: s.rubrik || 'Tam ve doğru açıklamaya tam puan verilir.'
-          }))
+          })),
+          enUzunDySerisi: enUzunDyA,
+          dyDengesizUyari: dyUyariA
         }
       };
     }
 
     const karisikDyHam = diziKaristirDeterministik(
-      dySorular.map((s, idx) => ({ ...s, orijinalNo: idx + 1 })),
+      bazDy.map((s, idx) => ({ ...s, orijinalNo: idx + 1 })),
       `${sinavKodu}-DY-${aktifGrup}`
     );
-    const karisikDy = (sikKaristir ? onleDyArdisikYigilma(karisikDyHam) : karisikDyHam)
-      .map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1 }));
+    const karisikDyIslenmis = sikKaristir ? onleDyArdisikYigilma(karisikDyHam) : karisikDyHam;
+    const karisikDy = karisikDyIslenmis.map((s, idx) => ({ ...s, kitapcikSoruNo: idx + 1 }));
+    const karisikDyAnahtar = karisikDy.map((s) => (String(s.dogruDY || 'D').toUpperCase() === 'Y' ? 'Y' : 'D'));
+    const enUzunDyGrup = hesaplaEnUzunDySerisi(karisikDyAnahtar);
+    const dyUyariGrup = enUzunDyGrup > 3;
 
     const dengeliHarfGrup = sikKaristir
       ? uretDengeliHarfDizisi(testSorular.length, sikSayisi, `${sinavKodu}-DENGELI-${aktifGrup}`)
@@ -557,15 +633,20 @@
       dy: karisikDy,
       test: karisikTest,
       klasik: karisikKlasik,
+      enUzunDySerisi: enUzunDyGrup,
+      dyDengesizUyari: dyUyariGrup,
+      uyari: dyUyariGrup ? 'D/Y havuzunda yeterli D/Y çeşitliliği olmadığından ardışık yığılma yalnız sıralama ile çözülemedi.' : '',
       cevapAnahtari: {
-        dy: karisikDy.map((s) => (String(s.dogruDY || 'D').toUpperCase() === 'Y' ? 'Y' : 'D')),
+        dy: karisikDyAnahtar,
         test: karisikTest.map((s) => String(s.dogruHarf || 'A').toUpperCase()),
         klasik: karisikKlasik.map((s, idx) => ({
           soruNo: idx + 1,
           orijinalNo: s.orijinalNo || idx + 1,
           tamPuan: Number(s.puan || 10),
           rubrik: s.rubrik || 'Tam ve doğru açıklamaya tam puan verilir.'
-        }))
+        })),
+        enUzunDySerisi: enUzunDyGrup,
+        dyDengesizUyari: dyUyariGrup
       }
     };
   }
@@ -2563,7 +2644,7 @@
       const toplamPq = maddeler.reduce((ak, m) => ak + m.pj * (1 - m.pj), 0);
       if (varDogru > 0.0001) {
         const hamKr20 = (kMaddeSayisi / (kMaddeSayisi - 1)) * (1 - toplamPq / varDogru);
-        kr20 = Number(Math.max(0, Math.min(0.99, hamKr20)).toFixed(2));
+        kr20 = Number(Math.max(0, Math.min(1, hamKr20)).toFixed(2));
       }
     }
     const cronbachAlpha = kr20;
@@ -2869,8 +2950,35 @@
     const olculenOcKodlari = kazanimTablosu.filter((k) => k.soruSayisi > 0).map((k) => k.kod);
     const ogrenciOcMatrisi = ogrenciKarneleri.map((karne) => {
       const ocYuzdeHarita = {};
+      const ocHucreHarita = {};
+      (kazanimTablosu || []).forEach((kt) => {
+        const baslangicHucre = {
+          olculduMu: false,
+          yuzde: 0,
+          kazanilanPuan: 0,
+          azamiPuan: Number(kt.azamiSoruPuan || 0),
+          barajiGectiMi: false
+        };
+        ocHucreHarita[kt.kod] = baslangicHucre;
+        if (kt.ocKodu && !ocHucreHarita[kt.ocKodu]) {
+          ocHucreHarita[kt.ocKodu] = baslangicHucre;
+        }
+      });
       (karne.kazanimOzet || []).forEach((ko) => {
+        const kisaOc = (String(ko.kod || '').match(/^(ÖÇ-\d+|OC-\d+)/i) || [ko.kod])[0].toUpperCase().replace(/^OC-/, 'ÖÇ-');
         ocYuzdeHarita[ko.kod] = ko.yuzde;
+        if (kisaOc && ocYuzdeHarita[kisaOc] === undefined) {
+          ocYuzdeHarita[kisaOc] = ko.yuzde;
+        }
+        const hucre = {
+          olculduMu: Number(ko.azamiPuan || 0) > 0,
+          yuzde: ko.yuzde,
+          kazanilanPuan: Number(ko.kazanilanPuan || 0),
+          azamiPuan: Number(ko.azamiPuan || 0),
+          barajiGectiMi: ko.yuzde >= barajEsigi
+        };
+        ocHucreHarita[ko.kod] = hucre;
+        if (kisaOc) ocHucreHarita[kisaOc] = hucre;
       });
       return {
         ogrNo: karne.ogrNo,
@@ -2878,7 +2986,8 @@
         grup: karne.grup,
         toplamPuan: karne.toplamPuan,
         harfNotu: karne.harfNotu,
-        ocYuzdeleri: ocYuzdeHarita
+        ocYuzdeleri: ocYuzdeHarita,
+        ocHucreler: ocHucreHarita
       };
     });
 
@@ -4018,16 +4127,66 @@
       }
     }
 
+    // D/Y DENGE VE ARDIŞIK YIĞILMA KONTROLÜ:
+    // Havuzda karşıt D/Y sorusu varsa seçilen D/Y sorularında aşırı tek yönlü yığılmayı önle ve ardışık 4+ serileri kır
+    if (dy.length >= 4) {
+      const dyHarfAl = (s) => (String((s && s.dogruDY) || 'D').toUpperCase() === 'Y' ? 'Y' : 'D');
+      const tumSeciliDyId = new Set(dy.map((s) => s.id));
+      let dSayisi = dy.filter((s) => dyHarfAl(s) === 'D').length;
+      let ySayisi = dy.length - dSayisi;
+      const hedefMinAzinlik = Math.max(1, Math.floor(dy.length / 4));
+      if (dSayisi < hedefMinAzinlik || ySayisi < hedefMinAzinlik) {
+        const arananHarf = dSayisi < ySayisi ? 'D' : 'Y';
+        const baskinHarf = arananHarf === 'D' ? 'Y' : 'D';
+        const yedekHavuz = (tumDersSorulari || []).filter(
+          (s) => s && s.tur === 'dy' && !s.arsivde && !tumSeciliDyId.has(s.id) && !reddedilenSet.has(s.id) && dyHarfAl(s) === arananHarf
+        );
+        for (const yedek of yedekHavuz) {
+          if (Math.min(dSayisi, ySayisi) >= hedefMinAzinlik) break;
+          let takasIdx = -1;
+          for (let i = dy.length - 1; i >= 0; i--) {
+            const mevcut = dy[i];
+            if (sabitlenenSet.has(mevcut.id) || dyHarfAl(mevcut) !== baskinHarf) continue;
+            const mOc = soruOcKoduAl(mevcut);
+            const yOc = soruOcKoduAl(yedek);
+            if (!herOcEnAzBirSoru || mOc === yOc || (genelOcSayac.get(mOc) || 0) >= 2) {
+              takasIdx = i;
+              break;
+            }
+          }
+          if (takasIdx >= 0) {
+            const cikarilan = dy[takasIdx];
+            const mOc = soruOcKoduAl(cikarilan);
+            const yOc = soruOcKoduAl(yedek);
+            genelOcSayac.set(mOc, Math.max(0, (genelOcSayac.get(mOc) || 1) - 1));
+            genelOcSayac.set(yOc, (genelOcSayac.get(yOc) || 0) + 1);
+            tumSeciliDyId.delete(cikarilan.id);
+            tumSeciliDyId.add(yedek.id);
+            dy[takasIdx] = yedek;
+            if (arananHarf === 'D') { dSayisi++; ySayisi--; } else { ySayisi++; dSayisi--; }
+          }
+        }
+      }
+      const dengelenmisDy = onleDyArdisikYigilma(dy);
+      dy.length = 0;
+      dy.push(...dengelenmisDy);
+      Object.defineProperty(dy, 'enUzunDySerisi', { value: dengelenmisDy.enUzunDySerisi, enumerable: false, configurable: true });
+      Object.defineProperty(dy, 'dyDengesizUyari', { value: dengelenmisDy.dyDengesizUyari, enumerable: false, configurable: true });
+    }
+
     const tumSecili = [...dy, ...test, ...klasik];
     const kapsananOcSet = new Set(tumSecili.map((s) => soruOcKoduAl(s)));
     const kapsananOcListesi = Array.from(kapsananOcSet).sort((a, b) => ocKoduSiraNo(a) - ocKoduSiraNo(b));
     const eksikOcListesi = hedefOcKodlari.filter((oc) => !kapsananOcSet.has(oc));
+    const enUzunDy = hesaplaEnUzunDySerisi(dy);
 
     return {
       dy,
       test,
       klasik,
       tumSecili,
+      enUzunDySerisi: enUzunDy,
+      dyDengesizUyari: enUzunDy > 3,
       ocKapsamaRaporu: {
         herOcEnAzBirSoru,
         hedefOcListesi: hedefOcKodlari,
@@ -4976,103 +5135,218 @@
 
   /* Mobil Optik Okuyucudan (optik-mobil.html) Bilgisayar Stüdyosuna (index.html)
      Madde Analizi (pj/rjx) ve ÖÇ Karnesi İçin Detaylı Okuma Sonuçları Aktarım Paketi */
-  function uretOmrSonucPaketi(okumaSonuclari = [], sinavKodu = 'SINAV-2026', tabanAdres = '') {
-    const hafifListe = (Array.isArray(okumaSonuclari) ? okumaSonuclari : [])
-      .filter((s) => s && (s.ogrNo || s.okunanNoKod))
-      .map((s) => ({
-        no: String(s.ogrNo || s.okunanNoKod || ''),
-        ad: String(s.adSoyad || '').slice(0, 32),
-        g: String(s.grup || 'A').toUpperCase(),
-        p: Number(s.toplamPuan || 0),
-        dn: Number(s.dyNet || 0),
-        tn: Number(s.testNet || 0),
-        kp: Number(s.klasikToplamPuan || 0),
-        dy: (Array.isArray(s.dyDetay) ? s.dyDetay : []).map((d) => `${d.verilen || '-'}:${d.sonuc === 'DOGRU' ? '1' : '0'}`).join(','),
-        t: (Array.isArray(s.testDetay) ? s.testDetay : []).map((d) => `${d.verilen || '-'}:${d.sonuc === 'DOGRU' ? '1' : '0'}`).join(','),
-        kl: (Array.isArray(s.klasikDetay) ? s.klasikDetay : []).map((k) => Number(k.verilenPuan || 0))
+  function dogrulaVeTemizleOmrSonucKaydi(s, idx = 0) {
+    if (!s || typeof s !== 'object') return null;
+    const ogrNo = String(s.ogrNo !== undefined ? s.ogrNo : (s.no !== undefined ? s.no : '')).trim();
+    const okunanNoKod = String(s.okunanNoKod !== undefined ? s.okunanNoKod : (ogrNo ? ogrNo.slice(-2) : '')).trim();
+    if (!ogrNo && !okunanNoKod) return null;
+
+    const hamGrup = String(s.grup !== undefined ? s.grup : (s.g !== undefined ? s.g : 'A')).trim().toUpperCase();
+    if (!['A', 'B', 'C', 'D'].includes(hamGrup)) return null;
+
+    const hamPuan = s.toplamPuan !== undefined ? Number(s.toplamPuan) : (s.p !== undefined ? Number(s.p) : NaN);
+    if (!Number.isFinite(hamPuan) || hamPuan < 0 || hamPuan > 100) return null;
+
+    const dyNet = Number(s.dyNet !== undefined ? s.dyNet : (s.dn !== undefined ? s.dn : 0));
+    const testNet = Number(s.testNet !== undefined ? s.testNet : (s.tn !== undefined ? s.tn : 0));
+    const klasikToplamPuan = Number(s.klasikToplamPuan !== undefined ? s.klasikToplamPuan : (s.kp !== undefined ? s.kp : 0));
+    if (!Number.isFinite(dyNet) || !Number.isFinite(testNet) || !Number.isFinite(klasikToplamPuan)) return null;
+    if (klasikToplamPuan < 0 || klasikToplamPuan > 100) return null;
+
+    let dyDetay = [];
+    if (Array.isArray(s.dyDetay)) {
+      dyDetay = s.dyDetay.map((d, i) => ({
+        soruNo: Number((d && d.soruNo) || i + 1),
+        verilen: String((d && d.verilen) || ''),
+        sonuc: String((d && d.sonuc) || 'BOS')
       }));
+    } else if (typeof s.dy === 'string' && s.dy.trim()) {
+      dyDetay = s.dy.split(',').filter(Boolean).map((p, i) => {
+        const [verilen, d] = p.split(':');
+        return { soruNo: i + 1, verilen: verilen === '-' ? '' : verilen, sonuc: d === '1' ? 'DOGRU' : (verilen === '-' ? 'BOS' : 'YANLIS') };
+      });
+    }
+
+    let testDetay = [];
+    if (Array.isArray(s.testDetay)) {
+      testDetay = s.testDetay.map((d, i) => ({
+        soruNo: Number((d && d.soruNo) || i + 1),
+        verilen: String((d && d.verilen) || ''),
+        sonuc: String((d && d.sonuc) || 'BOS')
+      }));
+    } else if (typeof s.t === 'string' && s.t.trim()) {
+      testDetay = s.t.split(',').filter(Boolean).map((p, i) => {
+        const [verilen, d] = p.split(':');
+        return { soruNo: i + 1, verilen: verilen === '-' ? '' : verilen, sonuc: d === '1' ? 'DOGRU' : (verilen === '-' ? 'BOS' : 'YANLIS') };
+      });
+    }
+
+    let klasikDetay = [];
+    if (Array.isArray(s.klasikDetay)) {
+      klasikDetay = s.klasikDetay.map((k, i) => ({
+        soruNo: Number((k && k.soruNo) || i + 1),
+        verilenPuan: Number((k && k.verilenPuan) || 0)
+      }));
+    } else if (Array.isArray(s.kl)) {
+      klasikDetay = s.kl.map((puan, i) => ({
+        soruNo: i + 1,
+        verilenPuan: Number(puan || 0)
+      }));
+    }
+
+    return {
+      id: String(s.id || `mobil-aktarim-${Date.now()}-${idx}`),
+      ogrNo: ogrNo || `SON2-${okunanNoKod}`,
+      okunanNoKod: okunanNoKod || ogrNo.slice(-2),
+      adSoyad: String(s.adSoyad !== undefined ? s.adSoyad : (s.ad !== undefined ? s.ad : 'Öğrenci')).slice(0, 80),
+      grup: hamGrup,
+      toplamPuan: Number(hamPuan.toFixed(2)),
+      dyNet: Number(dyNet.toFixed(2)),
+      testNet: Number(testNet.toFixed(2)),
+      dyDogru: s.dyDogru !== undefined ? Number(s.dyDogru) : dyDetay.filter((x) => x.sonuc === 'DOGRU').length,
+      dyYanlis: s.dyYanlis !== undefined ? Number(s.dyYanlis) : dyDetay.filter((x) => x.sonuc === 'YANLIS').length,
+      testDogru: s.testDogru !== undefined ? Number(s.testDogru) : testDetay.filter((x) => x.sonuc === 'DOGRU').length,
+      testYanlis: s.testYanlis !== undefined ? Number(s.testYanlis) : testDetay.filter((x) => x.sonuc === 'YANLIS').length,
+      klasikToplamPuan: Number(klasikToplamPuan.toFixed(2)),
+      dyDetay,
+      testDetay,
+      klasikDetay,
+      supheliMi: Boolean(s.supheliMi),
+      incelemeKuyrugu: Array.isArray(s.incelemeKuyrugu) ? s.incelemeKuyrugu : []
+    };
+  }
+
+  function uretOmrSonucPaketi(okumaSonuclari = [], sinavKoduVeyaYapi = 'SINAV-2026', tabanAdresVeyaAyar = '') {
+    const sinavKodu = (sinavKoduVeyaYapi && typeof sinavKoduVeyaYapi === 'object')
+      ? String(sinavKoduVeyaYapi.sinavKodu || sinavKoduVeyaYapi.sinavId || sinavKoduVeyaYapi.kod || 'SINAV-2026')
+      : String(sinavKoduVeyaYapi || 'SINAV-2026');
+    const tabanHam = (tabanAdresVeyaAyar && typeof tabanAdresVeyaAyar === 'object')
+      ? String(tabanAdresVeyaAyar.tabanAdres || '')
+      : String(tabanAdresVeyaAyar || '');
+
+    const temizSonuclar = (Array.isArray(okumaSonuclari) ? okumaSonuclari : [])
+      .map((s, idx) => dogrulaVeTemizleOmrSonucKaydi(s, idx))
+      .filter(Boolean);
+
+    const hafifListe = temizSonuclar.map((s) => ({
+      no: String(s.ogrNo || s.okunanNoKod || ''),
+      ad: String(s.adSoyad || '').slice(0, 32),
+      g: String(s.grup || 'A').toUpperCase(),
+      p: Number(s.toplamPuan || 0),
+      dn: Number(s.dyNet || 0),
+      tn: Number(s.testNet || 0),
+      kp: Number(s.klasikToplamPuan || 0),
+      dy: (Array.isArray(s.dyDetay) ? s.dyDetay : []).map((d) => `${d.verilen || '-'}:${d.sonuc === 'DOGRU' ? '1' : '0'}`).join(','),
+      t: (Array.isArray(s.testDetay) ? s.testDetay : []).map((d) => `${d.verilen || '-'}:${d.sonuc === 'DOGRU' ? '1' : '0'}`).join(','),
+      kl: (Array.isArray(s.klasikDetay) ? s.klasikDetay : []).map((k) => Number(k.verilenPuan || 0))
+    }));
 
     const nesne = {
       v: 1,
-      kod: String(sinavKodu || 'SINAV-2026'),
+      kod: sinavKodu,
       zaman: new Date().toISOString(),
       kayitlar: hafifListe
     };
     const b64 = utf8ToBase64Guvenli(JSON.stringify(nesne));
-    const temizTaban = String(tabanAdres || '').trim().replace(/\/+$/, '');
+    const temizTaban = tabanHam.trim().replace(/\/+$/, '');
     const urlBilgisayar = `${temizTaban ? temizTaban + '/index.html' : 'index.html'}#omr-sonuc=${encodeURIComponent(b64)}`;
+    const paketKodu = `OMR-SONUC|${b64}`;
+    const jsonMetni = JSON.stringify({
+      belgeTuru: 'OMR_DETAYLI_SONUC_PAKETI',
+      sinavKodu,
+      olusturulmaZamani: nesne.zaman,
+      okumaSonuclari: temizSonuclar
+    }, null, 2);
     return {
       kayitSayisi: hafifListe.length,
-      paketKodu: `OMR-SONUC|${b64}`,
+      toplamOkuma: hafifListe.length,
+      sinavKodu,
+      paketKodu,
+      kod: paketKodu,
       urlBilgisayar,
-      jsonMetni: JSON.stringify({
-        belgeTuru: 'OMR_DETAYLI_SONUC_PAKETI',
-        sinavKodu,
-        olusturulmaZamani: nesne.zaman,
-        okumaSonuclari: (Array.isArray(okumaSonuclari) ? okumaSonuclari : []).map((s) => {
-          const { kanonikIkili, kanonikGri, kanonikHarita, ...temiz } = s || {};
-          return temiz;
-        })
-      }, null, 2)
+      okumaSonuclari: temizSonuclar,
+      sonuclar: temizSonuclar,
+      jsonMetni,
+      jsonMetin: jsonMetni
     };
   }
 
   function cozOmrSonucPaketi(girdi = '') {
-    let ham = String(girdi || '').trim();
-    if (!ham) return { gecerli: false, okumaSonuclari: [], hata: 'Boş OMR sonuç verisi.' };
+    if (girdi === null || girdi === undefined) {
+      return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'Boş OMR sonuç verisi.' };
+    }
     try {
-      if (ham.startsWith('{')) {
-        const j = JSON.parse(ham);
-        if (j && Array.isArray(j.okumaSonuclari)) {
-          return { gecerli: true, okumaSonuclari: j.okumaSonuclari, sinavKodu: j.sinavKodu || 'SINAV-2026' };
+      let adayListe = null;
+      let sinavKodu = 'SINAV-2026';
+
+      if (typeof girdi === 'object' && !Array.isArray(girdi)) {
+        if (typeof girdi.paket === 'string' || typeof girdi.paketKodu === 'string' || typeof girdi.kod === 'string') {
+          const icGirdi = girdi.paket || girdi.paketKodu || (String(girdi.kod || '').startsWith('OMR-SONUC') ? girdi.kod : '');
+          if (icGirdi) return cozOmrSonucPaketi(icGirdi);
         }
+        if (Array.isArray(girdi.okumaSonuclari)) {
+          adayListe = girdi.okumaSonuclari;
+          sinavKodu = String(girdi.sinavKodu || girdi.kod || 'SINAV-2026');
+        } else if (Array.isArray(girdi.sonuclar)) {
+          adayListe = girdi.sonuclar;
+          sinavKodu = String(girdi.sinavKodu || girdi.kod || 'SINAV-2026');
+        } else if (Array.isArray(girdi.kayitlar)) {
+          adayListe = girdi.kayitlar;
+          sinavKodu = String(girdi.kod || girdi.sinavKodu || 'SINAV-2026');
+        } else {
+          return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'OMR sonuç nesnesi geçersiz.' };
+        }
+      } else if (Array.isArray(girdi)) {
+        adayListe = girdi;
+      } else {
+        let ham = String(girdi || '').trim();
+        if (!ham) return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'Boş OMR sonuç verisi.' };
+        if (ham.startsWith('{') || ham.startsWith('[')) {
+          const j = JSON.parse(ham);
+          return cozOmrSonucPaketi(j);
+        }
+        if (ham.includes('#omr-sonuc=')) {
+          ham = decodeURIComponent(ham.slice(ham.indexOf('#omr-sonuc=') + 11).split('&')[0]);
+        } else if (ham.startsWith('OMR-SONUC-V1|')) {
+          ham = ham.slice(13).trim();
+        } else if (ham.startsWith('OMR-SONUC|')) {
+          ham = ham.slice(10).trim();
+        }
+        const nesne = JSON.parse(base64ToUtf8Guvenli(ham));
+        if (!nesne || typeof nesne !== 'object') {
+          return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'OMR sonuç paketi formatı geçersiz.' };
+        }
+        return cozOmrSonucPaketi(nesne);
       }
-      if (ham.includes('#omr-sonuc=')) {
-        ham = decodeURIComponent(ham.slice(ham.indexOf('#omr-sonuc=') + 11).split('&')[0]);
-      } else if (ham.startsWith('OMR-SONUC|')) {
-        ham = ham.slice(10).trim();
+
+      if (!Array.isArray(adayListe) || adayListe.length === 0) {
+        return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'OMR sonuç paketinde geçerli öğrenci kaydı bulunamadı.' };
       }
-      const nesne = JSON.parse(base64ToUtf8Guvenli(ham));
-      if (!nesne || !Array.isArray(nesne.kayitlar)) {
-        return { gecerli: false, okumaSonuclari: [], hata: 'OMR sonuç paketi formatı geçersiz.' };
+
+      const okumaSonuclari = [];
+      for (let i = 0; i < adayListe.length; i++) {
+        const temizKayit = dogrulaVeTemizleOmrSonucKaydi(adayListe[i], i);
+        if (!temizKayit) {
+          return {
+            gecerli: false,
+            okumaSonuclari: [],
+            sonuclar: [],
+            hata: `OMR sonuç paketindeki ${i + 1}. kayıt şema doğrulamasından geçemedi (geçersiz grup veya puan aralığı).`
+          };
+        }
+        okumaSonuclari.push(temizKayit);
       }
-      const okumaSonuclari = nesne.kayitlar.map((k, idx) => {
-        const dyDetay = String(k.dy || '').split(',').filter(Boolean).map((p, i) => {
-          const [verilen, d] = p.split(':');
-          return { soruNo: i + 1, verilen: verilen === '-' ? '' : verilen, sonuc: d === '1' ? 'DOGRU' : (verilen === '-' ? 'BOS' : 'YANLIS') };
-        });
-        const testDetay = String(k.t || '').split(',').filter(Boolean).map((p, i) => {
-          const [verilen, d] = p.split(':');
-          return { soruNo: i + 1, verilen: verilen === '-' ? '' : verilen, sonuc: d === '1' ? 'DOGRU' : (verilen === '-' ? 'BOS' : 'YANLIS') };
-        });
-        const klasikDetay = (Array.isArray(k.kl) ? k.kl : []).map((puan, i) => ({
-          soruNo: i + 1,
-          verilenPuan: Number(puan || 0)
-        }));
-        return {
-          id: `mobil-aktarim-${Date.now()}-${idx}`,
-          ogrNo: String(k.no || ''),
-          okunanNoKod: String(k.no || '').slice(-2),
-          adSoyad: String(k.ad || 'Öğrenci'),
-          grup: String(k.g || 'A'),
-          toplamPuan: Number(k.p || 0),
-          dyNet: Number(k.dn || 0),
-          testNet: Number(k.tn || 0),
-          dyDogru: dyDetay.filter((x) => x.sonuc === 'DOGRU').length,
-          dyYanlis: dyDetay.filter((x) => x.sonuc === 'YANLIS').length,
-          testDogru: testDetay.filter((x) => x.sonuc === 'DOGRU').length,
-          testYanlis: testDetay.filter((x) => x.sonuc === 'YANLIS').length,
-          klasikToplamPuan: Number(k.kp || 0),
-          dyDetay,
-          testDetay,
-          klasikDetay,
-          supheliMi: false,
-          incelemeKuyrugu: []
-        };
-      });
-      return { gecerli: true, okumaSonuclari, sinavKodu: nesne.kod || 'SINAV-2026' };
+
+      return {
+        gecerli: true,
+        okumaSonuclari,
+        sonuclar: okumaSonuclari,
+        kayitSayisi: okumaSonuclari.length,
+        toplamOkuma: okumaSonuclari.length,
+        sinavKodu
+      };
     } catch (e) {
-      return { gecerli: false, okumaSonuclari: [], hata: 'OMR sonuç paketi çözümlenemedi.' };
+      return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'OMR sonuç paketi çözümlenemedi.' };
     }
   }
 
@@ -5423,25 +5697,39 @@
   ];
 
   function uretDelilLogHash(metin) {
-    const giris = String(metin || '');
-    const utf8 = [];
-    for (let i = 0; i < giris.length; i++) {
-      let c = giris.charCodeAt(i);
-      if (c < 0x80) {
-        utf8.push(c);
-      } else if (c < 0x800) {
-        utf8.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
-      } else if (c < 0xd800 || c >= 0xe000) {
-        utf8.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
-      } else {
-        i++;
-        c = 0x10000 + (((c & 0x3ff) << 10) | (giris.charCodeAt(i) & 0x3ff));
-        utf8.push(
-          0xf0 | (c >> 18),
-          0x80 | ((c >> 12) & 0x3f),
-          0x80 | ((c >> 6) & 0x3f),
-          0x80 | (c & 0x3f)
-        );
+    const giris = String(metin === undefined || metin === null ? '' : metin);
+    let utf8;
+    if (typeof TextEncoder !== 'undefined') {
+      utf8 = Array.from(new TextEncoder().encode(giris));
+    } else {
+      utf8 = [];
+      for (let i = 0; i < giris.length; i++) {
+        let c = giris.charCodeAt(i);
+        if (c < 0x80) {
+          utf8.push(c);
+        } else if (c < 0x800) {
+          utf8.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+        } else if (c >= 0xd800 && c <= 0xdbff) {
+          const next = i + 1 < giris.length ? giris.charCodeAt(i + 1) : 0;
+          if (next >= 0xdc00 && next <= 0xdfff) {
+            i++;
+            c = 0x10000 + (((c & 0x3ff) << 10) | (next & 0x3ff));
+            utf8.push(
+              0xf0 | (c >> 18),
+              0x80 | ((c >> 12) & 0x3f),
+              0x80 | ((c >> 6) & 0x3f),
+              0x80 | (c & 0x3f)
+            );
+          } else {
+            // Tekil (eşleşmemiş) yüksek vekil karakter -> U+FFFD (EF BF BD)
+            utf8.push(0xef, 0xbf, 0xbd);
+          }
+        } else if (c >= 0xdc00 && c <= 0xdfff) {
+          // Tekil (eşleşmemiş) düşük vekil karakter -> U+FFFD (EF BF BD)
+          utf8.push(0xef, 0xbf, 0xbd);
+        } else {
+          utf8.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+        }
       }
     }
 
@@ -5546,6 +5834,7 @@
     return {
       id: `LOG-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
       zamanIso,
+      zamanDamgasi: zamanIso,
       yerelZaman,
       sinavId,
       sinavBaslik,
@@ -5666,7 +5955,7 @@
     const secili = (Array.isArray(loglar) ? loglar : []).filter(
       (l) => !hedefSinavId || hedefSinavId === 'TUMU' || l.sinavId === hedefSinavId
     );
-    const temizleHucre = (v) => String(v === undefined || v === null ? '' : v).replace(/;/g, ',').replace(/[\r\n]+/g, ' ').trim();
+    const temizleHucre = (v) => temizleCsvFormulEnjeksiyon(v);
     const satirlar = secili.map((l, idx) =>
       [
         idx + 1,
@@ -5850,11 +6139,14 @@
       }
     );
 
-    const seciliDy = onleDyArdisikYigilma(ocSecim.dy.slice(0, dySayisi)).map((s, i) => ({
+    const seciliDyIslenmis = onleDyArdisikYigilma(ocSecim.dy.slice(0, dySayisi));
+    const seciliDy = seciliDyIslenmis.map((s, i) => ({
       ...s,
       kitapcikSoruNo: i + 1,
       orijinalNo: i + 1
     }));
+    const enUzunDyOgr = hesaplaEnUzunDySerisi(seciliDy);
+    const dyUyariOgr = enUzunDyOgr > 3;
 
     const dengeliHarfOgr = uretDengeliHarfDizisi(testSayisi, sikSayisi, `OGR-DENGELI-${sinavKodu}-${ogrNo}`);
     const seciliTest = ocSecim.test.slice(0, testSayisi).map((s, i) => {
@@ -5885,12 +6177,17 @@
       ozelKod,
       dy: seciliDy,
       test: seciliTest,
-      klasik: seciliKlasik
+      klasik: seciliKlasik,
+      enUzunDySerisi: enUzunDyOgr,
+      dyDengesizUyari: dyUyariOgr,
+      uyari: dyUyariOgr ? 'D/Y havuzunda yeterli D/Y çeşitliliği olmadığından ardışık yığılma yalnız sıralama ile çözülemedi.' : ''
     };
 
     const anahtar = {
       dy: seciliDy.map((s) => s.dogruDY || 'D'),
       test: seciliTest.map((s) => s.dogruHarf || 'A'),
+      enUzunDySerisi: enUzunDyOgr,
+      dyDengesizUyari: dyUyariOgr,
       testDetay: seciliTest.map((s) => ({
         soruId: s.id || '',
         dogruHarf: s.dogruHarf || 'A',
@@ -6400,6 +6697,7 @@
     olusturGuvenliBlobUrl,
     temizleTumBlobUrller,
     kurGuvenliInterval,
+    kaydetGuvenliInterval: kurGuvenliInterval,
     temizleGuvenliInterval,
     guvenliDecompress,
     tohumluRastgele,
@@ -6412,6 +6710,8 @@
     cozOptikGeometriMatrisi,
     uretMiniGeometriSVG,
     hesaplaKanonikBalonHaritasi,
+    hesaplaEnUzunDySerisi,
+    onleDyArdisikYigilma,
     uretOptikYerlesim,
     uretOptikFormSVG,
     bulOptikFormKoseleri,

@@ -55,6 +55,17 @@ function denemeCsvUret() {
   if (!fs.existsSync(path.join(URETILEN, 'ornek_sorular_karma.csv'))) {
     fs.writeFileSync(path.join(URETILEN, 'ornek_sorular_karma.csv'), '\ufeff' + C.uretBosSoruSablonuCSV(), 'utf8');
   }
+  if (!fs.existsSync(path.join(URETILEN, 'ornek_ogrenciler.csv'))) {
+    const ogrCsv = '\ufeff' + [
+      'Ogrenci_No;Ad_Soyad',
+      '2024101001;Ahmet Yılmaz',
+      '2024101002;Ayşe Kaya',
+      '2024101003;Mehmet Demir',
+      '2024101004;Zeynep Çelik',
+      '2024101005;Mustafa Şahin'
+    ].join('\r\n');
+    fs.writeFileSync(path.join(URETILEN, 'ornek_ogrenciler.csv'), ogrCsv, 'utf8');
+  }
   const aoa = [baslik.split(';'), ...DENEME_CSV_SATIRLARI.map((s, i) => [...s.slice(0, 7), zorluklar[i % 3], 'ÖÇ-1: Deneme', (i % 7) + 1])];
   const kitap = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(kitap, XLSX.utils.aoa_to_sheet(aoa), 'Sayfa1');
