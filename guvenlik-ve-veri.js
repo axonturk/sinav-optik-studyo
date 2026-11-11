@@ -158,6 +158,30 @@
       }
     }
 
+    if (veri.dersler !== undefined) {
+      if (!Array.isArray(veri.dersler)) {
+        throw new Error('Şema hatası: dersler bir dizi olmalıdır.');
+      }
+      for (let i = 0; i < veri.dersler.length; i++) {
+        const d = veri.dersler[i];
+        if (!d || typeof d !== 'object' || Array.isArray(d) || typeof d.id !== 'string' || !d.id.trim()) {
+          throw new Error(`Şema hatası: dersler[${i}] null veya geçersiz nesne olamaz.`);
+        }
+      }
+    }
+
+    if (veri.okumaSonuclari !== undefined) {
+      if (!Array.isArray(veri.okumaSonuclari)) {
+        throw new Error('Şema hatası: okumaSonuclari bir dizi olmalıdır.');
+      }
+      for (let i = 0; i < veri.okumaSonuclari.length; i++) {
+        const ok = veri.okumaSonuclari[i];
+        if (!ok || typeof ok !== 'object' || Array.isArray(ok)) {
+          throw new Error(`Şema hatası: okumaSonuclari[${i}] null veya geçersiz nesne olamaz.`);
+        }
+      }
+    }
+
     return veri;
   }
 
@@ -5428,24 +5452,48 @@
     try {
       let adayListe = null;
       let sinavKodu = 'SINAV-2026';
+      let sinavKoduAcikMi = false;
       let sinavSurumId = '';
 
       if (typeof girdi === 'object' && !Array.isArray(girdi)) {
         if (Array.isArray(girdi.okumaSonuclari)) {
           adayListe = girdi.okumaSonuclari;
-          sinavKodu = String(girdi.sinavKodu || girdi.kod || 'SINAV-2026');
-          sinavSurumId = String(girdi.sinavSurumId || girdi.surum || '');
+          const hamKod = girdi.sinavKodu !== undefined ? girdi.sinavKodu : girdi.kod;
+          if (hamKod !== undefined && String(hamKod).trim() !== '') {
+            sinavKodu = String(hamKod).trim();
+            sinavKoduAcikMi = true;
+          }
+          sinavSurumId = String(girdi.sinavSurumId || girdi.surum || '').trim();
         } else if (Array.isArray(girdi.sonuclar)) {
           adayListe = girdi.sonuclar;
-          sinavKodu = String(girdi.sinavKodu || girdi.kod || 'SINAV-2026');
-          sinavSurumId = String(girdi.sinavSurumId || girdi.surum || '');
+          const hamKod = girdi.sinavKodu !== undefined ? girdi.sinavKodu : girdi.kod;
+          if (hamKod !== undefined && String(hamKod).trim() !== '') {
+            sinavKodu = String(hamKod).trim();
+            sinavKoduAcikMi = true;
+          }
+          sinavSurumId = String(girdi.sinavSurumId || girdi.surum || '').trim();
         } else if (Array.isArray(girdi.kayitlar)) {
           adayListe = girdi.kayitlar.map((k) => (k && k.ke ? { ...k, kimlikEslesmeBekliyor: true } : k));
-          sinavKodu = String(girdi.kod || girdi.sinavKodu || 'SINAV-2026');
-          sinavSurumId = String(girdi.surum || girdi.sinavSurumId || '');
+          const hamKod = girdi.kod !== undefined ? girdi.kod : girdi.sinavKodu;
+          if (hamKod !== undefined && String(hamKod).trim() !== '') {
+            sinavKodu = String(hamKod).trim();
+            sinavKoduAcikMi = true;
+          }
+          sinavSurumId = String(girdi.surum || girdi.sinavSurumId || '').trim();
         } else if (typeof girdi.paket === 'string' || typeof girdi.paketKodu === 'string' || typeof girdi.kod === 'string') {
           const icGirdi = girdi.paket || girdi.paketKodu || (String(girdi.kod || '').startsWith('OMR-SONUC') ? girdi.kod : '');
-          if (icGirdi) return cozOmrSonucPaketi(icGirdi, sinirlar);
+          if (icGirdi) {
+            const disKodHam = girdi.sinavKodu !== undefined
+              ? String(girdi.sinavKodu).trim()
+              : (typeof girdi.kod === 'string' && !girdi.kod.startsWith('OMR-SONUC') ? girdi.kod.trim() : '');
+            const disSurumHam = String(girdi.sinavSurumId || girdi.surum || '').trim();
+            const altSinirlar = {
+              ...sinirlar,
+              ...(disKodHam ? { disSinavKodu: disKodHam } : {}),
+              ...(disSurumHam ? { disSinavSurumId: disSurumHam } : {})
+            };
+            return cozOmrSonucPaketi(icGirdi, altSinirlar);
+          }
           return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'OMR sonuç nesnesi geçersiz.' };
         } else {
           return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'OMR sonuç nesnesi geçersiz.' };
@@ -5473,15 +5521,52 @@
         return cozOmrSonucPaketi(nesne, sinirlar);
       }
 
-      if (sinirlar.beklenenSinavSurumId && sinavSurumId && sinirlar.beklenenSinavSurumId !== sinavSurumId) {
+      const disSinavKodu = String(sinirlar.disSinavKodu || '').trim();
+      const disSinavSurumId = String(sinirlar.disSinavSurumId || '').trim();
+      if (disSinavKodu && sinavKoduAcikMi && disSinavKodu !== sinavKodu) {
         return {
           gecerli: false,
           surumUyusmazligi: true,
           okumaSonuclari: [],
           sonuclar: [],
-          hata: `OMR paketi eski sınav sürümüne (${sinavSurumId}) ait; aktif sürüm (${sinirlar.beklenenSinavSurumId}) ile eşleşmiyor.`
+          hata: `Dış gövdedeki sınav kodu (${disSinavKodu}) ile paket içindeki sınav kodu (${sinavKodu}) eşleşmiyor.`
         };
       }
+      if (disSinavSurumId && sinavSurumId && disSinavSurumId !== sinavSurumId) {
+        return {
+          gecerli: false,
+          surumUyusmazligi: true,
+          okumaSonuclari: [],
+          sonuclar: [],
+          hata: `Dış gövdedeki sınav sürümü (${disSinavSurumId}) ile paket içindeki sürüm (${sinavSurumId}) eşleşmiyor.`
+        };
+      }
+
+      const etkinSinavKodu = sinavKoduAcikMi ? sinavKodu : (disSinavKodu || sinavKodu);
+      const etkinSinavSurumId = sinavSurumId || disSinavSurumId || '';
+      const aktifSinavEslesiyorMu = Boolean(
+        sinirlar.aktifSinavId &&
+        (String(etkinSinavKodu) === String(sinirlar.aktifSinavId) || (disSinavKodu && String(disSinavKodu) === String(sinirlar.aktifSinavId)))
+      );
+      const beklenenSinavSurumId = String(
+        sinirlar.beklenenSinavSurumId || (aktifSinavEslesiyorMu ? (sinirlar.aktifSinavSurumId || '') : '')
+      ).trim();
+
+      if (beklenenSinavSurumId && (!etkinSinavSurumId || beklenenSinavSurumId !== etkinSinavSurumId)) {
+        return {
+          gecerli: false,
+          surumUyusmazligi: true,
+          okumaSonuclari: [],
+          sonuclar: [],
+          hata: !etkinSinavSurumId
+            ? `Aktif sınav (${etkinSinavKodu}) için sınav sürüm kimliği (sinavSurumId) zorunludur.`
+            : `OMR paketi eski sınav sürümüne (${etkinSinavSurumId}) ait; aktif sürüm (${beklenenSinavSurumId}) ile eşleşmiyor.`
+        };
+      }
+
+      const kayitSinirlari = aktifSinavEslesiyorMu && sinirlar.aktifSinavLimitleri
+        ? { ...sinirlar, ...sinirlar.aktifSinavLimitleri }
+        : sinirlar;
 
       if (!Array.isArray(adayListe) || adayListe.length === 0) {
         return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'OMR sonuç paketinde geçerli öğrenci kaydı bulunamadı.' };
@@ -5489,7 +5574,7 @@
 
       const okumaSonuclari = [];
       for (let i = 0; i < adayListe.length; i++) {
-        const temizKayit = dogrulaVeTemizleOmrSonucKaydi(adayListe[i], i, sinirlar);
+        const temizKayit = dogrulaVeTemizleOmrSonucKaydi(adayListe[i], i, kayitSinirlari);
         if (!temizKayit) {
           return {
             gecerli: false,
@@ -5507,8 +5592,8 @@
         sonuclar: okumaSonuclari,
         kayitSayisi: okumaSonuclari.length,
         toplamOkuma: okumaSonuclari.length,
-        sinavKodu,
-        sinavSurumId
+        sinavKodu: etkinSinavKodu,
+        sinavSurumId: etkinSinavSurumId
       };
     } catch (e) {
       return { gecerli: false, okumaSonuclari: [], sonuclar: [], hata: 'OMR sonuç paketi çözümlenemedi.' };
@@ -7043,7 +7128,7 @@
 
     const satirlar = duzMetin
       .split(/\r?\n/)
-      .map((s) => s.replace(/\u00a0/g, ' ').replace(/[ \t]+/g, (m) => (m.includes('\t') ? '\t' : ' ')).trim())
+      .map((s) => s.replace(/\u00a0/g, ' ').replace(/ +/g, ' ').replace(/ *\t */g, '\t').trim())
       .filter(Boolean);
 
     const sonuc = {
@@ -7147,26 +7232,31 @@
         const s = satirlar[i];
         if (/^(AKTS Hesaplama|Dersin Öğrenme Çıktıları|Toplam\s*:)/i.test(s)) break;
         if (/^(Yarıyıl Çalışmaları|Sayısı|Katkı)$/i.test(s)) continue;
-        // Tek satır: Ara Sınav \t 1 \t % 40
-        const tekEsl = s.match(/^(Ara\s*Sınav|Vize|Final|Yarıyıl\s*Sonu|Bütünleme|Kısa\s*Sınav|Quiz|Ödev|Proje|Uygulama|Laboratuvar)[^\d%]*(\d+)?\s*%?\s*(\d{1,3})\s*%?$/i);
-        if (tekEsl && s.includes('%')) {
-          const ad = tekEsl[1].trim();
-          const katki = Number(s.match(/%\s*(\d{1,3})|(\d{1,3})\s*%/)?.[1] || s.match(/%\s*(\d{1,3})|(\d{1,3})\s*%/)?.[2] || tekEsl[3]);
-          if (katki > 0 && katki <= 100) {
+        // Tek satır / sekme ayrılmış Proliz satırı: "Ara Sınav \t 1 \t % 40" veya "Vize 40%"
+        // DİKKAT: "1 \t % 40" içinde (\d+)\s*% sekme karakterini aşarak "1\t%" yakalamamalı; yalnız yatay boşluk ([ \u00a0]*) kullanılır!
+        const baslikEsl = s.match(/^(Ara\s*Sınav|Vize|Final|Yarıyıl\s*Sonu(?:\s*Sınavı)?|Bütünleme|Kısa\s*Sınav|Quiz|Ödev|Proje|Uygulama|Laboratuvar)\b(.*)$/i);
+        if (baslikEsl && s.includes('%')) {
+          const ad = baslikEsl[1].trim();
+          const kalan = baslikEsl[2] || '';
+          const yuzdeEsl = kalan.match(/%[ \u00a0]*(\d{1,3})(?!\d)|(?<!\d)(\d{1,3})[ \u00a0]*%/);
+          const katki = yuzdeEsl ? Number(yuzdeEsl[1] || yuzdeEsl[2]) : NaN;
+          if (Number.isFinite(katki) && katki > 0 && katki <= 100) {
+            const kalanSayiMetni = yuzdeEsl ? kalan.replace(yuzdeEsl[0], ' ') : kalan;
+            const sayiEsl = kalanSayiMetni.match(/\b(\d{1,2})\b/);
             sonuc.degerlendirmeOlcutleri.push({
               ad,
               tur: /ara|vize/i.test(ad) ? 'vize' : (/final|yarıyıl\s*sonu/i.test(ad) ? 'final' : 'diger'),
-              sayi: Number(tekEsl[2] || 1) || 1,
+              sayi: sayiEsl ? (Number(sayiEsl[1]) || 1) : 1,
               katkiYuzde: katki
             });
           }
           continue;
         }
         // 3 satırlı Proliz kopyası: Ara Sınav / 1 / % 40
-        if (/^(Ara\s*Sınav|Vize|Final|Yarıyıl\s*Sonu|Kısa\s*Sınav|Ödev|Proje|Uygulama)$/i.test(s) && i + 2 < satirlar.length) {
+        if (/^(Ara\s*Sınav|Vize|Final|Yarıyıl\s*Sonu(?:\s*Sınavı)?|Kısa\s*Sınav|Ödev|Proje|Uygulama)$/i.test(s) && i + 2 < satirlar.length) {
           const sayiAday = satirlar[i + 1];
           const yuzdeAday = satirlar[i + 2];
-          const yEsl = yuzdeAday.match(/%\s*(\d{1,3})|(\d{1,3})\s*%/);
+          const yEsl = yuzdeAday.match(/%[ \u00a0]*(\d{1,3})(?!\d)|(?<!\d)(\d{1,3})[ \u00a0]*%/);
           if (/^\d+$/.test(sayiAday) && yEsl) {
             const katki = Number(yEsl[1] || yEsl[2]);
             sonuc.degerlendirmeOlcutleri.push({
@@ -7269,9 +7359,10 @@
           if (!row.length) continue;
           const ilk = row[0] || '';
           if (/^Katkı Düzeyi/i.test(ilk)) break;
+          const kayma = pcSutunIndeksleri.length > 0 && pcSutunIndeksleri[0].cIdx === 0 ? 1 : 0;
           if (/^Tüm$/i.test(ilk)) {
             pcSutunIndeksleri.forEach((sut) => {
-              const deger = Number(row[sut.cIdx] || 0);
+              const deger = Number(row[sut.cIdx + kayma] || 0);
               if (deger >= 1 && deger <= 5) {
                 sonuc.programCiktilari.tumSatiri[sut.pKod] = Math.max(sonuc.programCiktilari.tumSatiri[sut.pKod] || 0, deger);
               }
@@ -7281,7 +7372,7 @@
             const ocKod = `ÖÇ-${ocNo}`;
             sonuc.programCiktilari.ocPcMatrisi[ocKod] = sonuc.programCiktilari.ocPcMatrisi[ocKod] || {};
             pcSutunIndeksleri.forEach((sut) => {
-              const deger = Number(row[sut.cIdx] || 0);
+              const deger = Number(row[sut.cIdx + kayma] || 0);
               if (deger >= 1 && deger <= 5) {
                 sonuc.programCiktilari.ocPcMatrisi[ocKod][sut.pKod] = deger;
               }
@@ -7297,19 +7388,24 @@
       if (pcBas >= 0) {
         const hamSutunlar = [];
         const tumDegerler = [];
+        let tumSekmeliHucreler = null;
         let tumGoruldu = false;
         for (let i = pcBas + 1; i < satirlar.length; i++) {
           const s = satirlar[i];
           if (/^Katkı Düzeyi/i.test(s)) break;
-          const parcalar = s.split(/\s+/);
-          if (!tumGoruldu && parcalar.every((p) => /^(?:PÇ|P)-?\d{1,2}$/i.test(p))) {
+          const parcalar = s.split(/\s+/).filter(Boolean);
+          if (!tumGoruldu && parcalar.length > 0 && parcalar.every((p) => /^(?:PÇ|P)-?\d{1,2}$/i.test(p))) {
             hamSutunlar.push(...parcalar);
             continue;
           }
           if (/^Tüm(\b|\s)/i.test(s)) {
             tumGoruldu = true;
-            const sayilar = s.replace(/^Tüm/i, '').trim().split(/\s+/).filter(Boolean).map(Number).filter((n) => n >= 1 && n <= 5);
-            tumDegerler.push(...sayilar);
+            if (s.includes('\t') && /\t\t/.test(s)) {
+              tumSekmeliHucreler = s.split('\t').slice(1);
+            } else {
+              const sayilar = s.replace(/^Tüm/i, '').trim().split(/\s+/).filter(Boolean).map(Number).filter((n) => n >= 1 && n <= 5);
+              tumDegerler.push(...sayilar);
+            }
             continue;
           }
           if (tumGoruldu && /^[1-5]$/.test(s)) {
@@ -7317,14 +7413,27 @@
             continue;
           }
           if (/^(?:ÖÇ|Ö)\s*-?\s*\d{1,2}/i.test(s)) {
-            const parca = s.split(/\s+/);
-            const ocNo = Number(parca[0].replace(/\D+/g, ''));
-            const ocKod = `ÖÇ-${ocNo}`;
-            sonuc.programCiktilari.ocPcMatrisi[ocKod] = sonuc.programCiktilari.ocPcMatrisi[ocKod] || {};
-            const sayilar = parca.slice(1).map(Number).filter((n) => n >= 1 && n <= 5);
-            sayilar.forEach((n, idx) => {
-              sonuc.programCiktilari.ocPcMatrisi[ocKod][`PÇ-${idx + 1}`] = n;
-            });
+            if (s.includes('\t') && /\t\t/.test(s)) {
+              const sekmeHucre = s.split('\t');
+              const ocNo = Number(sekmeHucre[0].replace(/\D+/g, ''));
+              const ocKod = `ÖÇ-${ocNo}`;
+              sonuc.programCiktilari.ocPcMatrisi[ocKod] = sonuc.programCiktilari.ocPcMatrisi[ocKod] || {};
+              sekmeHucre.slice(1).forEach((degerMetni, idx) => {
+                const n = Number(degerMetni);
+                const hBaslik = hamSutunlar[idx] || `P${idx + 1}`;
+                const pKod = `PÇ-${Number(hBaslik.replace(/\D+/g, '')) || (idx + 1)}`;
+                if (n >= 1 && n <= 5) sonuc.programCiktilari.ocPcMatrisi[ocKod][pKod] = n;
+              });
+            } else {
+              const parca = s.split(/\s+/);
+              const ocNo = Number(parca[0].replace(/\D+/g, ''));
+              const ocKod = `ÖÇ-${ocNo}`;
+              sonuc.programCiktilari.ocPcMatrisi[ocKod] = sonuc.programCiktilari.ocPcMatrisi[ocKod] || {};
+              const sayilar = parca.slice(1).map(Number).filter((n) => n >= 1 && n <= 5);
+              sayilar.forEach((n, idx) => {
+                sonuc.programCiktilari.ocPcMatrisi[ocKod][`PÇ-${idx + 1}`] = n;
+              });
+            }
           }
         }
         const gorulen = new Map();
@@ -7338,11 +7447,20 @@
         });
         sonuc.programCiktilari.sutunlar = hamSutunlar;
         sonuc.programCiktilari.kanonikSutunlar = kanonik.length ? kanonik : ['PÇ-1', 'PÇ-2', 'PÇ-3', 'PÇ-4', 'PÇ-5'];
-        // Düz metinde boş hücre kaybolduğunda gelen katkı değerlerini sırasıyla PÇ-1..PÇ-k ile eşle ve uyar
-        tumDegerler.forEach((val, idx) => {
-          const hedefPc = sonuc.programCiktilari.kanonikSutunlar[idx] || `PÇ-${idx + 1}`;
-          sonuc.programCiktilari.tumSatiri[hedefPc] = val;
-        });
+        if (tumSekmeliHucreler) {
+          tumSekmeliHucreler.forEach((degerMetni, idx) => {
+            const val = Number(degerMetni);
+            const hBaslik = hamSutunlar[idx] || `P${idx + 1}`;
+            const pKod = `PÇ-${Number(hBaslik.replace(/\D+/g, '')) || (idx + 1)}`;
+            if (val >= 1 && val <= 5) sonuc.programCiktilari.tumSatiri[pKod] = val;
+          });
+        } else {
+          // Düz metinde boş hücre kaybolduğunda gelen katkı değerlerini sırasıyla PÇ-1..PÇ-k ile eşle ve uyar
+          tumDegerler.forEach((val, idx) => {
+            const hedefPc = sonuc.programCiktilari.kanonikSutunlar[idx] || `PÇ-${idx + 1}`;
+            sonuc.programCiktilari.tumSatiri[hedefPc] = val;
+          });
+        }
       }
     }
 
@@ -7378,6 +7496,7 @@
     sonuc.dersAdi = sonuc.ad;
     sonuc.tul = sonuc.tUL;
     sonuc.bolumProgram = sonuc.bolum;
+    sonuc.kanonikPcSutunlar = sonuc.programCiktilari.kanonikSutunlar;
     sonuc.pcTumKatkilar = sonuc.programCiktilari.tumSatiri;
     sonuc.ocPcMatrisi = sonuc.programCiktilari.ocPcMatrisi;
 
@@ -7759,7 +7878,9 @@
     // 2. Program Çıktıları (PÇ 1..10) Gerçekleşme Tablosu (1–5 Akreditasyon Ölçeği)
     const ocPcMatrisi = bolognaVerisi.ocPcMatrisi || (bolognaVerisi.programCiktilari && bolognaVerisi.programCiktilari.ocPcMatrisi) || {};
     const pcTumKatkilar = bolognaVerisi.pcTumKatkilar || (bolognaVerisi.programCiktilari && bolognaVerisi.programCiktilari.tumSatiri) || {};
+    const kanonikPcSutunlar = bolognaVerisi.kanonikPcSutunlar || (bolognaVerisi.programCiktilari && bolognaVerisi.programCiktilari.kanonikSutunlar) || [];
     const pcSet = new Set();
+    (Array.isArray(kanonikPcSutunlar) ? kanonikPcSutunlar : []).forEach((p) => { if (p) pcSet.add(p); });
     Object.keys(pcTumKatkilar || {}).forEach((p) => pcSet.add(p));
     Object.values(ocPcMatrisi).forEach((satir) => {
       if (satir && typeof satir !== 'function' && typeof satir === 'object') {
@@ -7771,6 +7892,7 @@
     }
 
     const kazanimListesi = tekilAnaliz.kazanimTablosu || tekilAnaliz.kazanimlar || [];
+    const acikBolognaMatrisiVar = Object.keys(ocPcMatrisi || {}).length > 0 || Object.keys(pcTumKatkilar || {}).length > 0;
     const pcTablosu = Array.from(pcSet).map((pcKod) => {
       let agirlikliPay = 0;
       let agirlikToplam = 0;
@@ -7787,7 +7909,9 @@
           katkidaBulunanOcler.push(`${ocKodu}(${katkiDuzeyi})`);
         }
       });
-      if (agirlikToplam === 0) {
+      // Yalnız derste hiç Bologna ÖÇ×PÇ matrisi tanımlanmamışsa varsayılan eşit ağırlık kullanılır;
+      // açık Bologna matrisi varken katkısı 0 olan PÇ (örn. PÇ-2) sentetik 3* almaz, ÖLÇÜLMEDİ olarak raporlanır!
+      if (!acikBolognaMatrisiVar && agirlikToplam === 0) {
         kazanimListesi.filter((k) => k.olculduMu !== false && k.soruSayisi > 0).forEach((k) => {
           const ocKodu = normalizeOcKodu(k.ocKodu || k.kod) || k.ocKodu || k.kod;
           agirlikliPay += k.basariYuzde * 3;
@@ -7796,14 +7920,14 @@
         });
         if (!maksKatki) maksKatki = 3;
       }
-      const basariYuzde = agirlikToplam > 0 ? Math.round(agirlikliPay / agirlikToplam) : 0;
-      const beslikSkor = Number(((basariYuzde / 100) * 5).toFixed(2));
       const olculduMu = agirlikToplam > 0;
+      const basariYuzde = olculduMu ? Math.round(agirlikliPay / agirlikToplam) : null;
+      const beslikSkor = olculduMu ? Number(((basariYuzde / 100) * 5).toFixed(2)) : 0;
       const barajiGectiMi = olculduMu && basariYuzde >= barajYuzde;
       return {
         pcKod,
         pcKodu: pcKod,
-        hedefKatkiDuzeyi: maksKatki || 3,
+        hedefKatkiDuzeyi: maksKatki || 0,
         bagliOcler: katkidaBulunanOcler,
         katkidaBulunanOcler,
         olculduMu,
@@ -7818,6 +7942,28 @@
     // 3. Kümülatif Dönem Sonu (Ara Sınav %40 + Final %60 / Bütünleme İkamesi) Öğrenci × ÖÇ Birleştiricisi
     const aktifAgirlik = Number(ayarlar.aktifSinavAgirlik || ayarlar.aktifSinavAgirlikYuzde || (String(sinavYapisi.sinavTuru || '').toUpperCase().includes('FİNAL') ? 60 : 40));
     const aktifTur = String(ayarlar.aktifSinavTuru || sinavYapisi.sinavTuru || 'ARA SINAV').toUpperCase();
+    const aktifDersKoduNorm = String(
+      dersNesne.kod ||
+      bolognaVerisi.kod ||
+      (sinavYapisi.ders && sinavYapisi.ders.kod) ||
+      sinavYapisi.dersKod ||
+      sinavYapisi.dersKodu ||
+      ''
+    ).trim().toUpperCase();
+    const reddedilenYabanciPaketler = [];
+    const gecerliDigerPaketler = (Array.isArray(digerSinavPaketleri) ? digerSinavPaketleri : []).filter((p) => {
+      if (!p || typeof p !== 'object') return false;
+      const paketDersKodu = String(p.dersKodu || p.dersKod || (p.ders && p.ders.kod) || '').trim().toUpperCase();
+      if (paketDersKodu && aktifDersKoduNorm && aktifDersKoduNorm !== 'GENEL' && paketDersKodu !== aktifDersKoduNorm) {
+        reddedilenYabanciPaketler.push({
+          dersKodu: paketDersKodu,
+          beklenenDersKodu: aktifDersKoduNorm,
+          sinavTuru: String(p.ad || p.sinavTuru || 'Ek Sınav')
+        });
+        return false;
+      }
+      return true;
+    });
     const cikarSatirOcHarita = (st) => {
       const sonucMap = {};
       if (st && st.ocYuzdeleri && typeof st.ocYuzdeleri === 'object') {
@@ -7862,7 +8008,7 @@
         agirlik: aktifAgirlik,
         matris: normMatris(tekilAnaliz.ogrenciOcMatrisi, olculenKanonikKodlar)
       },
-      ...digerSinavPaketleri.map((p) => ({
+      ...gecerliDigerPaketler.map((p) => ({
         ad: String(p.ad || p.sinavTuru || 'Ek Sınav'),
         tur: String(p.tur || (/büt/i.test(p.ad || p.sinavTuru || '') ? 'butunleme' : (/final/i.test(p.ad || p.sinavTuru || '') ? 'final' : 'vize'))),
         agirlik: Math.max(1, Number(p.agirlik || p.katkiYuzde || 60)),
@@ -7970,6 +8116,7 @@
         satirlar: kumulatifSatirlar,
         birlestirilenSinavSayisi: tumDonemPaketleri.length
       },
+      reddedilenYabanciPaketler,
       bireyselTekrarOnerileri,
       ogrenciKarneleri: zenginKarneler,
       pukoRaporMetni: pukoMetni,
@@ -8042,13 +8189,19 @@
     const gAnahtar = (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari[grup]) || { dy: [], test: [] };
     const iptalSet = new Set(Array.isArray(sinavYapisi.iptalEdilenSorular) ? sinavYapisi.iptalEdilenSorular : []);
 
+    const dersKod = String(sinavYapisi.dersKod || sinavYapisi.dersKodu || (sinavYapisi.ders && sinavYapisi.ders.kod) || '').trim();
+    const dersAd = String(sinavYapisi.dersAd || sinavYapisi.dersAdi || (sinavYapisi.ders && sinavYapisi.ders.ad) || '').trim();
+    const dersMetin = [dersKod, dersAd].filter(Boolean).join(' — ') || 'Genel Ders';
+    const sinavTurMetin = String(sinavYapisi.sinavTuru || sinavYapisi.sinavAd || 'ARA SINAV').trim();
+    const kurumAdMetin = String(kurumBilgi.kurumAdi || sinavYapisi.kurum || 'Üniversite Rektörlüğü').trim();
+
     const cizgiler = [
       '========================================================================',
       '        T.C. YÜKSEKÖĞRETİM KURUMU — MADDİ HATA İTİRAZ KANIT TUTANAĞI     ',
       '========================================================================',
-      `Kurum / Birim   : ${kurumBilgi.kurumAdi || 'Üniversite Rektörlüğü'} ${kurumBilgi.birimAdi ? '/ ' + kurumBilgi.birimAdi : ''}`,
-      `Ders            : ${sinavYapisi.dersKod || ''} ${sinavYapisi.dersAd || ''}`.trim(),
-      `Sınav Türü      : ${sinavYapisi.sinavTuru || 'ARA SINAV'} · Kitapçık Grubu: ${grup}`,
+      `Kurum / Birim   : ${kurumAdMetin} ${kurumBilgi.birimAdi ? '/ ' + kurumBilgi.birimAdi : ''}`.trim(),
+      `Ders            : ${dersMetin}`,
+      `Sınav Türü      : ${sinavTurMetin} · Kitapçık Grubu: ${grup}`,
       `Öğrenci         : ${ogrenciSonuc.ogrNo} — ${ogrenciSonuc.adSoyad || ''}`,
       `Hesaplanan Puan : ${ogrenciSonuc.toplamPuan} / 100 (Harf: ${hesaplaHarfNotu(ogrenciSonuc.toplamPuan)})`,
       `Net Özeti       : D/Y Net=${ogrenciSonuc.dyNet} · Test Net=${ogrenciSonuc.testNet} · Klasik=${ogrenciSonuc.klasikToplamPuan}p`,

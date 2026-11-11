@@ -258,17 +258,20 @@ function istekIsleyici(req, res) {
           if (sunucuDurumu.kayitliOgrenciler && sunucuDurumu.kayitliOgrenciler.size > 0) {
             omrSinirlar.ogrenciler = Array.from(sunucuDurumu.kayitliOgrenciler.values());
           }
-          if (sunucuDurumu.aktifSinav && govde && govde.sinavKodu && String(govde.sinavKodu) === String(sunucuDurumu.aktifSinav.sinavId)) {
+          if (sunucuDurumu.aktifSinav && sunucuDurumu.aktifSinav.sinavId) {
+            omrSinirlar.aktifSinavId = String(sunucuDurumu.aktifSinav.sinavId);
             if (sunucuDurumu.aktifSinav.sinavSurumId) {
-              omrSinirlar.beklenenSinavSurumId = String(sunucuDurumu.aktifSinav.sinavSurumId);
+              omrSinirlar.aktifSinavSurumId = String(sunucuDurumu.aktifSinav.sinavSurumId);
             }
             if (Array.isArray(sunucuDurumu.aktifSinav.sorular) && sunucuDurumu.aktifSinav.sorular.length > 0) {
-              omrSinirlar.azamiDy = Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'dy').length || 50);
-              omrSinirlar.azamiTest = Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'test').length || 200);
-              omrSinirlar.azamiKlasik = Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'klasik').length || 25);
+              omrSinirlar.aktifSinavLimitleri = {
+                azamiDy: Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'dy').length || 50),
+                azamiTest: Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'test').length || 200),
+                azamiKlasik: Math.max(1, sunucuDurumu.aktifSinav.sorular.filter((q) => q.tur === 'klasik').length || 25)
+              };
             }
           }
-          const cozum = Cekirdek.cozOmrSonucPaketi(govde && govde.paket ? govde.paket : govde, omrSinirlar);
+          const cozum = Cekirdek.cozOmrSonucPaketi(govde, omrSinirlar);
           const okunanListe = cozum.okumaSonuclari || cozum.sonuclar || [];
           if (cozum.surumUyusmazligi) {
             return gonderJson(res, 409, { hata: cozum.hata });

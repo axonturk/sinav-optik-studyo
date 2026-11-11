@@ -1203,6 +1203,13 @@ body.kiosk-aktif .kiosk-gizle {
   .daha-fazla-menu {
     display: none !important;
   }
+  body.hoca-oturum-acik #ana-icerik-alani,
+  body.hoca-oturum-acik #ust-sekme-nav {
+    filter: none !important;
+  }
+  body:not(.hoca-oturum-acik) #ana-icerik-alani {
+    display: none !important;
+  }
 }
 
 /* Araç çubuğu akıştan çıkarıldı: soru metni/şıklarla iç içe geçmez, yalnız üzerine gelince görünür */

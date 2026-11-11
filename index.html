@@ -1110,6 +1110,7 @@
               <button type="button" class="btn btn-birincil btn-kucuk" id="btn-banka-otomatik-oc-analiz">🤖 Soruları Otomatik ÖÇ &amp; Bloom Analiz Et</button>
             </div>
           </div>
+          <div id="uyari-depo-kurtarma-cubuk" hidden style="padding:0.5rem 0.65rem; margin-bottom:0.55rem; background:#fffbeb; border:1px solid #f59e0b; border-radius:6px; color:#92400e; font-size:0.78rem; font-weight:700;"></div>
           <div id="kutu-banka-arsiv-cubuk" style="display:none; padding:0.55rem 0.65rem; margin-bottom:0.55rem; background:var(--uyari-acik); border:1px solid var(--uyari); border-radius:6px; font-size:0.8rem;"></div>
           <div id="kutu-banka-oc-ozet" style="padding:0.45rem 0.6rem; margin-bottom:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:6px; font-size:0.76rem;"></div>
           <div class="tablo-sarmal">
@@ -1171,6 +1172,64 @@
                 </div>
                 <p style="font-size:0.78rem; color:var(--metin-ikincil); margin:0.3rem 0 0;">Köşe işareti gerekmez: balonlar otomatik bulunur, eğim ve 90° dönüklük düzeltilir.</p>
               </div>
+              <details id="panel-omr-harici-anahtar" style="margin-top:0.55rem; padding-top:0.5rem; border-top:1px dashed var(--kenar);">
+                <summary style="cursor:pointer; font-size:0.8rem; font-weight:700; color:var(--birincil);">🔑 Eski / Harici Sınav Cevap Anahtarı Aktar (Soru Bankasız OMR Okuma)</summary>
+                <div style="margin-top:0.5rem;">
+                  <p style="font-size:0.76rem; color:var(--metin-ikincil); margin-bottom:0.45rem;">
+                    Daha önce basılmış sınavların kağıtlarını soru bankasına soru yüklemeden okumak için <strong>CSV/Excel cevap anahtarı yükleyin</strong>, <strong>işaretli öğretmen cevap kağıdını okutun</strong> veya A/B/C/D dizilerini elle girin:
+                  </p>
+                  <label style="display:inline-flex; align-items:center; gap:0.4rem; font-size:0.78rem; font-weight:700; margin-bottom:0.5rem; cursor:pointer; color:var(--basari);">
+                    <input type="checkbox" id="ayar-omr-harici-anahtar-aktif" style="width:auto;" />
+                    <span>✅ Harici Cevap Anahtarı Modu Aktif (Okuma ve yeniden puanlamada bu anahtarı kullan)</span>
+                  </label>
+                  <div class="form-satir">
+                    <div><label class="etiket" for="omr-harici-dy-sayisi">D/Y Sayısı</label><input type="number" id="omr-harici-dy-sayisi" min="0" max="50" value="10" /></div>
+                    <div><label class="etiket" for="omr-harici-test-sayisi">Test Sayısı</label><input type="number" id="omr-harici-test-sayisi" min="0" max="100" value="10" /></div>
+                    <div><label class="etiket" for="omr-harici-sik-sayisi">Şık Sayısı</label><select id="omr-harici-sik-sayisi"><option value="5" selected>5 (A-E)</option><option value="4">4 (A-D)</option></select></div>
+                    <div><label class="etiket" for="omr-harici-klasik-sayisi">Klasik</label><input type="number" id="omr-harici-klasik-sayisi" min="0" max="10" value="0" /></div>
+                  </div>
+                  <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.5rem; align-items:center;">
+                    <button type="button" class="btn btn-kucuk" id="btn-omr-anahtar-csv-sablon">📥 Boş A/B/C/D CSV Şablonu</button>
+                    <label class="btn btn-birincil btn-kucuk" style="cursor:pointer; margin:0;">
+                      📤 Cevap Anahtarı CSV/Excel Yükle
+                      <input type="file" id="input-omr-anahtar-csv-yukle" accept=".csv,.xlsx,.xls,text/csv" style="display:none;" />
+                    </label>
+                    <select id="sec-omr-ogretmen-grup" style="width:auto; font-size:0.76rem; padding:0.25rem 0.4rem;" title="Okutulacak öğretmen anahtar kağıdının grubu">
+                      <option value="A" selected>A Grubu Kağıdı</option>
+                      <option value="B">B Grubu Kağıdı</option>
+                      <option value="C">C Grubu Kağıdı</option>
+                      <option value="D">D Grubu Kağıdı</option>
+                    </select>
+                    <label class="btn btn-mor btn-kucuk" style="cursor:pointer; margin:0;">
+                      📸 İşaretli Öğretmen Kağıdından Anahtar Oku
+                      <input type="file" id="input-omr-ogretmen-kagit-foto" accept="image/*" style="display:none;" />
+                    </label>
+                  </div>
+                  <div class="form-satir" style="margin-bottom:0.35rem;">
+                    <div><label class="etiket" for="omr-anahtar-a-dy">A Grubu D/Y (Örn: DYDDY...)</label><input type="text" id="omr-anahtar-a-dy" class="mono" placeholder="DYDY..." autocomplete="off" /></div>
+                    <div><label class="etiket" for="omr-anahtar-a-test">A Grubu Test (Örn: ABCDE...)</label><input type="text" id="omr-anahtar-a-test" class="mono" placeholder="ABCDE..." autocomplete="off" /></div>
+                  </div>
+                  <div class="form-satir" style="margin-bottom:0.35rem;">
+                    <div><label class="etiket" for="omr-anahtar-b-dy">B Grubu D/Y</label><input type="text" id="omr-anahtar-b-dy" class="mono" placeholder="Boşsa A grubu kullanılır" autocomplete="off" /></div>
+                    <div><label class="etiket" for="omr-anahtar-b-test">B Grubu Test</label><input type="text" id="omr-anahtar-b-test" class="mono" placeholder="Boşsa A grubu kullanılır" autocomplete="off" /></div>
+                  </div>
+                  <div class="form-satir" style="margin-bottom:0.35rem;">
+                    <div><label class="etiket" for="omr-anahtar-c-dy">C Grubu D/Y</label><input type="text" id="omr-anahtar-c-dy" class="mono" placeholder="Boşsa A grubu kullanılır" autocomplete="off" /></div>
+                    <div><label class="etiket" for="omr-anahtar-c-test">C Grubu Test</label><input type="text" id="omr-anahtar-c-test" class="mono" placeholder="Boşsa A grubu kullanılır" autocomplete="off" /></div>
+                  </div>
+                  <div class="form-satir" style="margin-bottom:0.45rem;">
+                    <div><label class="etiket" for="omr-anahtar-d-dy">D Grubu D/Y</label><input type="text" id="omr-anahtar-d-dy" class="mono" placeholder="Boşsa A grubu kullanılır" autocomplete="off" /></div>
+                    <div><label class="etiket" for="omr-anahtar-d-test">D Grubu Test</label><input type="text" id="omr-anahtar-d-test" class="mono" placeholder="Boşsa A grubu kullanılır" autocomplete="off" /></div>
+                  </div>
+                  <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+                    <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                      <button type="button" class="btn btn-kucuk" id="btn-omr-anahtar-a-kopyala">📋 A Grubunu B/C/D'ye Kopyala</button>
+                      <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-omr-harici-anahtar-temizle">🗑️ Harici Anahtarı Kapat</button>
+                    </div>
+                    <span id="etiket-omr-harici-anahtar-durum" style="font-size:0.75rem; font-weight:700; color:var(--metin-ikincil);">Stüdyo soru bankası anahtarı aktif.</span>
+                  </div>
+                </div>
+              </details>
             </div>
             <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.75rem;">
               <button type="button" class="btn btn-birincil" id="btn-studyo-kamera-ac">
@@ -1225,6 +1284,7 @@
                 <label class="etiket" for="sim-senaryo-sec">Görüntü &amp; İşaretleme Senaryosu</label>
                 <select id="sim-senaryo-sec">
                   <option value="basarili" selected>✅ Başarılı Öğrenci + Telefon Gölgesi (%85–95 Puan)</option>
+                  <option value="tam">🎯 Anahtar Doğrulama — Tam Doğru (%100 Puan)</option>
                   <option value="orta">⚙️ Orta Seviye Öğrenci + Hafif Gölge (%60–75 Puan)</option>
                   <option value="silinti">⚠️ 3. Test Sorusunda Silinti İzi Olan Kağıt (İnceleme Kuyruğu)</option>
                   <option value="zayif">🌱 Düşük Puanlı Kağıt (%30–45 Puan)</option>
@@ -1542,6 +1602,7 @@
         <div id="etiket-kumulatif-bilgi" style="font-size:0.76rem; color:var(--metin-ikincil); margin-bottom:0.45rem;">
           Aktif sınav sonuçları dönem ağırlığıyla gösteriliyor. Vize paketini kaydedip Final sınavında yüklediğinizde (veya Bütünleme eklediğinizde) ağırlıklı dönem sonu <strong>Öğrenci × ÖÇ</strong> matrisi otomatik birleşir.
         </div>
+        <div id="uyari-donem-paket-ders" hidden style="padding:0.45rem 0.65rem; margin-bottom:0.45rem; background:#fef2f2; border:1px solid #ef4444; border-radius:6px; color:#991b1b; font-size:0.76rem; font-weight:700;"></div>
         <div id="kutu-kumulatif-oc-matrisi" class="tablo-sarmal"></div>
       </div>
 

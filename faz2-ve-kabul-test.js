@@ -298,10 +298,56 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         { oturumKodu: 'SURUM1', sinavKodu: 'SINAV-OMR-1', sinavSurumId: 'ESKI-SURUM-999', okumaSonuclari: [gecerliKayit] },
         authBaslik
       );
+      const wrongVersionCompactOnly = await istekFn(
+        'POST',
+        '/api/omr-sonuc-senkron',
+        { oturumKodu: 'SURUM2', paket: uretilenPaket.paketKodu },
+        authBaslik
+      );
+      const wrongVersionJsonOnly = await istekFn(
+        'POST',
+        '/api/omr-sonuc-senkron',
+        { oturumKodu: 'SURUM3', paket: uretilenPaket.jsonMetni },
+        authBaslik
+      );
+      const wrongVersionWithOtherOuterCode = await istekFn(
+        'POST',
+        '/api/omr-sonuc-senkron',
+        { oturumKodu: 'SURUM4', sinavKodu: 'BASKA-SINAV-KODU', paket: uretilenPaket.paketKodu },
+        authBaslik
+      );
+      const missingVersionExplicit = await istekFn(
+        'POST',
+        '/api/omr-sonuc-senkron',
+        { oturumKodu: 'SURUM5', sinavKodu: 'SINAV-OMR-1', okumaSonuclari: [gecerliKayit] },
+        authBaslik
+      );
+      const guncelPaket = Cekirdek.uretOmrSonucPaketi([gecerliKayit], {
+        sinavKodu: 'SINAV-OMR-1',
+        sinavSurumId: tanim.body.sinavSurumId
+      });
+      const guncelSurumCompact = await istekFn(
+        'POST',
+        '/api/omr-sonuc-senkron',
+        { oturumKodu: 'SURUM6', paket: guncelPaket.paketKodu },
+        authBaslik
+      );
       kontrol(
-        `${etiket}: Aktif sınav sürümüyle (${tanim.body.sinavSurumId}) uyuşmayan OMR paketi 409 Conflict döner`,
-        eskiSurumOmr.status === 409,
-        String(eskiSurumOmr.status)
+        `${etiket}: Aktif sınav sürümüyle (${tanim.body.sinavSurumId}) uyuşmayan tüm zarf/kompakt/JSON/eksik-sürüm OMR paketleri 409 döner; güncel sürüm 200 döner`,
+        eskiSurumOmr.status === 409 &&
+          wrongVersionCompactOnly.status === 409 &&
+          wrongVersionJsonOnly.status === 409 &&
+          wrongVersionWithOtherOuterCode.status === 409 &&
+          missingVersionExplicit.status === 409 &&
+          guncelSurumCompact.status === 200,
+        JSON.stringify([
+          eskiSurumOmr.status,
+          wrongVersionCompactOnly.status,
+          wrongVersionJsonOnly.status,
+          wrongVersionWithOtherOuterCode.status,
+          missingVersionExplicit.status,
+          guncelSurumCompact.status
+        ])
       );
 
       // Statik dosya engeli: test-artifacts, server.js, worker.js, *-test.js -> 404
@@ -699,6 +745,111 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         );
       }
 
+      // Karşı-örnek (stem-3187): 10 kısa D/Y + 20 adet 3.187 karakterlik Test kökü + 2 kısa Klasik (toplam ~64.520 krk) -> Tam 2 A4 Sayfa!
+      await sayfa.evaluate((dId) => {
+        const uzat = (onek, n) => {
+          let s = `${onek} Kurumsal ağ mimarisinde VLAN segmentasyonu, yönlendirme tablosu yakınsaması ve erişim denetim listesi kuralları `;
+          while (s.length < n) s += 'çerçevesinde paket başlığı bütünlüğü ve alt ağ maskesi doğrulanır ';
+          return s.slice(0, n - 1) + '.';
+        };
+        const harfler = ['A', 'B', 'C', 'D', 'E'];
+        const sorular = [];
+        for (let i = 1; i <= 10; i++) {
+          sorular.push({
+            id: `s3187-dy-${i}`,
+            dersId: dId,
+            tur: 'dy',
+            zorluk: 'Kolay',
+            hafta: ((i - 1) % 7) + 1,
+            ocKodu: 'ÖÇ-1',
+            metin: uzat(`D/Y ${i}:`, 62),
+            dogruDY: i % 2 === 0 ? 'Y' : 'D'
+          });
+        }
+        for (let i = 1; i <= 20; i++) {
+          sorular.push({
+            id: `s3187-test-${i}`,
+            dersId: dId,
+            tur: 'test',
+            zorluk: 'Orta',
+            hafta: ((i - 1) % 7) + 1,
+            ocKodu: 'ÖÇ-2',
+            metin: uzat(`Test ${i}:`, 3187),
+            siklar: harfler.map((h) => `${h} şıkkı`),
+            dogruHarf: harfler[(i - 1) % 5]
+          });
+        }
+        for (let i = 1; i <= 2; i++) {
+          sorular.push({
+            id: `s3187-kl-${i}`,
+            dersId: dId,
+            tur: 'klasik',
+            zorluk: 'Zor',
+            hafta: i,
+            ocKodu: 'ÖÇ-3',
+            metin: uzat(`Klasik ${i}:`, 80),
+            puan: 10,
+            cevapSatir: 3
+          });
+        }
+        const d = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+        d.sorular = sorular;
+        localStorage.setItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2', JSON.stringify(d));
+      }, aktifDersId);
+      await sayfa.reload({ waitUntil: 'networkidle0' });
+      // Açık oturumda F5 yenilemesi sonrası hoca kilidi bulanıklığı kalmamalı!
+      const yenilemeSonrasiAcik = await sayfa.evaluate(() => {
+        const ana = document.getElementById('ana-icerik-alani');
+        return {
+          oturumAcikSinif: document.body.classList.contains('hoca-oturum-acik'),
+          filtre: ana ? window.getComputedStyle(ana).filter : ''
+        };
+      });
+      kontrol(
+        'Açık öğretmen oturumunda F5 sonrası bulanıklık (blur) kalmaz ve baskıya taşınmaz',
+        yenilemeSonrasiAcik.oturumAcikSinif && (yenilemeSonrasiAcik.filtre === 'none' || !yenilemeSonrasiAcik.filtre.includes('blur')),
+        JSON.stringify(yenilemeSonrasiAcik)
+      );
+      await sayfa.evaluate(() => {
+        const setVal = (id, v) => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.value = String(v);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        };
+        setVal('ayar-dy-sayisi', 10);
+        setVal('ayar-dy-toplam-puan', 20);
+        setVal('ayar-test-sayisi', 20);
+        setVal('ayar-test-toplam-puan', 60);
+        setVal('ayar-klasik-sayisi', 2);
+        setVal('ayar-klasik-toplam-puan', 20);
+        const ek = document.getElementById('ayar-ek-sayfa-izni');
+        if (ek && ek.checked) ek.click();
+        setVal('baski-kapsam-sec', 'sinif-aktif');
+        document.getElementById('btn-kombinasyon-uygula').click();
+      });
+      await bekle(550);
+      const stem3187Olcu = await sayfa.evaluate(() => {
+        const sayfalar = Array.from(document.querySelectorAll('#a4-onizleme-sahne .a4-sayfa'));
+        const olculer = sayfalar.map((p) => ({ scroll: p.scrollHeight, client: p.clientHeight }));
+        const soruAdet = document.querySelectorAll('#a4-onizleme-sahne .dy-soru-satir, #a4-onizleme-sahne .soru-kutu').length;
+        return {
+          sayfaSayisi: sayfalar.length,
+          olculer,
+          tasmaVar: olculer.some((o) => o.scroll > o.client + 2),
+          soruAdet
+        };
+      });
+      const stem3187NativePdf = await sayfa.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+      const stem3187NativeSayfa = (Buffer.from(stem3187NativePdf).toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+      kontrol(
+        `Soru Başına 3.187 Karakter Test Kökü (~64.520 krk toplam): Tam 2 A4 sayfa, taşma yok (${JSON.stringify(stem3187Olcu.olculer)}), 32/32 soru ve 2 sayfa Chrome PDF`,
+        stem3187Olcu.sayfaSayisi === 2 && !stem3187Olcu.tasmaVar && stem3187Olcu.soruAdet === 32 && stem3187NativeSayfa === 2,
+        JSON.stringify({ stem3187Olcu, stem3187NativeSayfa })
+      );
+
       // Aşırı yoğun metinde (75.000 karakter) taşma koruma kilidi ve açık ek sayfa izni testi
       const asiriBanka = uretYogunSoruBankasi(75000, aktifDersId);
       await sayfa.evaluate((yeniSorular) => {
@@ -708,6 +859,8 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       }, asiriBanka.sorular);
       await sayfa.reload({ waitUntil: 'networkidle0' });
       await sayfa.evaluate(() => {
+        window.__printCagri = 0;
+        window.print = () => { window.__printCagri++; };
         const b = document.getElementById('btn-hoca-giris-yap');
         if (b && document.getElementById('modal-hoca-giris').style.display === 'flex') b.click();
       });
@@ -725,27 +878,39 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         setVal('ayar-test-toplam-puan', 60);
         setVal('ayar-klasik-sayisi', 2);
         setVal('ayar-klasik-toplam-puan', 20);
+        const ek = document.getElementById('ayar-ek-sayfa-izni');
+        if (ek && ek.checked) ek.click();
         document.getElementById('btn-kombinasyon-uygula').click();
       });
       await bekle(450);
+      await sayfa.select('#baski-format-sec', 'yazdir');
+      await sayfa.click('#btn-secili-baski-calistir');
+      await bekle(200);
       const tasmaKoruma = await sayfa.evaluate(() => {
         const uyari = document.getElementById('uyari-a4-tasma-kutu');
+        const olculer = Array.from(document.querySelectorAll('#a4-onizleme-sahne .a4-sayfa')).map((p) => ({ scroll: p.scrollHeight, client: p.clientHeight }));
         return {
           uyariGorunur: Boolean(uyari && uyari.style.display !== 'none'),
-          sayfaSayisi: document.querySelectorAll('#a4-onizleme-sahne .a4-sayfa').length
+          kilitliYazdirCagri: window.__printCagri || 0,
+          sayfaSayisi: olculer.length,
+          olculer
         };
       });
       await sayfa.click('#ayar-ek-sayfa-izni');
       await bekle(450);
       const ekSayfaSonrasi = await sayfa.evaluate(() => {
         const sayfalar = Array.from(document.querySelectorAll('#a4-onizleme-sahne .a4-sayfa'));
-        const sonEtiket = sayfalar.length ? (sayfalar[sayfalar.length - 1].querySelector('.a4-sayfa-etiket') || {}).textContent || '' : '';
-        return { sayfaSayisi: sayfalar.length, sonEtiket };
+        const etiketler = sayfalar.map((sf) => ((sf.querySelector('.a4-sayfa-etiket') || {}).textContent || '').trim());
+        const sonEtiket = etiketler[etiketler.length - 1] || '';
+        const ciftDevamYok = etiketler.every((et) => !/\(DEVAM SAYFASI\).*\(DEVAM SAYFASI\)/i.test(et));
+        return { sayfaSayisi: sayfalar.length, sonEtiket, etiketler, ciftDevamYok };
       });
       kontrol(
-        'Aşırı yoğun metinde (75.000 krk) ek sayfa izni kapalıyken uyarı gösterilir; açıldığında Sayfa N / N olarak numaralanır',
+        'Aşırı yoğun metinde (75.000 krk) ek sayfa izni kapalıyken uyarı gösterilir ve yazdırma engellenir (0 çağrı); açıldığında mükerrer etiketsiz Sayfa N / N olarak numaralanır',
         tasmaKoruma.uyariGorunur &&
+          tasmaKoruma.kilitliYazdirCagri === 0 &&
           ekSayfaSonrasi.sayfaSayisi >= 3 &&
+          ekSayfaSonrasi.ciftDevamYok &&
           ekSayfaSonrasi.sonEtiket.includes(`${ekSayfaSonrasi.sayfaSayisi} / ${ekSayfaSonrasi.sayfaSayisi}`),
         JSON.stringify({ tasmaKoruma, ekSayfaSonrasi })
       );
@@ -794,12 +959,66 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       console.log('\n[5/5] Faz 2: Bologna 74161101 Paketi, Otomatik ÖÇ/Bloom Masası, Sekme 7 Kalite Şablonları ve Kümülatif PUKÖ Analitiği');
       await sayfa.setViewport({ width: 1440, height: 950 });
 
+      // 5A-ÖN: "Yönlendiriciler" Dersi Soru Kalıcılığı (Bozuk yan kayıt + Mükerrer ders kaydı + Bologna içe aktarma koruması)
+      await sayfa.evaluate(() => {
+        document.getElementById('btn-yeni-ders-modal').click();
+        document.getElementById('yeni-ders-kod').value = 'YON101';
+        document.getElementById('yeni-ders-ad').value = 'Yönlendiriciler';
+        document.getElementById('btn-yeni-ders-kaydet').click();
+      });
+      await bekle(200);
+      const yonDersId = await sayfa.$eval('#aktif-ders-sec', (el) => el.value);
+      await sayfa.evaluate((yId) => {
+        const d = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+        d.sorular = [
+          { id: 'yon-q1', dersId: yId, tur: 'dy', zorluk: 'Kolay', hafta: 1, ocKodu: 'ÖÇ-1', metin: 'OSPF link-state yönlendirme protokolüdür.', dogruDY: 'D' },
+          { id: 'yon-q2', dersId: yId, tur: 'test', zorluk: 'Orta', hafta: 2, ocKodu: 'ÖÇ-2', metin: 'RIP protokolünün azami hop sayısı kaçtır?', siklar: ['15', '16', '32', '64', '255'], dogruHarf: 'A' },
+          { id: 'yon-q3', dersId: yId, tur: 'klasik', zorluk: 'Zor', hafta: 3, ocKodu: 'ÖÇ-3', metin: 'Statik ve dinamik yönlendirme farklarını açıklayınız.', puan: 20, cevapSatir: 3 }
+        ];
+        // Kardeş alana şema hatası fırlatacak bozuk (null) eleman enjekte et -> Yönlendiriciler soruları silinmemeli!
+        d.okumaSonuclari = [null];
+        localStorage.removeItem('SINAV_IDB_KOTA_YEDEK_AKTIF');
+        localStorage.setItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2', JSON.stringify(d));
+      }, yonDersId);
+      await sayfa.reload({ waitUntil: 'networkidle0' });
+      await bekle(250);
+      // Aynı kod ve adla tekrar "Yeni Dersi Kaydet" tıklandığında mükerrer boş ders açılmamalı
+      await sayfa.evaluate(() => {
+        document.getElementById('btn-yeni-ders-modal').click();
+        document.getElementById('yeni-ders-kod').value = 'YON101';
+        document.getElementById('yeni-ders-ad').value = 'Yönlendiriciler';
+        document.getElementById('btn-yeni-ders-kaydet').click();
+      });
+      await bekle(200);
+      const yonKorumaSonuc1 = await sayfa.evaluate((yId) => {
+        const d = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+        const yonDersler = (d.dersler || []).filter((x) => x.kod === 'YON101');
+        const yonSorular = (d.sorular || []).filter((q) => q.dersId === yId);
+        return { yonDersSayisi: yonDersler.length, yonSoruSayisi: yonSorular.length };
+      }, yonDersId);
+      kontrol(
+        'Yönlendiriciler (YON101) dersi soruları bozuk yan kayıtta ve aynı adla ders kaydında kaybolmaz (3/3 soru korundu)',
+        yonKorumaSonuc1.yonDersSayisi === 1 && yonKorumaSonuc1.yonSoruSayisi === 3,
+        JSON.stringify(yonKorumaSonuc1)
+      );
+
+      const sekmeAc = async (sekmeId) => {
+        await sayfa.evaluate((id) => {
+          ['modal-yeni-ders', 'modal-bologna-aktar', 'modal-ai-oc-onay', 'modal-ogrenci-qr'].forEach((mId) => {
+            const m = document.getElementById(mId);
+            if (m) m.style.display = 'none';
+          });
+          const btn = document.querySelector(`[data-sekme="${id}"]`);
+          if (btn) btn.click();
+        }, sekmeId);
+        await bekle(200);
+      };
+
       // 5A. Bologna Bilgi Paketi (74161101 — Ağ Teknolojilerine Giriş) UI üzerinden içe aktarma
-      await sayfa.click('[data-sekme="sekme-banka"]');
+      await sekmeAc('sekme-banka');
+      await sayfa.$eval('#btn-banka-bologna-ac', (el) => el.click());
       await bekle(200);
-      await sayfa.click('#btn-banka-bologna-ac');
-      await bekle(200);
-      await sayfa.click('#btn-bologna-ornek-yukle');
+      await sayfa.$eval('#btn-bologna-ornek-yukle', (el) => el.click());
       await bekle(450);
 
       const bolognaOnizleme = await sayfa.evaluate(() => {
@@ -810,28 +1029,44 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         };
       });
       kontrol(
-        'Faz 2 Bologna (74161101): Ö1..Ö4 -> ÖÇ-1..ÖÇ-4, 14 hafta, Ara Sınav %40 / Final %60 ve mükerrer P4 (PÇ-4) uyarısı ayrıştırıldı',
+        'Faz 2 Bologna (74161101): Ö1..Ö4 -> ÖÇ-1..ÖÇ-4, 14 hafta, Ara Sınav %40 / Final %60 (%1 hatası yok) ve mükerrer P4 (PÇ-4) uyarısı ayrıştırıldı',
         bolognaOnizleme.gorunur &&
           bolognaOnizleme.metin.includes('74161101') &&
           bolognaOnizleme.metin.includes('Ağ Teknolojilerine Giriş') &&
+          bolognaOnizleme.metin.includes('%40') &&
+          bolognaOnizleme.metin.includes('%60') &&
           (bolognaOnizleme.metin.includes('PÇ-4') || bolognaOnizleme.metin.includes('P4')) &&
           bolognaOnizleme.metin.includes('ÖÇ-4') &&
           bolognaOnizleme.metin.includes('14 hafta'),
-        bolognaOnizleme.metin.replace(/\s+/g, ' ').slice(0, 140)
+        bolognaOnizleme.metin.replace(/\s+/g, ' ').slice(0, 180)
       );
-      await sayfa.click('#btn-bologna-uygula');
+      await sayfa.$eval('#btn-bologna-uygula', (el) => el.click());
       await bekle(300);
+
+      const bolognaUygulaSonrasi = await sayfa.evaluate((yId) => {
+        const d = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+        const yonHalaVar = (d.dersler || []).some((x) => x.id === yId && x.kod === 'YON101');
+        const yonSoruAdet = (d.sorular || []).filter((q) => q.dersId === yId).length;
+        const aktifAgirlik = (document.getElementById('ayar-aktif-sinav-agirlik') || {}).value;
+        return { yonHalaVar, yonSoruAdet, aktifAgirlik };
+      }, yonDersId);
+      kontrol(
+        'Bologna (74161101) içe aktarıldığında Yönlendiriciler dersi ve 3 sorusu ezilmez; sınav ağırlığı %40 olarak yazılır',
+        bolognaUygulaSonrasi.yonHalaVar && bolognaUygulaSonrasi.yonSoruAdet === 3 && bolognaUygulaSonrasi.aktifAgirlik === '40',
+        JSON.stringify(bolognaUygulaSonrasi)
+      );
 
       // 5B. Soru Bankasında Enum-Kilitli Otomatik ÖÇ + Hafta + Bloom + Zorluk Analizi ve Onay Masası
       const bolognaDersId = await sayfa.$eval('#aktif-ders-sec', (el) => el.value);
       await sayfa.evaluate((dId) => {
         const d = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
-        d.sorular = [
+        const digerSorular = (d.sorular || []).filter((q) => q.dersId !== dId);
+        d.sorular = digerSorular.concat([
           { id: 'ag-1', dersId: dId, tur: 'dy', zorluk: 'Kolay', hafta: 1, ocKodu: '', metin: 'OSI referans modelinde fiziksel katman bit iletiminden sorumludur.', dogruDY: 'D' },
           { id: 'ag-2', dersId: dId, tur: 'test', zorluk: 'Orta', hafta: 1, ocKodu: '', metin: 'UTP Cat6 ağ kablosunda RJ-45 konnektör çakma sıralaması T568B standardına göre nasıl yapılandırılır?', siklar: ['Turuncu-Beyaz, Turuncu...', 'Mavi, Sarı', 'Kırmızı', 'Siyah', 'Mor'], dogruHarf: 'A' },
           { id: 'ag-3', dersId: dId, tur: 'test', zorluk: 'Orta', hafta: 1, ocKodu: '', metin: '192.168.10.0/24 IPv4 alt ağ adresleme yapısını 4 alt ağa bölmek için subnet mask değerini hesaplayınız.', siklar: ['255.255.255.192', '255.255.0.0', '255.0.0.0', '255.255.255.0', '255.255.255.252'], dogruHarf: 'A' },
           { id: 'ag-4', dersId: dId, tur: 'klasik', zorluk: 'Zor', hafta: 1, ocKodu: '', metin: 'Kurumsal ağ paylaşım ve güvenlik duvarı erişim politikasını sıfır güven ilkelerine göre tasarlayınız.', puan: 20, cevapSatir: 4 }
-        ];
+        ]);
         localStorage.setItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2', JSON.stringify(d));
       }, bolognaDersId);
       await sayfa.reload({ waitUntil: 'networkidle0' });
@@ -857,9 +1092,8 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       });
       await bekle(300);
 
-      await sayfa.click('[data-sekme="sekme-banka"]');
-      await bekle(200);
-      await sayfa.click('#btn-banka-otomatik-oc-analiz');
+      await sekmeAc('sekme-banka');
+      await sayfa.$eval('#btn-banka-otomatik-oc-analiz', (el) => el.click());
       await bekle(450);
 
       const aiMasaBilgi = await sayfa.evaluate(() => {
@@ -876,12 +1110,12 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         aiMasaBilgi.hepsiGecerliEnumMu,
         JSON.stringify(aiMasaBilgi.secimler)
       );
-      await sayfa.click('#btn-ai-oc-tumunu-onayla');
+      await sayfa.$eval('#btn-ai-oc-tumunu-onayla', (el) => el.click());
       await bekle(300);
 
       // Baskı öncesi ÖÇ & Bloom trafik ışığı kontrolü
-      await sayfa.click('[data-sekme="sekme-stüdyo"]');
-      await bekle(250);
+      await sekmeAc('sekme-stüdyo');
+      await bekle(100);
       const trafikMetin = await sayfa.$eval('#trafik-oc-bloom-cubuk', (el) => el.textContent);
       kontrol('Faz 2 Baskı Öncesi ÖÇ & Bloom Trafik Işığı çubuğu aktif hesaplandı', trafikMetin.includes('ÖÇ') && trafikMetin.includes('Bloom'), trafikMetin.slice(0, 100));
 
@@ -970,18 +1204,38 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       });
       await bekle(350);
 
-      await sayfa.click('[data-sekme="sekme-analiz"]');
-      await bekle(300);
+      await sekmeAc('sekme-analiz');
+      await bekle(150);
 
-      const analizDurum1 = await sayfa.evaluate(() => ({
-        pcSatir: document.querySelectorAll('#tablo-pc-gerceklesme tr').length,
-        pcMetin: document.getElementById('tablo-pc-gerceklesme').textContent,
-        pukoMetin: document.getElementById('metin-puko-raporu').value
-      }));
+      const analizDurum1 = await sayfa.evaluate(() => {
+        const satirlar = Array.from(document.querySelectorAll('#tablo-pc-gerceklesme tr')).map((r) => r.textContent.replace(/\s+/g, ' ').trim());
+        const pc6Satir = satirlar.find((s) => s.includes('PÇ-6')) || '';
+        return {
+          pcSatir: satirlar.length,
+          pcMetin: document.getElementById('tablo-pc-gerceklesme').textContent,
+          pc6Satir,
+          sentetik3YildizVar: document.getElementById('tablo-pc-gerceklesme').textContent.includes('3*'),
+          pukoMetin: document.getElementById('metin-puko-raporu').value
+        };
+      });
+      // Boş <td></td> hücreli HTML Bologna tablosunda katkısız PÇ-2 = ÖLÇÜLMEDİ karşı-örneği:
+      const htmlBosPc2 = Cekirdek.cozBolognaBilgiPaketi(
+        '<table><tr><th>P1</th><th>P2</th><th>P3</th><th>P4</th></tr><tr><td>Tüm</td><td>5</td><td></td><td>3</td><td>5</td></tr></table>\nDersin Öğrenme Çıktıları\n1\tAğ yapısını hazırlayabilecek'
+      );
+      const htmlPc2Rapor = Cekirdek.hesaplaKumulatifOcPcVePukoRaporu({
+        tekilAnaliz: { kazanimTablosu: [{ kod: 'ÖÇ-1', soruSayisi: 2, basariYuzde: 65, olculduMu: true }] },
+        bolognaVerisi: htmlBosPc2
+      });
+      const pc2Kayit = (htmlPc2Rapor.pcTablosu || []).find((x) => x.pcKod === 'PÇ-2');
       kontrol(
-        'Faz 2 Sekme 4: Program Çıktıları (PÇ-1..PÇ-5) gerçekleşme tablosu ve PUKÖ özeti üretildi',
-        analizDurum1.pcSatir >= 4 && (analizDurum1.pcMetin.includes('PÇ-1') || analizDurum1.pcMetin.includes('P1')) && analizDurum1.pukoMetin.includes('PUKÖ'),
-        `${analizDurum1.pcSatir} PÇ satırı`
+        'Faz 2 Sekme 4: Program Çıktıları (PÇ-1..PÇ-10) tablosunda katkısız PÇ-6 ve boş HTML PÇ-2 = ÖLÇÜLMEDİ (sentetik 3* yok) ve PUKÖ özeti üretildi',
+        analizDurum1.pcSatir >= 5 &&
+          analizDurum1.pcMetin.includes('PÇ-1') &&
+          analizDurum1.pc6Satir.includes('ÖLÇÜLMEDİ') &&
+          !analizDurum1.sentetik3YildizVar &&
+          Boolean(pc2Kayit && pc2Kayit.olculduMu === false && pc2Kayit.durum === 'ÖLÇÜLMEDİ' && pc2Kayit.bagliOcler.length === 0) &&
+          analizDurum1.pukoMetin.includes('PUKÖ'),
+        JSON.stringify({ pcSatir: analizDurum1.pcSatir, pc6Satir: analizDurum1.pc6Satir, pc2Kayit })
       );
 
       // Tek tıkla Test Soru 2'yi İptal Et -> tüm öğrencilere tam madde puanı (+30) yansımalı!
@@ -1002,10 +1256,42 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         JSON.stringify(iptalSonrasiPuanlar)
       );
 
-      // Kümülatif Dönem Sonu (Vize %40 + Eklenen Final %60) birleştirme testi
+      // Yabancı ders kodlu (BASKA-DERS) dönem paketi yüklendiğinde reddedilmeli ve uyarı gösterilmeli
+      await sayfa.evaluate(() => {
+        const yabanciPaket = {
+          belgeTuru: 'DONEM_SINAV_OC_PAKETI_V1',
+          dersKodu: 'BASKA-DERS',
+          dersAdi: 'Yabancı Ders',
+          sinavTuru: 'Final',
+          agirlik: 60,
+          ogrenciOcMatrisi: [{ ogrNo: '99999999', adSoyad: 'Yabancı Öğrenci', ocler: { 'ÖÇ-1': { basariYuzde: 99, alinanPuan: 99, azamiPuan: 100 } } }]
+        };
+        const dt = new DataTransfer();
+        dt.items.add(new File([JSON.stringify(yabanciPaket)], 'yabanci_ders.sinavoc.json', { type: 'application/json' }));
+        const inp = document.getElementById('input-donem-sinav-dosya');
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await bekle(350);
+      const yabanciDersKontrol = await sayfa.evaluate(() => {
+        const u = document.getElementById('uyari-donem-paket-ders');
+        const matris = (document.getElementById('kutu-kumulatif-oc-matrisi') || {}).textContent || '';
+        return {
+          uyariGorunur: Boolean(u && !u.hidden && u.textContent.includes('BASKA-DERS')),
+          yabanciKaristiMi: matris.includes('Yabancı Öğrenci')
+        };
+      });
+      kontrol(
+        'Farklı ders kodlu (BASKA-DERS) dönem paketi reddedilir, uyarı gösterilir ve kümülatif tabloya karışmaz',
+        yabanciDersKontrol.uyariGorunur && !yabanciDersKontrol.yabanciKaristiMi,
+        JSON.stringify(yabanciDersKontrol)
+      );
+
+      // Kümülatif Dönem Sonu (Vize %40 + Aynı Ders Kodlu Eklenen Final %60) birleştirme testi
       await sayfa.evaluate(() => {
         const finalPaket = {
           belgeTuru: 'OMR_DETAYLI_SONUC_PAKETI',
+          dersKodu: '74161101',
           sinavKodu: 'FINAL-2026',
           sinavTuru: 'Final',
           agirlik: 60,
@@ -1050,12 +1336,49 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         kumulatifMetin.replace(/\s+/g, ' ').slice(0, 120)
       );
 
-      // Maddi Hata İtiraz Kanıt Tutanağı ve Özel OBS CSV çekirdek doğrulaması
+      // Maddi Hata İtiraz Kanıt Tutanağı (hem yapi.ders.{kod,ad} hem dersAd formatı) ve Özel OBS CSV çekirdek doğrulaması
       const itirazTxt = Cekirdek.uretMaddiHataItirazKanitRaporuTXT(
         { ogrNo: '20261002', adSoyad: 'Kerem Demir', grup: 'A', toplamPuan: 70, dyDetay: [{ soruNo: 1, verilen: 'D', sonuc: 'DOGRU' }], testDetay: [{ soruNo: 1, verilen: 'C', sonuc: 'YANLIS' }] },
-        { dersAd: 'Ağ Teknolojilerine Giriş', cevapAnahtarlari: { A: { dy: ['D'], test: ['A'] } } }
+        { ders: { kod: '74161101', ad: 'Ağ Teknolojilerine Giriş' }, sinavAd: 'ARA SINAVI', cevapAnahtarlari: { A: { dy: ['D'], test: ['A'] } } }
       );
-      kontrol('Faz 2 Maddi Hata İtiraz Kanıt Tutanağı (.txt) üretilir', itirazTxt.includes('MADDİ HATA') && itirazTxt.includes('Kerem Demir'));
+      kontrol(
+        'Faz 2 Maddi Hata İtiraz Kanıt Tutanağı (.txt) yapi.ders.{kod,ad} bilgisini eksiksiz yazar',
+        itirazTxt.includes('MADDİ HATA') && itirazTxt.includes('Kerem Demir') && itirazTxt.includes('74161101 — Ağ Teknolojilerine Giriş')
+      );
+
+      // 5C-EK: Masaüstü Sekme 3 Harici A/B/C/D Cevap Anahtarı İçe Aktarma (Soru Bankasız Geçmiş Sınav Puanlama)
+      await sekmeAc('sekme-omr');
+      await sayfa.$eval('#btn-okumalari-temizle', (el) => el.click());
+      await bekle(150);
+      await sayfa.evaluate(() => {
+        const csvIcerik = [
+          'Grup;DY_Anahtar;Test_Anahtar',
+          'A;DYDYD;BCDEA',
+          'B;YDYDY;CDEAB'
+        ].join('\r\n');
+        const dt = new DataTransfer();
+        dt.items.add(new File([csvIcerik], 'gecmis_sinav_anahtar.csv', { type: 'text/csv' }));
+        const inp = document.getElementById('input-omr-anahtar-csv-yukle');
+        inp.files = dt.files;
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await bekle(300);
+      await sayfa.select('#sim-kitapcik-sec', 'B');
+      await sayfa.select('#sim-senaryo-sec', 'tam');
+      await sayfa.$eval('#btn-sim-tek-tara', (el) => el.click());
+      await bekle(450);
+      const hariciOmrSonuc = await sayfa.evaluate(() => ({
+        aktifMi: document.getElementById('ayar-omr-harici-anahtar-aktif').checked,
+        bTestDeger: document.getElementById('omr-anahtar-b-test').value,
+        detayMetin: (document.getElementById('kutu-son-okunan-detay') || {}).textContent || ''
+      }));
+      kontrol(
+        'Masaüstü Sekme 3 Harici A/B/C/D Cevap Anahtarı CSV ile soru bankası olmadan B kitapçığı tam puanlandı (100/100)',
+        hariciOmrSonuc.aktifMi && hariciOmrSonuc.bTestDeger === 'CDEAB' && hariciOmrSonuc.detayMetin.includes('100 / 100'),
+        JSON.stringify(hariciOmrSonuc)
+      );
+      await sayfa.$eval('#btn-omr-harici-anahtar-temizle', (el) => el.click());
+      await bekle(150);
 
       const ozelObsCsv = Cekirdek.uretOzelObsNotCsv(
         [{ ogrNo: '20261001', adSoyad: 'Zeynep Kaya', grup: 'A', toplamPuan: 88 }],
@@ -1064,8 +1387,8 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       kontrol('Faz 2 Kuruma Özel OBS CSV Eşleştiricisi özel sütunlarla üretilir', ozelObsCsv.includes('OGRENCI_NO;AD_SOYAD;PUAN;HARF_NOTU') && ozelObsCsv.includes('20261001'));
 
       // 5D. Sekme 7: Kurumsal Kalite & Şablon Stüdyosu + 7 Sekmenin Tamamında 390x844 Mobil Taşmasızlık
-      await sayfa.click('[data-sekme="sekme-sablonlar"]');
-      await bekle(250);
+      await sekmeAc('sekme-sablonlar');
+      await bekle(100);
       await sayfa.evaluate(() => {
         const setInput = (id, v) => {
           const el = document.getElementById(id);
@@ -1076,7 +1399,7 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         setInput('sablon-birim-adi', 'Kırıkhan Meslek Yüksekokulu');
         setInput('sablon-dokuman-no', 'MKU-FRM-101');
       });
-      await sayfa.click('#btn-kurum-sablon-kaydet');
+      await sayfa.$eval('#btn-kurum-sablon-kaydet', (el) => el.click());
       await bekle(300);
       const sablonOnizlemeMetni = await sayfa.$eval('#onizleme-kurum-antet', (el) => el.textContent);
       kontrol(
@@ -1089,8 +1412,7 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       await sayfa.setViewport({ width: 390, height: 844 });
       await bekle(200);
       for (const sekmeId of ['sekme-stüdyo', 'sekme-banka', 'sekme-omr', 'sekme-analiz', 'sekme-ogrenciler', 'sekme-online', 'sekme-sablonlar']) {
-        await sayfa.click(`[data-sekme="${sekmeId}"]`);
-        await bekle(180);
+        await sekmeAc(sekmeId);
         const boyut = await sayfa.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
         kontrol(`Stüdyo 390×844 (${sekmeId}) yatay taşma yok`, boyut.sw <= boyut.iw, `${boyut.sw}/${boyut.iw}`);
       }
