@@ -832,11 +832,11 @@
     // --- Blok 1: Kitapçık grubu + öğrenci kimliği
     {
       const rakamSatir = haneSayisi;
-      const w = rakamSatir > 0 ? 218 : 150;
-      const h = ILK + (rakamSatir > 0 ? 8 + rakamSatir * P : 0) + 14;
+      const w = rakamSatir > 0 ? 218 : 218;
+      const h = rakamSatir > 0 ? (ILK + 8 + rakamSatir * P + 14) : 76;
       const baslik = kimlikModu === 'tam'
         ? `KİTAPÇIK & ÖĞRENCİ NO (${haneSayisi} HANE)`
-        : (kimlikModu === 'son3' ? 'KİTAPÇIK & ÖĞR. NO SON 3 HANE' : (kimlikModu === 'qr' ? 'KİTAPÇIK & QR KİMLİK' : 'KİTAPÇIK & ÖĞR. NO SON 2 HANE'));
+        : (kimlikModu === 'son3' ? 'KİTAPÇIK & ÖĞR. NO SON 3 HANE' : (kimlikModu === 'qr' ? 'KİTAPÇIK & ŞİFRELİ QR' : 'KİTAPÇIK & ÖĞR. NO SON 2 HANE'));
       bloklar.push({
         ad: 'kimlik', w, h,
         ciz(bx, by) {
@@ -846,7 +846,7 @@
             harita.grupBalonlari.push({ harf, x: bx + 50 + i * 22, y: by + ILK, r: 7.5 });
           });
           if (rakamSatir === 0) {
-            harita.etiketler.push({ x: bx, y: by + ILK + 22, metin: 'Kimlik: ön baskılı QR / etiket', boyut: 8 });
+            harita.etiketler.push({ x: bx, y: by + ILK + 24, metin: 'Kimlik: Şifreli Optik QR', boyut: 8 });
           }
           const adlar = kimlikModu === 'son3' ? ['Yüzler', 'Onlar', 'Birler'] : (kimlikModu === 'son2' ? ['Onlar', 'Birler'] : null);
           for (let hh = 0; hh < rakamSatir; hh++) {
@@ -991,8 +991,63 @@
     return uretOptikYerlesim(sema);
   }
 
+  /* Sıfır bağımlılıklı vektörel QR SVG üretici (Hem Tarayıcı hem Node.js uyumlu) */
+  function cozQrUreticiKutuphane() {
+    if (typeof global !== 'undefined' && typeof global.qrcode === 'function') return global.qrcode;
+    if (typeof window !== 'undefined' && typeof window.qrcode === 'function') return window.qrcode;
+    if (typeof require === 'function') {
+      try { return require('./qrcode-generator.js'); } catch (_) {}
+    }
+    return null;
+  }
+
+  function uretQrIcElemanlari(veriMetni, x, y, boyutPx, hataSeviyesi = 'M') {
+    const qrFn = cozQrUreticiKutuphane();
+    const metin = String(veriMetni || '').trim();
+    if (!qrFn || !metin) return '';
+    try {
+      let qr = null;
+      const seviyeler = hataSeviyesi === 'L' ? ['L'] : [hataSeviyesi, 'L'];
+      for (const sev of seviyeler) {
+        try {
+          const aday = qrFn(0, sev);
+          aday.addData(metin, 'Byte');
+          aday.make();
+          qr = aday;
+          break;
+        } catch (_) {}
+      }
+      if (!qr) return '';
+      const modSay = qr.getModuleCount();
+      if (!modSay || modSay <= 0) return '';
+      const sessiz = 2;
+      const hucre = boyutPx / (modSay + sessiz * 2);
+      let d = '';
+      for (let r = 0; r < modSay; r++) {
+        for (let c = 0; c < modSay; c++) {
+          if (qr.isDark(r, c)) {
+            const rx = (x + (c + sessiz) * hucre).toFixed(2);
+            const ry = (y + (r + sessiz) * hucre).toFixed(2);
+            const rw = (hucre + 0.08).toFixed(2);
+            d += `M${rx},${ry}h${rw}v${rw}h-${rw}z`;
+          }
+        }
+      }
+      return `<rect x="${x}" y="${y}" width="${boyutPx}" height="${boyutPx}" fill="#ffffff" stroke="#cbd5e1" stroke-width="0.7"/>` +
+        `<path d="${d}" fill="#000000" shape-rendering="crispEdges"/>`;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function uretQrKodSvg(veriMetni, boyutPx = 116, hataSeviyesi = 'M') {
+    const ic = uretQrIcElemanlari(veriMetni, 0, 0, boyutPx, hataSeviyesi);
+    if (!ic) return '';
+    return `<svg class="vektor-qr-svg" xmlns="http://www.w3.org/2000/svg" width="${boyutPx}" height="${boyutPx}" viewBox="0 0 ${boyutPx} ${boyutPx}" role="img" aria-label="QR Kodu">${ic}</svg>`;
+  }
+
   /* BASILAN optik form: yerleşimden üretilen vektörel (SVG) çizim.
-     sec: { grup:'A', ogrNoKod:'2023104042', baslik:'...' } -> grup balonu ve öğrenci numarası ön-baskılı doldurulur.
+     sec: { grup:'A', ogrNoKod:'2023104042', baslik:'...', kagitQrMetni:'OQV2:...' } -> grup balonu ve öğrenci numarası ön-baskılı doldurulur.
      En üst bantta Doğru (● Tam Dolu) ve Yanlış (✗ Çarpı, ✓ Tik, ◐ Yarım, ⊙ Nokta) kodlama örnekleri yer alır. */
   function uretOptikFormSVG(sema, sec = {}) {
     const y = uretOptikYerlesim(sema);
@@ -1070,6 +1125,32 @@
     const noHam = String(sec.ogrNoKod || '').replace(/\D/g, '');
     const satirSay = y.kimlikSatirlari.length;
     const hedefNo = noHam && satirSay > 0 ? noHam.slice(-satirSay).padStart(satirSay, '0') : '';
+    const kimlikBlok = (y.bloklar || []).find((bl) => bl.ad === 'kimlik');
+    if (kimlikBlok) {
+      if (sec.grup) {
+        parcalar.push(
+          `<g class="optik-grup-rozet" aria-label="Basılı Kitapçık Grubu">` +
+          `<rect x="${kimlikBlok.x + 138}" y="${kimlikBlok.y + 19}" width="26" height="14" rx="2" fill="#f8fafc" stroke="#334155" stroke-width="0.9"/>` +
+          `<text x="${kimlikBlok.x + 151}" y="${kimlikBlok.y + 29}" text-anchor="middle" font-size="8.5" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#0f172a">${kac(sec.grup)}</text>` +
+          `</g>`
+        );
+      }
+      if (satirSay > 0 && satirSay <= 3) {
+        const kutuBasX = kimlikBlok.x + 168;
+        for (let hi = 0; hi < satirSay; hi++) {
+          const kx = kutuBasX + hi * 15;
+          const ky = kimlikBlok.y + 19;
+          const rak = hedefNo ? hedefNo[hi] : '';
+          parcalar.push(
+            `<rect x="${kx}" y="${ky}" width="13" height="14" rx="1.5" fill="#ffffff" stroke="#475569" stroke-width="0.8" stroke-dasharray="${rak ? 'none' : '2,1'}"/>` +
+            (rak ? `<text x="${kx + 6.5}" y="${ky + 10}" text-anchor="middle" font-size="8.2" font-weight="700" font-family="Arial,Helvetica,sans-serif" fill="#0f172a">${kac(rak)}</text>` : '')
+          );
+        }
+      } else if (satirSay === 0 && (sec.kagitQrMetni || sec.qrMetni)) {
+        const qrSvgIc = uretQrIcElemanlari(sec.kagitQrMetni || sec.qrMetni, kimlikBlok.x + 152, kimlikBlok.y + 14, 56, 'L');
+        if (qrSvgIc) parcalar.push(`<g class="optik-kagit-qr">${qrSvgIc}</g>`);
+      }
+    }
     y.kimlikSatirlari.forEach((sat, i) => {
       for (const b of sat.balonlar) parcalar.push(balon(b, b.rakam, hedefNo && b.rakam === hedefNo[i]));
     });
@@ -1157,18 +1238,348 @@
       dySayisi,
       dyToplamPuan,
       dySoruPuan,
+      dyBirimPuan: dySoruPuan,
       testSayisi,
       testToplamPuan,
       testSoruPuan,
+      testBirimPuan: testSoruPuan,
       klasikSayisi,
       klasikPuanModu,
       klasikToplamPuan,
       klasikSoruPuan,
+      klasikBirimPuan: klasikSoruPuan,
       klasikSoruPuanlari,
       toplamPuan,
       fark100,
       tam100Mu
     };
+  }
+
+  /* Soru sayıları değiştiğinde veya klasik=0 olduğunda tavan puanın 90'da kalmasını önleyen Otomatik 100 Puan Dengeleyici */
+  function normalizeSinav100PuanYapisi(ayar = {}, zorla100 = false) {
+    const dySayisi = Math.max(0, parseInt(ayar.dySayisi, 10) || 0);
+    const testSayisi = Math.max(0, parseInt(ayar.testSayisi, 10) || 0);
+    const klasikSayisi = Math.max(0, parseInt(ayar.klasikSayisi, 10) || 0);
+
+    let dyTop = dySayisi > 0
+      ? (ayar.dyToplamPuan !== undefined ? Math.max(0, Number(ayar.dyToplamPuan) || 0) : dySayisi * Math.max(0.5, Number(ayar.dySoruPuan || 2)))
+      : 0;
+    let testTop = testSayisi > 0
+      ? (ayar.testToplamPuan !== undefined ? Math.max(0, Number(ayar.testToplamPuan) || 0) : testSayisi * Math.max(0.5, Number(ayar.testSoruPuan || 5)))
+      : 0;
+    let klasikTop = klasikSayisi > 0
+      ? (ayar.klasikToplamPuan !== undefined ? Math.max(0, Number(ayar.klasikToplamPuan) || 0) : klasikSayisi * Math.max(1, Number(ayar.klasikSoruPuan || 10)))
+      : 0;
+
+    const aktifBolumSayisi = (dySayisi > 0 ? 1 : 0) + (testSayisi > 0 ? 1 : 0) + (klasikSayisi > 0 ? 1 : 0);
+    const mevcutToplam = Number((dyTop + testTop + klasikTop).toFixed(2));
+
+    if (aktifBolumSayisi > 0 && (zorla100 || Math.abs(mevcutToplam - 100) >= 0.05)) {
+      if (mevcutToplam <= 0) {
+        if (dySayisi > 0 && testSayisi > 0 && klasikSayisi === 0) {
+          dyTop = Math.min(40, dySayisi * 2);
+          testTop = Math.max(10, 100 - dyTop);
+        } else if (dySayisi > 0 && testSayisi === 0 && klasikSayisi === 0) {
+          dyTop = 100;
+        } else if (testSayisi > 0 && dySayisi === 0 && klasikSayisi === 0) {
+          testTop = 100;
+        } else if (klasikSayisi > 0 && dySayisi === 0 && testSayisi === 0) {
+          klasikTop = 100;
+        } else {
+          const pay = Number((100 / aktifBolumSayisi).toFixed(2));
+          if (dySayisi > 0) dyTop = pay;
+          if (testSayisi > 0) testTop = pay;
+          if (klasikSayisi > 0) klasikTop = Number((100 - (dySayisi > 0 ? dyTop : 0) - (testSayisi > 0 ? testTop : 0)).toFixed(2));
+        }
+      } else if (dySayisi > 0 && testSayisi > 0 && klasikSayisi === 0) {
+        // Saha standardı: D/Y tam sayı makul puanda (örn. 15*2=30p), kalan puan Test bölümüne (70p -> 7p/soru) veya orantılı
+        const adayDyBirim = Number((dyTop / dySayisi).toFixed(2));
+        if (Number.isInteger(adayDyBirim) && dyTop > 0 && dyTop <= 50 && (100 - dyTop) % testSayisi === 0) {
+          testTop = 100 - dyTop;
+        } else {
+          const olcek = 100 / mevcutToplam;
+          dyTop = Math.round(dyTop * olcek);
+          testTop = 100 - dyTop;
+        }
+      } else {
+        const olcek = 100 / mevcutToplam;
+        if (dySayisi > 0) dyTop = Math.round(dyTop * olcek);
+        if (testSayisi > 0) testTop = Math.round(testTop * olcek);
+        if (klasikSayisi > 0) {
+          klasikTop = Math.max(1, 100 - (dySayisi > 0 ? dyTop : 0) - (testSayisi > 0 ? testTop : 0));
+        } else if (testSayisi > 0) {
+          testTop = Math.max(1, 100 - (dySayisi > 0 ? dyTop : 0));
+        } else if (dySayisi > 0) {
+          dyTop = 100;
+        }
+      }
+    }
+
+    return hesaplaSinavBolumVeSoruPuanlari({
+      ...ayar,
+      dySayisi,
+      testSayisi,
+      klasikSayisi,
+      dyToplamPuan: dyTop,
+      testToplamPuan: testTop,
+      klasikToplamPuan: klasikTop
+    });
+  }
+
+  /* Kişiye Özel / Kitapçık Optik Kağıt İçin 128-bit Şifreli + 48-bit SHA-256 MAC İmzalı Kompakt QR (OQV2) */
+  function uretSinavGizliAnahtari(tohumMetin = '') {
+    if (tohumMetin && String(tohumMetin).trim()) {
+      return uretDelilLogHash(String(tohumMetin), 'OQV2-MASTER-KEY').slice(0, 32).toUpperCase();
+    }
+    const rastgele = `${Date.now()}-${Math.random()}-${Math.random()}`;
+    return uretDelilLogHash(rastgele, 'OQV2-RANDOM-KEY').slice(0, 32).toUpperCase();
+  }
+
+  function hexToBytes(hexStr) {
+    const temiz = String(hexStr || '').replace(/[^0-9a-fA-F]/g, '');
+    const out = new Uint8Array(Math.floor(temiz.length / 2));
+    for (let i = 0; i < out.length; i++) {
+      out[i] = parseInt(temiz.slice(i * 2, i * 2 + 2), 16) || 0;
+    }
+    return out;
+  }
+
+  function bytesToUrlBase64(u8) {
+    let ikili = '';
+    for (let i = 0; i < u8.length; i++) ikili += String.fromCharCode(u8[i]);
+    const b64 = typeof btoa === 'function' ? btoa(ikili) : Buffer.from(u8).toString('base64');
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function urlBase64ToBytes(b64Url) {
+    let b64 = String(b64Url || '').replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4 !== 0) b64 += '=';
+    if (typeof atob === 'function') {
+      const ikili = atob(b64);
+      const u8 = new Uint8Array(ikili.length);
+      for (let i = 0; i < ikili.length; i++) u8[i] = ikili.charCodeAt(i);
+      return u8;
+    }
+    return new Uint8Array(Buffer.from(b64, 'base64'));
+  }
+
+  function uretOqv2AnahtarAkisi(gizliAnahtar, nonceHex, uzunluk) {
+    const akis = new Uint8Array(uzunluk);
+    let yazilan = 0;
+    let blokNo = 0;
+    while (yazilan < uzunluk) {
+      const blokHex = uretDelilLogHash(`${gizliAnahtar}|${nonceHex}|${blokNo}`, 'OQV2-STREAM');
+      const blokBytes = hexToBytes(blokHex);
+      for (let i = 0; i < blokBytes.length && yazilan < uzunluk; i++) {
+        akis[yazilan++] = blokBytes[i];
+      }
+      blokNo++;
+    }
+    return akis;
+  }
+
+  function uretSifreliOptikKagitQrPaketi(bilgi = {}, sinavGizliAnahtar = '') {
+    const anahtar = String(sinavGizliAnahtar || bilgi.sinavGizliAnahtar || '').trim() || uretSinavGizliAnahtari(bilgi.sinavKodu || 'SINAV-2026');
+    const sinavKodu = String(bilgi.sinavKodu || 'SINAV-2026').trim();
+    const grupHarf = ['A', 'B', 'C', 'D'].includes(String(bilgi.grup || 'A').toUpperCase())
+      ? String(bilgi.grup || 'A').toUpperCase()
+      : 'A';
+    const grupIdx = ['A', 'B', 'C', 'D'].indexOf(grupHarf);
+    const ogrNo = String(bilgi.ogrNo || '').trim().slice(0, 20);
+    const dyAnahtar = Array.isArray(bilgi.dyAnahtar)
+      ? bilgi.dyAnahtar
+      : (bilgi.cevapAnahtari && Array.isArray(bilgi.cevapAnahtari.dy) ? bilgi.cevapAnahtari.dy : []);
+    const testAnahtar = Array.isArray(bilgi.testAnahtar)
+      ? bilgi.testAnahtar
+      : (bilgi.cevapAnahtari && Array.isArray(bilgi.cevapAnahtari.test) ? bilgi.cevapAnahtari.test : []);
+
+    const dySayisi = Math.max(0, Math.min(40, Number(bilgi.dySayisi !== undefined ? bilgi.dySayisi : dyAnahtar.length) || 0));
+    const testSayisi = Math.max(0, Math.min(60, Number(bilgi.testSayisi !== undefined ? bilgi.testSayisi : testAnahtar.length) || 0));
+    const klasikSayisi = Math.max(0, Math.min(10, Number(bilgi.klasikSayisi) || 0));
+
+    const puanYapi = normalizeSinav100PuanYapisi({
+      dySayisi,
+      testSayisi,
+      klasikSayisi,
+      dyToplamPuan: bilgi.dyToplamPuan,
+      testToplamPuan: bilgi.testToplamPuan,
+      klasikToplamPuan: bilgi.klasikToplamPuan,
+      dySoruPuan: bilgi.dySoruPuan,
+      testSoruPuan: bilgi.testSoruPuan,
+      klasikSoruPuan: bilgi.klasikSoruPuan
+    });
+
+    const ozelMi = bilgi.ozelCevapAnahtariMi !== false && (dyAnahtar.length > 0 || testAnahtar.length > 0);
+    const ogrNoBytes = new TextEncoder().encode(ogrNo);
+    const dyPaketLen = ozelMi ? Math.ceil(dySayisi / 8) : 0;
+    const testPaketLen = ozelMi ? Math.ceil((testSayisi * 3) / 8) : 0;
+
+    const sinavHash4 = hexToBytes(uretDelilLogHash(sinavKodu, 'OQV2-SINAV').slice(0, 8));
+    const acikUzunluk = 1 + 4 + 1 + 3 + 3 + 1 + ogrNoBytes.length + dyPaketLen + testPaketLen;
+    const acik = new Uint8Array(acikUzunluk);
+    let p = 0;
+    acik[p++] = 2; // Sürüm 2
+    acik.set(sinavHash4, p); p += 4;
+    acik[p++] = (grupIdx & 0x03) | (ozelMi ? 0x04 : 0x00);
+    acik[p++] = dySayisi;
+    acik[p++] = testSayisi;
+    acik[p++] = klasikSayisi;
+    acik[p++] = Math.min(200, Math.round(puanYapi.dyToplamPuan * 2));
+    acik[p++] = Math.min(200, Math.round(puanYapi.testToplamPuan * 2));
+    acik[p++] = Math.min(200, Math.round(puanYapi.klasikToplamPuan * 2));
+    acik[p++] = ogrNoBytes.length;
+    acik.set(ogrNoBytes, p); p += ogrNoBytes.length;
+
+    if (ozelMi) {
+      for (let i = 0; i < dySayisi; i++) {
+        const bit = String(dyAnahtar[i] || 'D').toUpperCase() === 'D' ? 1 : 0;
+        if (bit) acik[p + (i >> 3)] |= (1 << (i & 7));
+      }
+      p += dyPaketLen;
+
+      const harfHarita = { A: 1, B: 2, C: 3, D: 4, E: 5 };
+      let bitKonum = 0;
+      for (let i = 0; i < testSayisi; i++) {
+        const kod = harfHarita[String(testAnahtar[i] || 'A').toUpperCase()] || 1;
+        for (let b = 0; b < 3; b++) {
+          if ((kod >> b) & 1) {
+            acik[p + (bitKonum >> 3)] |= (1 << (bitKonum & 7));
+          }
+          bitKonum++;
+        }
+      }
+      p += testPaketLen;
+    }
+
+    const nonceHex = uretDelilLogHash(`${sinavKodu}|${ogrNo}|${grupHarf}`, 'OQV2-NONCE').slice(0, 6).toUpperCase();
+    const nonceBytes = hexToBytes(nonceHex); // 3 bayt
+    const akis = uretOqv2AnahtarAkisi(anahtar, nonceHex, acik.length);
+    const sifreli = new Uint8Array(acik.length);
+    for (let i = 0; i < acik.length; i++) sifreli[i] = acik[i] ^ akis[i];
+
+    const sifreliHex = Array.from(sifreli, (b) => b.toString(16).padStart(2, '0')).join('');
+    const macBytes = hexToBytes(uretDelilLogHash(`${anahtar}|${nonceHex}|${sifreliHex}`, 'OQV2-MAC').slice(0, 12)); // 6 bayt (48-bit MAC)
+
+    const toplam = new Uint8Array(3 + sifreli.length + 6);
+    toplam.set(nonceBytes, 0);
+    toplam.set(sifreli, 3);
+    toplam.set(macBytes, 3 + sifreli.length);
+
+    return `OQV2:${bytesToUrlBase64(toplam)}`;
+  }
+
+  function cozSifreliOptikKagitQrPaketi(qrMetin = '', sinavGizliAnahtar = '', beklenenSinavKodu = '') {
+    const ham = String(qrMetin || '').trim();
+    if (!ham.startsWith('OQV2:')) {
+      return { gecerli: false, hata: 'OQV2 formatında şifreli kağıt QR kodu değil.' };
+    }
+    const anahtar = String(sinavGizliAnahtar || '').trim();
+    if (!anahtar) {
+      return { gecerli: false, anahtarEksik: true, hata: 'Şifreli öğrenci kağıdını çözmek için önce Öğretmen Master Kurulum QR kodunu okutun.' };
+    }
+    try {
+      const toplam = urlBase64ToBytes(ham.slice(5));
+      if (toplam.length < 21) return { gecerli: false, hata: 'Bozuk veya eksik OQV2 QR verisi.' };
+      const nonceBytes = toplam.slice(0, 3);
+      const macGelen = toplam.slice(toplam.length - 6);
+      const sifreli = toplam.slice(3, toplam.length - 6);
+      const nonceHex = Array.from(nonceBytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+      const sifreliHex = Array.from(sifreli, (b) => b.toString(16).padStart(2, '0')).join('');
+      const macBeklenen = hexToBytes(uretDelilLogHash(`${anahtar}|${nonceHex}|${sifreliHex}`, 'OQV2-MAC').slice(0, 12));
+
+      let fark = 0;
+      for (let i = 0; i < 6; i++) fark |= (macGelen[i] ^ macBeklenen[i]);
+      if (fark !== 0) {
+        return { gecerli: false, imzaHatasi: true, hata: 'QR güvenlik imzası doğrulanamadı (farklı sınav anahtarı veya değiştirilmiş etiket).' };
+      }
+
+      const akis = uretOqv2AnahtarAkisi(anahtar, nonceHex, sifreli.length);
+      const acik = new Uint8Array(sifreli.length);
+      for (let i = 0; i < sifreli.length; i++) acik[i] = sifreli[i] ^ akis[i];
+
+      let p = 0;
+      const surum = acik[p++];
+      if (surum !== 2) return { gecerli: false, hata: 'Desteklenmeyen OQV2 sürümü.' };
+      const sinavHashHex = Array.from(acik.slice(p, p + 4), (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+      p += 4;
+      if (beklenenSinavKodu) {
+        const bekHash = uretDelilLogHash(String(beklenenSinavKodu).trim(), 'OQV2-SINAV').slice(0, 8).toUpperCase();
+        if (sinavHashHex !== bekHash) {
+          return { gecerli: false, farkliSinav: true, hata: 'Bu kağıt farklı bir sınava aittir.' };
+        }
+      }
+      const bayrak = acik[p++];
+      const grup = ['A', 'B', 'C', 'D'][bayrak & 0x03] || 'A';
+      const ozelMi = Boolean(bayrak & 0x04);
+      const dySayisi = acik[p++];
+      const testSayisi = acik[p++];
+      const klasikSayisi = acik[p++];
+      const dyToplamPuan = acik[p++] / 2;
+      const testToplamPuan = acik[p++] / 2;
+      const klasikToplamPuan = acik[p++] / 2;
+      const ogrLen = acik[p++];
+      if (p + ogrLen > acik.length) return { gecerli: false, hata: 'QR öğrenci numarası alanı bozuk.' };
+      const ogrNo = new TextDecoder().decode(acik.slice(p, p + ogrLen));
+      p += ogrLen;
+
+      let cevapAnahtari = null;
+      if (ozelMi) {
+        const dyPaketLen = Math.ceil(dySayisi / 8);
+        const testPaketLen = Math.ceil((testSayisi * 3) / 8);
+        if (p + dyPaketLen + testPaketLen > acik.length) {
+          return { gecerli: false, hata: 'QR cevap anahtarı bit alanı bozuk.' };
+        }
+        const dy = [];
+        for (let i = 0; i < dySayisi; i++) {
+          const bit = (acik[p + (i >> 3)] >> (i & 7)) & 1;
+          dy.push(bit === 1 ? 'D' : 'Y');
+        }
+        p += dyPaketLen;
+
+        const harfler = ['A', 'A', 'B', 'C', 'D', 'E'];
+        const test = [];
+        let bitKonum = 0;
+        for (let i = 0; i < testSayisi; i++) {
+          let kod = 0;
+          for (let b = 0; b < 3; b++) {
+            if ((acik[p + (bitKonum >> 3)] >> (bitKonum & 7)) & 1) kod |= (1 << b);
+            bitKonum++;
+          }
+          test.push(harfler[kod] || 'A');
+        }
+        cevapAnahtari = { dy, test, klasik: [] };
+      }
+
+      const puanYapi = normalizeSinav100PuanYapisi({
+        dySayisi,
+        testSayisi,
+        klasikSayisi,
+        dyToplamPuan,
+        testToplamPuan,
+        klasikToplamPuan
+      });
+
+      return {
+        gecerli: true,
+        surum,
+        sinavHashHex,
+        ogrNo,
+        grup,
+        ozelCevapAnahtariMi: ozelMi,
+        dySayisi,
+        testSayisi,
+        klasikSayisi,
+        dyToplamPuan: puanYapi.dyToplamPuan,
+        testToplamPuan: puanYapi.testToplamPuan,
+        klasikToplamPuan: puanYapi.klasikToplamPuan,
+        dySoruPuan: puanYapi.dySoruPuan,
+        testSoruPuan: puanYapi.testSoruPuan,
+        klasikSoruPuan: puanYapi.klasikSoruPuan,
+        cevapAnahtari
+      };
+    } catch (err) {
+      return { gecerli: false, hata: 'OQV2 QR çözümlenemedi: ' + err.message };
+    }
   }
 
   /* ------------------------------------------------------------------------
@@ -1407,7 +1818,17 @@
       return enIyi;
     };
 
-    let enIyi = dortluAra(kesinAdaylar, false);
+    let filtrelenmisKesin = kesinAdaylar;
+    if (kesinAdaylar.length > 4) {
+      const maksBoyutAday = Math.max(...kesinAdaylar.map((a) => a.boyut));
+      const anaBoyutlular = kesinAdaylar.filter((a) => a.boyut >= maksBoyutAday * 0.58);
+      if (anaBoyutlular.length >= 4) filtrelenmisKesin = anaBoyutlular;
+    }
+    let enIyi = dortluAra(filtrelenmisKesin, false);
+    if (!enIyi || enIyi.skor > 1.15) {
+      const tamKesin = filtrelenmisKesin !== kesinAdaylar ? dortluAra(kesinAdaylar, false) : null;
+      if (tamKesin && (!enIyi || tamKesin.skor < enIyi.skor)) enIyi = tamKesin;
+    }
     if (!enIyi || enIyi.skor > 1.15) {
       const esnekEnIyi = dortluAra(esnekAdaylar, true);
       if (esnekEnIyi && (!enIyi || esnekEnIyi.skor < enIyi.skor)) {
@@ -1674,11 +2095,59 @@
     };
   }
 
+  /* Düzeltilmiş kanonik gri görüntüden (800xKY) üst-orta 8x8 Mini Geometri Matrisini pikselden okur (CRC doğrulamalı) */
+  function okuOptikGeometriMatrisiPikselden(duzGri, KG, KY) {
+    if (!duzGri || KG < 800 || KY < 120) return null;
+    const x0 = Math.round(KG / 2 - 16);
+    const y0 = 8;
+    const h = 4;
+    // Dış beyaz sessiz bölge ile en koyu hücre arasındaki kontrastı ölç
+    let enAcik = 0;
+    let enKoyu = 255;
+    const hucreOrt = new Float32Array(64);
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
+        const cx = x0 + j * h + 1;
+        const cy = y0 + i * h + 1;
+        const v = (
+          duzGri[cy * KG + cx] +
+          duzGri[cy * KG + cx + 1] +
+          duzGri[(cy + 1) * KG + cx] +
+          duzGri[(cy + 1) * KG + cx + 1]
+        ) * 0.25;
+        hucreOrt[i * 8 + j] = v;
+        if (v > enAcik) enAcik = v;
+        if (v < enKoyu) enKoyu = v;
+      }
+    }
+    if (enAcik - enKoyu < 65) return null;
+    const esik = (enAcik + enKoyu) * 0.5;
+    const bitler = new Array(64);
+    for (let k = 0; k < 64; k++) {
+      // Belirsiz/bulanık gri geçişte yanlış CRC olasılığını sıfırlamak için marj kontrolü
+      if (Math.abs(hucreOrt[k] - esik) < 12) return null;
+      bitler[k] = hucreOrt[k] < esik ? 1 : 0;
+    }
+    return cozOptikGeometriMatrisi(bitler);
+  }
+
   /* Ana OMR Okuma Fonksiyonu (ImageData -> Tam Sınav Değerlendirme Sonucu)
      ozelKoseler verilmezse form, görüntünün HERHANGİ bir yerinde 4 köşe fiducialinden aranır.
      Form bulunamazsa { formBulundu:false, hata, mesaj } döner (yanlış puan üretilmez). */
   function okuOptikFormImageData(imageData, sinavYapisi, ogrenciListesi = [], ozelKoseler = null) {
     let etkinYapi = Object.assign({}, sinavYapisi || {});
+    const kagitQr = (etkinYapi.kagitQrCozum && etkinYapi.kagitQrCozum.gecerli) ? etkinYapi.kagitQrCozum : null;
+    if (kagitQr) {
+      etkinYapi.dySayisi = kagitQr.dySayisi;
+      etkinYapi.testSayisi = kagitQr.testSayisi;
+      etkinYapi.klasikSayisi = kagitQr.klasikSayisi;
+      etkinYapi.dyToplamPuan = kagitQr.dyToplamPuan;
+      etkinYapi.testToplamPuan = kagitQr.testToplamPuan;
+      etkinYapi.klasikToplamPuan = kagitQr.klasikToplamPuan;
+      etkinYapi.dySoruPuan = kagitQr.dySoruPuan;
+      etkinYapi.testSoruPuan = kagitQr.testSoruPuan;
+      etkinYapi.klasikSoruPuan = kagitQr.klasikSoruPuan;
+    }
     let harita = hesaplaKanonikBalonHaritasi(etkinYapi);
     let KG = harita.genislik;
     let KY = harita.yukseklik;
@@ -1701,10 +2170,8 @@
 
     const kaynakGri = griyeCevirImageData(imageData);
 
-    // Fiziksel 4 köşe oranından (homografi öncesi) kağıttaki gerçek satır/bant yapısını otomatik uyarla:
-    // Telefondaki sınav yapısı (örn. varsayılan 10 D/Y + 10 Test + 2 Klasik -> KY=330) ile
-    // basılı kağıttaki optik kutu (örn. 15 D/Y + 10 Test + 0 Klasik -> KY=254) farklıysa otomatik algılar.
-    if (!ozelKoseler && koseler && koseler.tl && koseler.tr && koseler.bl && koseler.br) {
+    // 0) Önce kağıdın üst ortasındaki 8x8 Geometri Matrisinden (CRC'li) veya fiziksel 4 köşe oranından gerçek şemayı algıla:
+    if (!ozelKoseler && !kagitQr && koseler && koseler.tl && koseler.tr && koseler.bl && koseler.br) {
       const ustGen = Math.hypot(koseler.tr.x - koseler.tl.x, koseler.tr.y - koseler.tl.y);
       const altGen = Math.hypot(koseler.br.x - koseler.bl.x, koseler.br.y - koseler.bl.y);
       const solYuk = Math.hypot(koseler.bl.x - koseler.tl.x, koseler.bl.y - koseler.tl.y);
@@ -1713,8 +2180,37 @@
       const ortYuk = (solYuk + sagYuk) / 2;
       if (ortGen > 25 && ortYuk > 15) {
         const fizikiOran = ortGen / ortYuk;
-        const tahminiKY = Math.round(2 * KANONIK_FIDUCIAL_MERKEZ + (KANONIK_GENISLIK - 2 * KANONIK_FIDUCIAL_MERKEZ) / fizikiOran);
-        if (Math.abs(tahminiKY - KY) > 22 && tahminiKY >= 165 && tahminiKY <= 295) {
+        const tahminiKY = Math.max(150, Math.min(720, Math.round(2 * KANONIK_FIDUCIAL_MERKEZ + (KANONIK_GENISLIK - 2 * KANONIK_FIDUCIAL_MERKEZ) / fizikiOran)));
+        const onDuzGri = perspektifDuzeltGri(kaynakGri, imageData.width, imageData.height, koseler, KG, tahminiKY);
+        const geoCozum = okuOptikGeometriMatrisiPikselden(onDuzGri, KG, tahminiKY);
+        if (
+          geoCozum &&
+          (geoCozum.dySayisi !== etkinYapi.dySayisi ||
+            geoCozum.testSayisi !== etkinYapi.testSayisi ||
+            geoCozum.klasikSayisi !== etkinYapi.klasikSayisi ||
+            geoCozum.sikSayisi !== (Number(etkinYapi.sikSayisi || 5) === 4 ? 4 : 5) ||
+            geoCozum.kimlikModu !== (etkinYapi.kimlikModu || 'son2'))
+        ) {
+          const normPuan = normalizeSinav100PuanYapisi({
+            ...etkinYapi,
+            dySayisi: geoCozum.dySayisi,
+            testSayisi: geoCozum.testSayisi,
+            klasikSayisi: geoCozum.klasikSayisi
+          });
+          etkinYapi = Object.assign({}, etkinYapi, geoCozum, {
+            dyToplamPuan: normPuan.dyToplamPuan,
+            testToplamPuan: normPuan.testToplamPuan,
+            klasikToplamPuan: normPuan.klasikToplamPuan,
+            dySoruPuan: normPuan.dySoruPuan,
+            testSoruPuan: normPuan.testSoruPuan,
+            klasikSoruPuan: normPuan.klasikSoruPuan,
+            otomatikAlgilandiMi: true
+          });
+          harita = hesaplaKanonikBalonHaritasi(etkinYapi);
+          KG = harita.genislik;
+          KY = harita.yukseklik;
+          aktifKanonikYukseklik = KY;
+        } else if (Math.abs(tahminiKY - KY) > 22 && tahminiKY >= 165 && tahminiKY <= 295) {
           const tahminiSatir = Math.max(3, Math.min(13, Math.round((tahminiKY - 94) / 20)));
           const maksAdaySoru = tahminiSatir * 2;
           const denemeYapi = Object.assign({}, etkinYapi, {
@@ -1753,10 +2249,22 @@
             if (satirBasiliMi(denemeHarita.testSatirlari[i].balonlar)) algilananTest = i + 1;
           }
           if (algilananDy > 0 || algilananTest > 0) {
+            const normPuan = normalizeSinav100PuanYapisi({
+              ...etkinYapi,
+              dySayisi: algilananDy || etkinYapi.dySayisi,
+              testSayisi: algilananTest || etkinYapi.testSayisi,
+              klasikSayisi: 0
+            });
             etkinYapi = Object.assign({}, etkinYapi, {
               dySayisi: algilananDy || etkinYapi.dySayisi,
               testSayisi: algilananTest || etkinYapi.testSayisi,
               klasikSayisi: 0,
+              dyToplamPuan: normPuan.dyToplamPuan,
+              testToplamPuan: normPuan.testToplamPuan,
+              klasikToplamPuan: normPuan.klasikToplamPuan,
+              dySoruPuan: normPuan.dySoruPuan,
+              testSoruPuan: normPuan.testSoruPuan,
+              klasikSoruPuan: normPuan.klasikSoruPuan,
               otomatikAlgilandiMi: true
             });
             harita = hesaplaKanonikBalonHaritasi(etkinYapi);
@@ -1775,63 +2283,78 @@
 
     // 1. Kitapçık Grubu Okuma
     const grupKarar = degerlendirBalonSatiri(duz.gri, duz.ikili, harita.grupBalonlari, 'harf');
-    const okunanGrup = (grupKarar.secilen && ['A', 'B', 'C', 'D'].includes(grupKarar.secilen))
-      ? grupKarar.secilen
-      : (sinavYapisi.varsayilanGrup || 'A');
+    const okunanGrup = kagitQr && kagitQr.grup
+      ? kagitQr.grup
+      : ((grupKarar.secilen && ['A', 'B', 'C', 'D'].includes(grupKarar.secilen))
+        ? grupKarar.secilen
+        : (etkinYapi.varsayilanGrup || 'A'));
     let grupBelirsiz = false;
-    if (grupKarar.supheli) {
-      grupBelirsiz = true;
-      incelemeKuyrugu.push({ alan: 'Kitapçık Grubu', detay: `Okunan: ${okunanGrup} (Güven: %${Math.round(grupKarar.guven * 100)})` });
-    } else if (grupKarar.durum === 'BOS') {
-      grupBelirsiz = true;
-      incelemeKuyrugu.push({ alan: 'Kitapçık Grubu', detay: `Kitapçık grubu işaretlenmemiş — varsayılan ${okunanGrup} kitapçığı anahtarı kullanıldı, puanı kontrol edin` });
+    if (!kagitQr) {
+      if (grupKarar.supheli) {
+        grupBelirsiz = true;
+        incelemeKuyrugu.push({ alan: 'Kitapçık Grubu', detay: `Okunan: ${okunanGrup} (Güven: %${Math.round(grupKarar.guven * 100)})` });
+      } else if (grupKarar.durum === 'BOS') {
+        grupBelirsiz = true;
+        incelemeKuyrugu.push({ alan: 'Kitapçık Grubu', detay: `Kitapçık grubu işaretlenmemiş — varsayılan ${okunanGrup} kitapçığı anahtarı kullanıldı, puanı kontrol edin` });
+      }
     }
 
     // 2. Öğrenci Numarası Okuma
     let okunanNoStr = '';
-    for (let h = 0; h < harita.kimlikSatirlari.length; h++) {
-      const hKarar = degerlendirBalonSatiri(duz.gri, duz.ikili, harita.kimlikSatirlari[h].balonlar, 'rakam');
-      okunanNoStr += hKarar.secilen !== null && hKarar.secilen !== 'ÇİFT' ? hKarar.secilen : '?';
-      if (hKarar.supheli || hKarar.durum === 'BOS') {
-        incelemeKuyrugu.push({ alan: `Öğrenci No ${h + 1}. Basamak`, detay: `Durum: ${hKarar.durum}` });
+    if (kagitQr && kagitQr.ogrNo) {
+      okunanNoStr = String(kagitQr.ogrNo).trim();
+    } else {
+      for (let h = 0; h < harita.kimlikSatirlari.length; h++) {
+        const hKarar = degerlendirBalonSatiri(duz.gri, duz.ikili, harita.kimlikSatirlari[h].balonlar, 'rakam');
+        okunanNoStr += hKarar.secilen !== null && hKarar.secilen !== 'ÇİFT' ? hKarar.secilen : '?';
+        if (hKarar.supheli || hKarar.durum === 'BOS') {
+          incelemeKuyrugu.push({ alan: `Öğrenci No ${h + 1}. Basamak`, detay: `Durum: ${hKarar.durum}` });
+        }
+      }
+      if (harita.kimlikSatirlari.length === 0) {
+        incelemeKuyrugu.push({ alan: 'Öğrenci Kimliği', detay: 'QR/ön baskılı kimlik modunda numara balonlardan okunmaz; öğrenciyi listeden seçin' });
       }
     }
-    if (harita.kimlikSatirlari.length === 0) {
-      incelemeKuyrugu.push({ alan: 'Öğrenci Kimliği', detay: 'QR/ön baskılı kimlik modunda numara balonlardan okunmaz; öğrenciyi listeden seçin' });
-    }
 
-    // Öğrenci Listesiyle Eşleştirme (Son 2 / Son 3 Hane veya Tam Numara)
+    // Öğrenci Listesiyle Eşleştirme (Şifreli QR Tam No, Son 2 / Son 3 Hane veya Tam Numara)
     let eslesenOgrenciler = [];
-    if (okunanNoStr && !okunanNoStr.includes('?')) {
-      if (sinavYapisi.kimlikModu === 'tam') {
+    if (kagitQr && kagitQr.ogrNo) {
+      eslesenOgrenciler = ogrenciListesi.filter((o) => String(o.ogrNo).trim() === String(kagitQr.ogrNo).trim());
+      if (eslesenOgrenciler.length === 0) {
+        eslesenOgrenciler = [{ ogrNo: String(kagitQr.ogrNo).trim(), adSoyad: `Öğrenci (${kagitQr.ogrNo})` }];
+      }
+    } else if (okunanNoStr && !okunanNoStr.includes('?')) {
+      if (etkinYapi.kimlikModu === 'tam') {
         eslesenOgrenciler = ogrenciListesi.filter((o) => String(o.ogrNo).endsWith(okunanNoStr));
       } else {
-        const hane = sinavYapisi.kimlikModu === 'son3' ? 3 : 2;
+        const hane = etkinYapi.kimlikModu === 'son3' ? 3 : 2;
         eslesenOgrenciler = ogrenciListesi.filter((o) => String(o.ogrNo).slice(-hane) === okunanNoStr.slice(-hane));
       }
     }
     if (eslesenOgrenciler.length > 1) {
       incelemeKuyrugu.push({
-        alan: `Öğrenci No Son ${sinavYapisi.kimlikModu === 'son3' ? 3 : 2} Hane Çakışması`,
+        alan: `Öğrenci No Son ${etkinYapi.kimlikModu === 'son3' ? 3 : 2} Hane Çakışması`,
         detay: `Sonu "${okunanNoStr}" ile biten ${eslesenOgrenciler.length} öğrenci var: ${eslesenOgrenciler.map((x) => x.adSoyad).join(' / ')}`
       });
     }
 
-    // 3. Cevap anahtarı
+    // 3. Cevap anahtarı (Önce OQV2 şifreli kağıt QR anahtarı, sonra kişiye özel harita, sonra A/B/C/D kitapçık)
     const tekilEslesenOgr = eslesenOgrenciler[0] || null;
-    const ogrenciOzelAnahtar = (
-      sinavYapisi.ogrenciyeOzelDegerlendirmeAktif !== false &&
-      tekilEslesenOgr &&
-      sinavYapisi.ogrenciyeOzelAnahtarlar &&
-      sinavYapisi.ogrenciyeOzelAnahtarlar[tekilEslesenOgr.ogrNo]
-    ) || null;
+    const ogrenciOzelAnahtar = (kagitQr && kagitQr.cevapAnahtari)
+      ? kagitQr.cevapAnahtari
+      : ((
+        etkinYapi.ogrenciyeOzelDegerlendirmeAktif !== false &&
+        tekilEslesenOgr &&
+        etkinYapi.ogrenciyeOzelAnahtarlar &&
+        etkinYapi.ogrenciyeOzelAnahtarlar[tekilEslesenOgr.ogrNo]
+      ) || null);
     const grupAnahtar = ogrenciOzelAnahtar
-      || (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari[okunanGrup])
-      || (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari.A)
+      || (etkinYapi.cevapAnahtarlari && etkinYapi.cevapAnahtarlari[okunanGrup])
+      || (etkinYapi.cevapAnahtarlari && etkinYapi.cevapAnahtarlari.A)
       || { dy: [], test: [], klasik: [] };
-    const esnekKurallar = sinavYapisi.esnekAnahtarKurallari && typeof sinavYapisi.esnekAnahtarKurallari === 'object'
-      ? sinavYapisi.esnekAnahtarKurallari
-      : cozEsnekAnahtarKurallari(sinavYapisi.ciftSikMetin || '');
+    const esnekKurallar = etkinYapi.esnekAnahtarKurallari && typeof etkinYapi.esnekAnahtarKurallari === 'object'
+      ? etkinYapi.esnekAnahtarKurallari
+      : cozEsnekAnahtarKurallari(etkinYapi.ciftSikMetin || '');
 
     // 4. Doğru / Yanlış
     const dyDetay = [];
@@ -1967,10 +2490,10 @@
     }
 
     // 7. Net ve Toplam Puan
-    const dyGoturme = Number(sinavYapisi.dyGoturmeOrani || 0);
-    const testGoturme = Number(sinavYapisi.testGoturmeOrani || 0);
-    const dySoruPuan = Number(sinavYapisi.dySoruPuan || 2);
-    const testSoruPuan = Number(sinavYapisi.testSoruPuan || 5);
+    const dyGoturme = Number(etkinYapi.dyGoturmeOrani || 0);
+    const testGoturme = Number(etkinYapi.testGoturmeOrani || 0);
+    const dySoruPuan = Number(etkinYapi.dySoruPuan !== undefined ? etkinYapi.dySoruPuan : 2);
+    const testSoruPuan = Number(etkinYapi.testSoruPuan !== undefined ? etkinYapi.testSoruPuan : 5);
 
     const dyNet = Math.max(0, dyDogru - (dyGoturme > 0 ? dyYanlis / dyGoturme : 0));
     const testNet = Math.max(0, testDogru - (testGoturme > 0 ? testYanlis / testGoturme : 0));
@@ -1981,7 +2504,7 @@
     );
 
     const tumGuvenler = [
-      grupKarar.guven,
+      kagitQr ? 0.99 : grupKarar.guven,
       ...dyDetay.map((d) => d.guven),
       ...testDetay.map((t) => t.guven)
     ];
@@ -2001,6 +2524,8 @@
       cakisanAdaylar: eslesenOgrenciler,
       numaraEslesmediMi: eslesenOgrenciler.length === 0,
       grup: okunanGrup,
+      ozelCevapAnahtari: ogrenciOzelAnahtar || null,
+      kagitQrIleOkunduMu: Boolean(kagitQr),
       dyDogru,
       dyYanlis,
       dyBos,
@@ -2816,7 +3341,7 @@
     const testBirimPuan = Math.max(0.5, Number(sinavYapisi.testSoruPuan || 5));
     const klasikVarsayilanPuan = Math.max(1, Number(sinavYapisi.klasikSoruPuan || 10));
     const klasikSoruPuanlari = Array.isArray(sinavYapisi.klasikSoruPuanlari) ? sinavYapisi.klasikSoruPuanlari : [];
-    const barajEsigi = Math.max(1, Math.min(100, Number(sinavYapisi.akreditasyonBaraji || 60)));
+    const barajEsigi = Math.max(1, Math.min(100, Number(sinavYapisi.akreditasyonBaraji || sinavYapisi.kazanimBarajYuzde || 60)));
 
     const kazanimHaritasi = {};
     const kayitAc = (kod) => {
@@ -2979,6 +3504,7 @@
         ocKodu: k.ocKodu || k.kod,
         soruSayisi: k.soruSayisi,
         azamiSoruPuan: Number(k.azamiSoruPuan.toFixed(2)),
+        toplamAzamiPuan: Number(k.azamiSoruPuan.toFixed(2)),
         olculduMu,
         basariYuzde,
         barajEsigi,
@@ -5048,42 +5574,69 @@
 
   /* Sınav Cevap Anahtarı ve Yapısını Telefon QR'ına Sığacak Kompakt Formatta Üretme & Çözme */
   function uretKompaktSetupQrPaketi(yapi = {}, ogrenciler = [], tabanAdres = '') {
+    if (typeof ogrenciler === 'string' && !tabanAdres) {
+      tabanAdres = ogrenciler;
+      ogrenciler = Array.isArray(yapi.ogrenciler)
+        ? yapi.ogrenciler
+        : (Array.isArray(yapi.ogrenciKayitlari) ? yapi.ogrenciKayitlari : []);
+    }
     const anahtarlar = {};
     for (const g of ['A', 'B', 'C', 'D']) {
       const a = (yapi.cevapAnahtarlari && yapi.cevapAnahtarlari[g]) || { dy: [], test: [] };
-      anahtarlar[g] = {
-        dy: Array.isArray(a.dy) ? a.dy.join('') : String(a.dy || ''),
-        test: Array.isArray(a.test) ? a.test.join('') : String(a.test || '')
-      };
+      const dyStr = Array.isArray(a.dy) ? a.dy.join('') : String(a.dy || '');
+      const testStr = Array.isArray(a.test) ? a.test.join('') : String(a.test || '');
+      if (g === 'A' || dyStr || testStr) {
+        anahtarlar[g] = { dy: dyStr, test: testStr };
+      }
     }
 
     const dersAdStr = yapi.ders
       ? `${yapi.ders.kod || 'DERS'} - ${yapi.ders.ad || 'Sınav'}`
       : String(yapi.dersAd || 'Sınav');
 
+    const normPuan = normalizeSinav100PuanYapisi({
+      dySayisi: Number(yapi.dySayisi) || 0,
+      testSayisi: Number(yapi.testSayisi) || 0,
+      klasikSayisi: Number(yapi.klasikSayisi) || 0,
+      dyToplamPuan: yapi.dyToplamPuan,
+      testToplamPuan: yapi.testToplamPuan,
+      klasikToplamPuan: yapi.klasikToplamPuan,
+      dySoruPuan: yapi.dySoruPuan,
+      testSoruPuan: yapi.testSoruPuan,
+      klasikSoruPuan: yapi.klasikSoruPuan
+    });
+    const gizliAnahtar = String(yapi.sinavGizliAnahtar || '').trim() || uretSinavGizliAnahtari(yapi.sinavKodu || 'SINAV-2026');
+
     const temelPaket = {
       sinavKodu: String(yapi.sinavKodu || 'SINAV-2026'),
       dersAd: dersAdStr.slice(0, 60),
-      dySayisi: Number(yapi.dySayisi) || 0,
-      dySoruPuan: Number(yapi.dySoruPuan) || 2,
-      testSayisi: Number(yapi.testSayisi) || 0,
-      testSoruPuan: Number(yapi.testSoruPuan) || 4,
+      dySayisi: normPuan.dySayisi,
+      dyToplamPuan: normPuan.dyToplamPuan,
+      dySoruPuan: normPuan.dySoruPuan,
+      testSayisi: normPuan.testSayisi,
+      testToplamPuan: normPuan.testToplamPuan,
+      testSoruPuan: normPuan.testSoruPuan,
       sikSayisi: Number(yapi.sikSayisi) || 5,
-      klasikSayisi: Number(yapi.klasikSayisi) || 0,
-      klasikSoruPuan: Number(yapi.klasikSoruPuan) || 10,
+      klasikSayisi: normPuan.klasikSayisi,
+      klasikToplamPuan: normPuan.klasikToplamPuan,
+      klasikSoruPuan: normPuan.klasikSoruPuan,
       kimlikModu: String(yapi.kimlikModu || 'son2'),
       haneSayisi: Number(yapi.haneSayisi) || 2,
+      sinavGizliAnahtar: gizliAnahtar,
       cevapAnahtarlari: anahtarlar
     };
 
     const temizTaban = String(tabanAdres || '').trim().replace(/\/+$/, '');
-    const ogrKisa = (Array.isArray(ogrenciler) ? ogrenciler : [])
-      .filter((o) => o && o.ogrNo && o.adSoyad)
-      .map((o) => [String(o.ogrNo).trim(), String(o.adSoyad).trim().slice(0, 28)]);
+    const gecerliOgrenciler = (Array.isArray(ogrenciler) ? ogrenciler : [])
+      .filter((o) => o && String(o.ogrNo || '').trim() && String(o.adSoyad || '').trim())
+      .map((o) => ({
+        ogrNo: String(o.ogrNo).trim(),
+        adSoyad: String(o.adSoyad).trim().replace(/[\r\n\t|]+/g, ' ')
+      }));
 
     const kodlaUrl = (nesne) => {
       const b64 = utf8ToBase64Guvenli(JSON.stringify(nesne));
-      const kodlu = encodeURIComponent(b64);
+      const kodlu = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       const tamUrl = `${temizTaban ? temizTaban + '/optik-mobil.html' : 'optik-mobil.html'}#setup=${kodlu}`;
       return {
         b64,
@@ -5094,16 +5647,74 @@
       };
     };
 
-    // Eğer öğrenci listesi <= 25 ise ve QR boyutu 1100 karakteri aşmıyorsa öğrenci listesini de aynı QR içine göm
-    if (ogrKisa.length > 0 && ogrKisa.length <= 25) {
-      const birlikte = kodlaUrl({ ...temelPaket, ogrKisa });
-      if (birlikte.tamUrl.length <= 1150) {
-        return {
-          ...birlikte,
-          ogrenciDahilMi: true,
-          ogrenciSayisi: ogrKisa.length,
-          not: `Sınav cevap anahtarı (A/B/C/D) ve ${ogrKisa.length} kişilik öğrenci listesi tek QR içine sığdırıldı.`
-        };
+    const ortakNoOnEkiBul = (liste) => {
+      if (!Array.isArray(liste) || liste.length < 2) return '';
+      let onEk = liste[0].ogrNo;
+      for (let i = 1; i < liste.length && onEk; i++) {
+        const n = liste[i].ogrNo;
+        let j = 0;
+        const maks = Math.min(onEk.length, n.length - 1);
+        while (j < maks && onEk[j] === n[j]) j++;
+        onEk = onEk.slice(0, j);
+      }
+      return onEk.length >= 2 ? onEk : '';
+    };
+
+    const trAsciiKisa = (m) => String(m || '')
+      .replace(/Ğ/g, 'G').replace(/ğ/g, 'g')
+      .replace(/Ü/g, 'U').replace(/ü/g, 'u')
+      .replace(/Ş/g, 'S').replace(/ş/g, 's')
+      .replace(/İ/g, 'I').replace(/ı/g, 'i')
+      .replace(/Ö/g, 'O').replace(/ö/g, 'o')
+      .replace(/Ç/g, 'C').replace(/ç/g, 'c');
+
+    if (gecerliOgrenciler.length > 0) {
+      // 1) <= 25 öğrenci için tam ad soyad (24 karakter) + < 950 karakter sınırı
+      if (gecerliOgrenciler.length <= 25) {
+        const ogrSatirTam = gecerliOgrenciler.map((o) => `${o.ogrNo}|${o.adSoyad.slice(0, 24)}`).join('\n');
+        const birlikte = kodlaUrl({ ...temelPaket, oS: ogrSatirTam });
+        if (birlikte.tamUrl.length <= 945) {
+          return {
+            ...birlikte,
+            ogrenciDahilMi: true,
+            ogrenciSayisi: gecerliOgrenciler.length,
+            not: `Sınav anahtarı, 100p ölçeği, şifre anahtarı ve ${gecerliOgrenciler.length} kişilik tam öğrenci listesi tek QR içine sığdırıldı.`
+          };
+        }
+      }
+      // 2) 26..240 kişilik sınıflar ve amfiler için ortak numara öneki + kademeli ad sıkıştırması (<= 2860 krk)
+      if (gecerliOgrenciler.length <= 240) {
+        const oPre = ortakNoOnEkiBul(gecerliOgrenciler);
+        const kademeler = [
+          { ilk: 10, son: 10, ascii: false, maksUrl: 2300 },
+          { ilk: 7, son: 7, ascii: false, maksUrl: 2600 },
+          { ilk: 5, son: 5, ascii: false, maksUrl: 2860 },
+          { ilk: 4, son: 5, ascii: true, maksUrl: 2880 },
+          { ilk: 3, son: 4, ascii: true, maksUrl: 2890 }
+        ];
+        for (const kad of kademeler) {
+          const satirlar = gecerliOgrenciler.map((o) => {
+            const hamAd = kad.ascii ? trAsciiKisa(o.adSoyad) : o.adSoyad;
+            const parcalar = hamAd.split(/\s+/).filter(Boolean);
+            const kisaAd = parcalar.length > 1
+              ? `${parcalar[0].slice(0, kad.ilk)} ${parcalar[parcalar.length - 1].slice(0, kad.son)}`
+              : hamAd.slice(0, kad.ilk + kad.son);
+            const noKisa = oPre ? o.ogrNo.slice(oPre.length) : o.ogrNo;
+            return `${noKisa}|${kisaAd}`;
+          }).join('\n');
+          const paketNesne = oPre
+            ? { ...temelPaket, oPre, oS: satirlar }
+            : { ...temelPaket, oS: satirlar };
+          const aday = kodlaUrl(paketNesne);
+          if (aday.tamUrl.length <= kad.maksUrl) {
+            return {
+              ...aday,
+              ogrenciDahilMi: true,
+              ogrenciSayisi: gecerliOgrenciler.length,
+              not: `Sınav anahtarı ve ${gecerliOgrenciler.length} kişilik sınıf listesi tek Öğretmen Master QR içine gömüldü.`
+            };
+          }
+        }
       }
     }
 
@@ -5111,10 +5722,10 @@
     return {
       ...sadeceSetup,
       ogrenciDahilMi: false,
-      ogrenciSayisi: ogrKisa.length,
-      not: ogrKisa.length > 0
-        ? `Cevap anahtarı QR'a işlendi (${ogrKisa.length} öğrenci için yan sekmedeki Öğrenci QR'ını okutabilirsiniz).`
-        : 'Sınav cevap anahtarı (A/B/C/D) ve puan yapısı QR içine işlendi.'
+      ogrenciSayisi: gecerliOgrenciler.length,
+      not: gecerliOgrenciler.length > 0
+        ? `Cevap anahtarı QR'a işlendi (${gecerliOgrenciler.length} öğrenci için Öğrenci QR veya bulut senkronunu kullanabilirsiniz).`
+        : 'Sınav cevap anahtarı (A/B/C/D) ve 100 puan yapısı QR içine işlendi.'
     };
   }
 
@@ -5127,7 +5738,9 @@
       ham = ham.slice(6).split('&')[0];
     }
     try {
-      const jsonStr = base64ToUtf8Guvenli(decodeURIComponent(ham));
+      let cozulmusB64 = decodeURIComponent(ham).replace(/-/g, '+').replace(/_/g, '/');
+      while (cozulmusB64.length % 4 !== 0) cozulmusB64 += '=';
+      const jsonStr = base64ToUtf8Guvenli(cozulmusB64);
       const v = JSON.parse(jsonStr);
       if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
 
@@ -5151,6 +5764,14 @@
         return null;
       }
 
+      const normPuan = normalizeSinav100PuanYapisi(v);
+      v.dyToplamPuan = normPuan.dyToplamPuan;
+      v.testToplamPuan = normPuan.testToplamPuan;
+      v.klasikToplamPuan = normPuan.klasikToplamPuan;
+      v.dySoruPuan = normPuan.dySoruPuan;
+      v.testSoruPuan = normPuan.testSoruPuan;
+      v.klasikSoruPuan = normPuan.klasikSoruPuan;
+
       if (v.cevapAnahtarlari && typeof v.cevapAnahtarlari === 'object') {
         for (const g of ['A', 'B', 'C', 'D']) {
           const a = v.cevapAnahtarlari[g];
@@ -5162,14 +5783,29 @@
             a.dy = dyDizi.map((ch) => String(ch).toUpperCase());
             a.test = testDizi.map((ch) => String(ch).toUpperCase());
             if (!Array.isArray(a.klasik)) a.klasik = [];
+          } else {
+            v.cevapAnahtarlari[g] = { dy: [], test: [], klasik: [] };
           }
         }
       }
-      if (Array.isArray(v.ogrKisa) && !Array.isArray(v.ogrenciler)) {
+      const noOnEk = typeof v.oPre === 'string' ? v.oPre : '';
+      if (typeof v.oS === 'string' && v.oS.trim() && !Array.isArray(v.ogrenciler)) {
+        v.ogrenciler = v.oS
+          .split('\n')
+          .map((sat) => {
+            const idx = sat.indexOf('|');
+            if (idx <= 0) return null;
+            const no = noOnEk + sat.slice(0, idx).trim();
+            const ad = sat.slice(idx + 1).trim();
+            return no && ad ? { ogrNo: no, adSoyad: ad, bolum: 'Genel' } : null;
+          })
+          .filter(Boolean);
+      } else if (Array.isArray(v.ogrKisa) && !Array.isArray(v.ogrenciler)) {
         v.ogrenciler = v.ogrKisa
           .filter((x) => Array.isArray(x) && x[0] && x[1])
           .map((x) => ({ ogrNo: String(x[0]), adSoyad: String(x[1]), bolum: 'Genel' }));
       }
+      if (!Array.isArray(v.ogrenciler)) v.ogrenciler = [];
       return v;
     } catch (_) {
       return null;
@@ -5180,9 +5816,13 @@
      Madde Analizi (pj/rjx) ve ÖÇ Karnesi İçin Detaylı Okuma Sonuçları Aktarım Paketi */
   function dogrulaVeTemizleOmrSonucKaydi(s, idx = 0, sinirlar = {}) {
     if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
-    const ogrNo = String(s.ogrNo !== undefined ? s.ogrNo : (s.no !== undefined ? s.no : '')).trim();
-    if (!ogrNo || ogrNo.length > 40 || ogrNo.includes('?')) return null;
-    const okunanNoKod = String(s.okunanNoKod !== undefined ? s.okunanNoKod : ogrNo.slice(-2)).trim();
+    const hamOgrNo = String(s.ogrNo !== undefined ? s.ogrNo : (s.no !== undefined ? s.no : '')).trim();
+    if (!hamOgrNo || hamOgrNo.length > 40) return null;
+    const belirsizNoMu = hamOgrNo.includes('?') || /^BEKLEYEN/i.test(hamOgrNo);
+    const ogrNo = hamOgrNo.includes('?')
+      ? `BEKLEYEN-${String(idx + 1).padStart(2, '0')} (${hamOgrNo})`
+      : hamOgrNo;
+    const okunanNoKod = String(s.okunanNoKod !== undefined ? s.okunanNoKod : (hamOgrNo.includes('?') ? hamOgrNo : ogrNo.slice(-2))).trim();
 
     const hamGrup = String(s.grup !== undefined ? s.grup : (s.g !== undefined ? s.g : 'A')).trim().toUpperCase();
     if (!['A', 'B', 'C', 'D'].includes(hamGrup)) return null;
@@ -5343,8 +5983,8 @@
     const kayitliListe = Array.isArray(sinirlar.ogrenciler) ? sinirlar.ogrenciler : null;
     const listedeVarMi = kayitliListe
       ? kayitliListe.some((o) => o && String(o.ogrNo || '').trim() === ogrNo)
-      : !Boolean(s.numaraEslesmediMi);
-    const kimlikEslesmeBekliyor = Boolean(s.numaraEslesmediMi || s.kimlikEslesmeBekliyor || (kayitliListe && kayitliListe.length > 0 && !listedeVarMi));
+      : !Boolean(s.numaraEslesmediMi || belirsizNoMu);
+    const kimlikEslesmeBekliyor = Boolean(belirsizNoMu || s.numaraEslesmediMi || s.kimlikEslesmeBekliyor || (kayitliListe && kayitliListe.length > 0 && !listedeVarMi));
 
     const incelemeKuyrugu = Array.isArray(s.incelemeKuyrugu)
       ? s.incelemeKuyrugu.filter((u) => u && typeof u === 'object').slice(0, 50)
@@ -5666,7 +6306,8 @@
 
   function temizleCsvFormulEnjeksiyon(hucre) {
     const s = String(hucre === undefined || hucre === null ? '' : hucre).replace(/;/g, ',').replace(/[\r\n]+/g, ' ').trim();
-    if (/^[=+\-@]/.test(s)) return `'${s}`;
+    if (s === '-') return '-';
+    if (/^[=+\-@\t]/.test(s)) return `'${s}`;
     return s;
   }
 
@@ -7722,12 +8363,41 @@
     };
   }
 
-  /* Soru İptali / Esnek Anahtar Değişikliği Sonrası Okunan Tüm Kağıtları Anlık Yeniden Puanlayıcı */
+  /* Soru İptali / Esnek Anahtar / Öğrenciye Özel Anahtar / 100 Puan Değişikliği Sonrası Anlık Yeniden Puanlayıcı */
   function yenidenPuanlaOkumaSonuclari(okumaSonuclari = [], sinavYapisi = {}) {
     const iptalSet = new Set(Array.isArray(sinavYapisi.iptalEdilenSorular) ? sinavYapisi.iptalEdilenSorular : []);
     const esnekKurallar = cozEsnekAnahtarKurallari(sinavYapisi.esnekAnahtarMetni || '');
-    const dySoruPuan = Math.max(0, Number(sinavYapisi.dySoruPuan || 2));
-    const testSoruPuan = Math.max(0, Number(sinavYapisi.testSoruPuan || 5));
+    const ilkKayit = (Array.isArray(okumaSonuclari) && okumaSonuclari.find((x) => x && typeof x === 'object')) || {};
+    const tahminiDySayi = Number(sinavYapisi.dySayisi !== undefined ? sinavYapisi.dySayisi : (Array.isArray(ilkKayit.dyDetay) ? ilkKayit.dyDetay.length : 0));
+    const tahminiTestSayi = Number(sinavYapisi.testSayisi !== undefined ? sinavYapisi.testSayisi : (Array.isArray(ilkKayit.testDetay) ? ilkKayit.testDetay.length : 0));
+    const tahminiKlasikSayi = Number(sinavYapisi.klasikSayisi !== undefined ? sinavYapisi.klasikSayisi : (Array.isArray(ilkKayit.klasikDetay) ? ilkKayit.klasikDetay.length : 0));
+
+    let dySoruPuan = Number(sinavYapisi.dySoruPuan);
+    let testSoruPuan = Number(sinavYapisi.testSoruPuan);
+    const bolumToplamVerildiMi = sinavYapisi.dyToplamPuan !== undefined || sinavYapisi.testToplamPuan !== undefined || sinavYapisi.klasikToplamPuan !== undefined;
+    if (
+      sinavYapisi.otomatik100Normalize ||
+      !Number.isFinite(dySoruPuan) ||
+      !Number.isFinite(testSoruPuan) ||
+      (bolumToplamVerildiMi && sinavYapisi.dySoruPuan === undefined && sinavYapisi.testSoruPuan === undefined)
+    ) {
+      const normPuan = normalizeSinav100PuanYapisi({
+        dySayisi: tahminiDySayi,
+        testSayisi: tahminiTestSayi,
+        klasikSayisi: tahminiKlasikSayi,
+        dyToplamPuan: sinavYapisi.dyToplamPuan,
+        testToplamPuan: sinavYapisi.testToplamPuan,
+        klasikToplamPuan: sinavYapisi.klasikToplamPuan,
+        dySoruPuan: Number.isFinite(dySoruPuan) ? dySoruPuan : undefined,
+        testSoruPuan: Number.isFinite(testSoruPuan) ? testSoruPuan : undefined
+      });
+      dySoruPuan = normPuan.dySoruPuan;
+      testSoruPuan = normPuan.testSoruPuan;
+    } else {
+      dySoruPuan = Math.max(0, dySoruPuan);
+      testSoruPuan = Math.max(0, testSoruPuan);
+    }
+
     const dyGoturme = Number(sinavYapisi.dyGoturmeOrani || 0);
     const testGoturme = Number(sinavYapisi.testGoturmeOrani || 0);
     const kitapciklar = sinavYapisi.kitapciklar || {};
@@ -7749,7 +8419,12 @@
     return (Array.isArray(okumaSonuclari) ? okumaSonuclari : []).map((ogr) => {
       if (!ogr || typeof ogr !== 'object') return ogr;
       const grup = String(ogr.grup || 'A').toUpperCase();
-      const gAnahtar = (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari[grup]) || (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari.A) || { dy: [], test: [] };
+      const ozelAnahtar = (ogr.ozelCevapAnahtari && typeof ogr.ozelCevapAnahtari === 'object' ? ogr.ozelCevapAnahtari : null)
+        || ((sinavYapisi.ogrenciyeOzelDegerlendirmeAktif !== false && sinavYapisi.ogrenciyeOzelAnahtarlar && ogr.ogrNo && sinavYapisi.ogrenciyeOzelAnahtarlar[ogr.ogrNo]) || null);
+      const gAnahtar = ozelAnahtar
+        || (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari[grup])
+        || (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari.A)
+        || { dy: [], test: [] };
 
       let dyDogru = 0;
       let dyYanlis = 0;
@@ -7775,7 +8450,7 @@
           sonuc = 'YANLIS';
           dyYanlis++;
         }
-        return { ...d, sonuc, iptalMi };
+        return { ...d, dogruCevap: beklenen || d.dogruCevap, sonuc, iptalMi };
       });
 
       let testDogru = 0;
@@ -7802,7 +8477,7 @@
           sonuc = 'YANLIS';
           testYanlis++;
         }
-        return { ...d, sonuc, iptalMi };
+        return { ...d, dogruCevap: beklenen || d.dogruCevap, sonuc, iptalMi };
       });
 
       const dyNet = Math.max(0, dyDogru - (dyGoturme > 0 ? dyYanlis / dyGoturme : 0));
@@ -7831,10 +8506,11 @@
     const dersNesne = ayarlar.ders || sinavYapisi.ders || {};
     const bolognaVerisi = ayarlar.bolognaVerisi || dersNesne.bolognaBilgisi || {};
     const digerSinavPaketleri = Array.isArray(ayarlar.digerSinavPaketleri) ? ayarlar.digerSinavPaketleri : [];
-    const barajYuzde = Math.max(1, Math.min(100, Number(ayarlar.barajEsigi || ayarlar.barajYuzde || sinavYapisi.akreditasyonBaraji || 60)));
+    const icAyar = (ayarlar.ayarlar && typeof ayarlar.ayarlar === 'object') ? ayarlar.ayarlar : {};
+    const barajYuzde = Math.max(1, Math.min(100, Number(ayarlar.barajEsigi || ayarlar.barajYuzde || icAyar.barajYuzde || sinavYapisi.akreditasyonBaraji || 60)));
     const okumaSonuclari = Array.isArray(ayarlar.okumaSonuclari) ? ayarlar.okumaSonuclari : [];
 
-    const tekilAnaliz = ayarlar.aktifSinavAnaliz || hesaplaKazanimVeKarneAnalizi(okumaSonuclari, { ...sinavYapisi, kazanimBarajYuzde: barajYuzde, akreditasyonBaraji: barajYuzde });
+    const tekilAnaliz = ayarlar.aktifSinavAnaliz || ayarlar.tekilAnaliz || hesaplaKazanimVeKarneAnalizi(okumaSonuclari, { ...sinavYapisi, kazanimBarajYuzde: barajYuzde, akreditasyonBaraji: barajYuzde });
     const maddeAnalizi = ayarlar.maddeAnaliz || ayarlar.maddeAnalizi || hesaplaSinifVeMaddeAnalizi(okumaSonuclari, sinavYapisi);
 
     // 1. ÖÇ -> Haftalık Konu Eşlemesi (Bireysel Öğrenci Tekrar Önerileri İçin)
@@ -8039,20 +8715,41 @@
     const kumulatifSatirlar = Array.from(ogrenciHarita.values()).map((kayit) => {
       const butVar = kayit.girilenler.some((g) => g.tur === 'butunleme');
       const etkinler = butVar ? kayit.girilenler.filter((g) => g.tur !== 'final') : kayit.girilenler;
-      const topAgirlik = etkinler.reduce((t, g) => t + g.agirlik, 0) || 1;
-      const agirlikliPuan = Number((etkinler.reduce((t, g) => t + g.toplamPuan * g.agirlik, 0) / topAgirlik).toFixed(2));
+      const donemEtkinPaketler = butVar
+        ? tumDonemPaketleri.filter((pk) => pk.tur !== 'final')
+        : tumDonemPaketleri.filter((pk) => pk.tur !== 'butunleme');
+      const donemTopAgirlik = donemEtkinPaketler.reduce((t, pk) => t + pk.agirlik, 0) || etkinler.reduce((t, g) => t + g.agirlik, 0) || 1;
+      const agirlikliPuan = Number((etkinler.reduce((t, g) => t + g.toplamPuan * g.agirlik, 0) / donemTopAgirlik).toFixed(2));
+      const girilenTurSet = new Set(etkinler.map((g) => g.tur));
+      const girilmeyenSinavlar = donemEtkinPaketler.filter((pk) => !girilenTurSet.has(pk.tur)).map((pk) => pk.ad);
       const ocYuzdeleri = {};
       const ocKumulatif = {};
       kumulatifSutunlar.forEach((ocKod) => {
         let pay = 0;
         let payda = 0;
-        etkinler.forEach((g) => {
-          const val = g.ocYuzdeleri[ocKod];
-          if (val !== null && val !== undefined && Number.isFinite(Number(val))) {
-            pay += Number(val) * g.agirlik;
-            payda += g.agirlik;
+        // Dönemdeki aktif sınavlardan bu ÖÇ'yi ölçen tüm sınavlar (GR olanlar 0 puan katkı ile) paydaya dahil edilir
+        donemEtkinPaketler.forEach((pk, pkIdx) => {
+          const pkSutunlar = (pk.matris.sutunlar || []).map((s) => normalizeOcKodu(s.ocKodu || s) || s.ocKodu || s);
+          const pkOlctuMu = pkSutunlar.includes(ocKod);
+          const girilenKayit = etkinler.find((g) => g.tur === pk.tur && g.agirlik === pk.agirlik && g.ocYuzdeleri[ocKod] !== undefined)
+            || etkinler.find((g) => g.tur === pk.tur);
+          if (girilenKayit && girilenKayit.ocYuzdeleri[ocKod] !== null && girilenKayit.ocYuzdeleri[ocKod] !== undefined && Number.isFinite(Number(girilenKayit.ocYuzdeleri[ocKod]))) {
+            pay += Number(girilenKayit.ocYuzdeleri[ocKod]) * pk.agirlik;
+            payda += pk.agirlik;
+          } else if (!girilenKayit && pkOlctuMu) {
+            // Öğrenci bu sınava girmediyse (GR), bu sınavda ölçülen ÖÇ katkısı 0 olarak ağırlığa girer
+            payda += pk.agirlik;
           }
         });
+        if (payda === 0) {
+          etkinler.forEach((g) => {
+            const val = g.ocYuzdeleri[ocKod];
+            if (val !== null && val !== undefined && Number.isFinite(Number(val))) {
+              pay += Number(val) * g.agirlik;
+              payda += g.agirlik;
+            }
+          });
+        }
         const yuzde = payda > 0 ? Math.round(pay / payda) : null;
         ocYuzdeleri[ocKod] = yuzde;
         ocKumulatif[ocKod] = {
@@ -8066,6 +8763,7 @@
         adSoyad: kayit.adSoyad,
         agirlikliPuan,
         harfNotu: hesaplaHarfNotu(agirlikliPuan),
+        girilmeyenSinavlar,
         ocYuzdeleri,
         ocKumulatif
       };
@@ -8151,10 +8849,19 @@
       ? ogrenciler
       : Array.from(okunanMap.values()).map((s) => ({ ogrNo: s.ogrNo, adSoyad: s.adSoyad, bolum: '' }));
 
+    const okunanPuanlarSirali = Array.from(okunanMap.values())
+      .map((s) => Number(s.toplamPuan || 0))
+      .sort((a, b) => a - b);
+
     const satirlar = [sutunlar.join(ayirici)];
     tamListe.forEach((ogr) => {
       const kayit = okunanMap.get(String(ogr.ogrNo).trim()) || null;
       const puan = kayit ? Number(kayit.toplamPuan || 0) : 0;
+      const yuzdelikDilimHesapla = () => {
+        if (!kayit || okunanPuanlarSirali.length === 0) return '-';
+        const kucukEsit = okunanPuanlarSirali.filter((p) => p <= puan).length;
+        return Math.max(1, Math.min(100, Math.round((kucukEsit / okunanPuanlarSirali.length) * 100)));
+      };
       const degerAl = (sutun) => {
         switch (String(sutun || '').toUpperCase()) {
           case 'OGRENCI_NO': return ogr.ogrNo || '';
@@ -8170,6 +8877,7 @@
           case 'SINAV_PUANI': return kayit ? Math.round(puan) : 'GR';
           case 'PUAN_KUSURATLI': return kayit ? puan : 'GR';
           case 'HARF_NOTU': return kayit ? hesaplaHarfNotu(puan) : 'GR';
+          case 'YUZDELIK_DILIM': return yuzdelikDilimHesapla();
           case 'DURUM': return kayit ? 'GİRDİ' : 'GİRMEDİ';
           default: return '';
         }
@@ -8294,7 +9002,13 @@
     uretKitapcikVaryasyonu,
     kodlaOptikGeometriMatrisi,
     cozOptikGeometriMatrisi,
+    okuOptikGeometriMatrisiPikselden,
     uretMiniGeometriSVG,
+    uretQrKodSvg,
+    normalizeSinav100PuanYapisi,
+    uretSinavGizliAnahtari,
+    uretSifreliOptikKagitQrPaketi,
+    cozSifreliOptikKagitQrPaketi,
     hesaplaKanonikBalonHaritasi,
     hesaplaEnUzunDySerisi,
     uretOptikYerlesim,

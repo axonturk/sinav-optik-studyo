@@ -5,5 +5,12 @@
   "assets": {
     "directory": ".",
     "binding": "ASSETS"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "SINAV_DB",
+      "database_name": "sinav-optik-db",
+      "database_id": "328bf4a6-70a2-4687-96a1-4c39cfe601ea"
+    }
+  ]
 }

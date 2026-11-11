@@ -31,8 +31,85 @@ const sunucuDurumu = {
   ogrenciQrKuyrugu: new Map(),
   omrSonucKuyrugu: new Map(),
   kioskDelilLoglari: [],
-  omrSonuclari: []
+  omrSonuclari: [],
+  bulutKasalarBellek: new Map(),
+  bulutGecmisBellek: new Map()
 };
+
+function hesaplaKasaOzeti(veri) {
+  if (!veri || typeof veri !== 'object') return { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0, metin: '0 ders' };
+  const ders = Array.isArray(veri.dersler) ? veri.dersler.length : 0;
+  const soru = Array.isArray(veri.sorular) ? veri.sorular.length : 0;
+  const ogrenci = Array.isArray(veri.ogrenciKayitlari)
+    ? veri.ogrenciKayitlari.length
+    : (Array.isArray(veri.ogrenciler) ? veri.ogrenciler.length : 0);
+  const sinav = Array.isArray(veri.kayitliSinavlar) ? veri.kayitliSinavlar.length : 0;
+  let okuma = Array.isArray(veri.okumaSonuclari) ? veri.okumaSonuclari.length : 0;
+  if (veri.okumaSonuclariHaritasi && typeof veri.okumaSonuclariHaritasi === 'object') {
+    const toplamHarita = Object.values(veri.okumaSonuclariHaritasi)
+      .reduce((t, d) => t + (Array.isArray(d) ? d.length : 0), 0);
+    if (toplamHarita > okuma) okuma = toplamHarita;
+  }
+  return {
+    ders,
+    soru,
+    ogrenci,
+    sinav,
+    okuma,
+    metin: `${ders} ders · ${soru} soru · ${ogrenci} öğrenci · ${sinav} sınav`
+  };
+}
+
+async function yukleSistemDurumuD1(env) {
+  if (!env || !env.SINAV_DB) return;
+  try {
+    const satirlar = await env.SINAV_DB.prepare('SELECT anahtar, deger_json FROM sistem_durumu').all();
+    const liste = (satirlar && Array.isArray(satirlar.results)) ? satirlar.results : [];
+    for (const s of liste) {
+      if (!s || !s.anahtar || !s.deger_json) continue;
+      const v = JSON.parse(s.deger_json);
+      if (s.anahtar === 'hoca_yonetim' && v) {
+        if (Array.isArray(v.hocaListesi) && v.hocaListesi.length > 0) sunucuDurumu.hocaListesi = v.hocaListesi;
+        if (v.hocaHesap) sunucuDurumu.hocaHesap = v.hocaHesap;
+        if (v.davetKodu) sunucuDurumu.davetKodu = v.davetKodu;
+      } else if (s.anahtar === 'hoca_oturumlari' && Array.isArray(v)) {
+        sunucuDurumu.aktifHocaTokenlar = new Set();
+        sunucuDurumu.aktifHocaOturumlari = new Map();
+        for (const [tok, ot] of v) {
+          if (tok && ot) {
+            sunucuDurumu.aktifHocaTokenlar.add(tok);
+            sunucuDurumu.aktifHocaOturumlari.set(tok, ot);
+          }
+        }
+      } else if (s.anahtar === 'aktif_sinav' && v) {
+        sunucuDurumu.aktifSinav = v;
+      } else if (s.anahtar === 'kayitli_ogrenciler' && Array.isArray(v)) {
+        sunucuDurumu.kayitliOgrenciler = new Map(v);
+      } else if (s.anahtar === 'aktif_tokenlar' && Array.isArray(v)) {
+        sunucuDurumu.aktifTokenlar = new Map(v);
+      } else if (s.anahtar === 'ogrenci_qr_kuyruk' && Array.isArray(v)) {
+        sunucuDurumu.ogrenciQrKuyrugu = new Map(v);
+      } else if (s.anahtar === 'omr_sonuc_kuyruk' && Array.isArray(v)) {
+        sunucuDurumu.omrSonucKuyrugu = new Map(v);
+      } else if (s.anahtar === 'kiosk_loglar' && Array.isArray(v)) {
+        sunucuDurumu.kioskDelilLoglari = v;
+      } else if (s.anahtar === 'kurumsal_sablonlar' && Array.isArray(v)) {
+        sunucuDurumu.kurumsalSablonlar = v;
+      }
+    }
+  } catch (_) {}
+}
+
+async function kaydetSistemAnahtariD1(env, anahtar, deger) {
+  if (!env || !env.SINAV_DB) return;
+  try {
+    await env.SINAV_DB.prepare(
+      `INSERT INTO sistem_durumu (anahtar, deger_json, guncelleme_ms)
+       VALUES (?1, ?2, ?3)
+       ON CONFLICT(anahtar) DO UPDATE SET deger_json = excluded.deger_json, guncelleme_ms = excluded.guncelleme_ms`
+    ).bind(anahtar, JSON.stringify(deger), Date.now()).run();
+  } catch (_) {}
+}
 
 const YASAKLI_ISTEMCI_ALANLARI = [
   'kagit',
@@ -122,6 +199,10 @@ export default {
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'max-age=86400' } });
     }
 
+    if (yol.startsWith('/api/')) {
+      await yukleSistemDurumuD1(env);
+    }
+
     if (metot === 'GET' && yol === '/api/ag-adresi') {
       return gonderJson(200, { adresler: [urlNesne.origin] });
     }
@@ -154,6 +235,8 @@ export default {
           const kayit = { oturumKodu, ogrenciler, ogrenciSayisi: ogrenciler.length, zamanMs: Date.now() };
           sunucuDurumu.ogrenciQrKuyrugu.set(oturumKodu, kayit);
           ogrenciler.forEach((o) => sunucuDurumu.kayitliOgrenciler.set(o.ogrNo, o));
+          await kaydetSistemAnahtariD1(env, 'ogrenci_qr_kuyruk', Array.from(sunucuDurumu.ogrenciQrKuyrugu.entries()));
+          await kaydetSistemAnahtariD1(env, 'kayitli_ogrenciler', Array.from(sunucuDurumu.kayitliOgrenciler.entries()));
           return gonderJson(200, { basarili: true, oturumKodu, aktarilanSayi: ogrenciler.length, adet: ogrenciler.length });
         } catch (err) {
           return gonderJson(400, { hata: err.message });
@@ -167,7 +250,10 @@ export default {
         const oturumKodu = String(urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || 'GENEL').trim().toUpperCase() || 'GENEL';
         const tuket = urlNesne.searchParams.get('tuket') === '1';
         const kayit = sunucuDurumu.ogrenciQrKuyrugu.get(oturumKodu) || null;
-        if (kayit && tuket) sunucuDurumu.ogrenciQrKuyrugu.delete(oturumKodu);
+        if (kayit && tuket) {
+          sunucuDurumu.ogrenciQrKuyrugu.delete(oturumKodu);
+          await kaydetSistemAnahtariD1(env, 'ogrenci_qr_kuyruk', Array.from(sunucuDurumu.ogrenciQrKuyrugu.entries()));
+        }
         const varMi = Boolean(kayit && Array.isArray(kayit.ogrenciler) && kayit.ogrenciler.length > 0);
         return gonderJson(200, {
           varMi,
@@ -216,6 +302,7 @@ export default {
           const kayit = { oturumKodu, sonuclar: okunanListe, okumaSonuclari: okunanListe, adet: okunanListe.length, zamanMs: Date.now() };
           sunucuDurumu.omrSonucKuyrugu.set(oturumKodu, kayit);
           sunucuDurumu.omrSonuclari = okunanListe;
+          await kaydetSistemAnahtariD1(env, 'omr_sonuc_kuyruk', Array.from(sunucuDurumu.omrSonucKuyrugu.entries()));
           return gonderJson(200, {
             basarili: true,
             oturumKodu,
@@ -236,7 +323,10 @@ export default {
         const oturumKodu = String(urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || urlNesne.searchParams.get('kod') || 'GENEL').trim().toUpperCase() || 'GENEL';
         const tuket = urlNesne.searchParams.get('tuket') === '1';
         const kayit = sunucuDurumu.omrSonucKuyrugu.get(oturumKodu) || null;
-        if (kayit && tuket) sunucuDurumu.omrSonucKuyrugu.delete(oturumKodu);
+        if (kayit && tuket) {
+          sunucuDurumu.omrSonucKuyrugu.delete(oturumKodu);
+          await kaydetSistemAnahtariD1(env, 'omr_sonuc_kuyruk', Array.from(sunucuDurumu.omrSonucKuyrugu.entries()));
+        }
         const sonuclarList = kayit && Array.isArray(kayit.sonuclar) ? kayit.sonuclar : [];
         const varMi = sonuclarList.length > 0;
         return gonderJson(200, {
@@ -269,6 +359,7 @@ export default {
           adSoyad: sonuc.adSoyad,
           rol: sonuc.rol || 'hoca'
         });
+        await kaydetSistemAnahtariD1(env, 'hoca_oturumlari', Array.from(sunucuDurumu.aktifHocaOturumlari.entries()));
         return gonderJson(200, {
           token: hocaToken,
           kullaniciAdi: sonuc.kullaniciAdi,
@@ -305,6 +396,11 @@ export default {
           kayitTarihi: new Date().toISOString().slice(0, 10)
         };
         sunucuDurumu.hocaListesi.push(yeniKayit);
+        await kaydetSistemAnahtariD1(env, 'hoca_yonetim', {
+          hocaListesi: sunucuDurumu.hocaListesi,
+          hocaHesap: sunucuDurumu.hocaHesap,
+          davetKodu: sunucuDurumu.davetKodu
+        });
         return gonderJson(201, {
           basarili: true,
           kullaniciAdi: yeniKayit.kullaniciAdi,
@@ -332,6 +428,11 @@ export default {
         if (sonuc.rol === 'yonetici') {
           sunucuDurumu.hocaHesap.sifre = String(govde.yeniSifre);
         }
+        await kaydetSistemAnahtariD1(env, 'hoca_yonetim', {
+          hocaListesi: sunucuDurumu.hocaListesi,
+          hocaHesap: sunucuDurumu.hocaHesap,
+          davetKodu: sunucuDurumu.davetKodu
+        });
         return gonderJson(200, {
           basarili: true,
           kullaniciAdi: sonuc.kullaniciAdi,
@@ -386,6 +487,12 @@ export default {
           oturum.kullaniciAdi = dogrulama.kullaniciAdi;
           oturum.adSoyad = dogrulama.adSoyad;
           if (kayit.rol === 'yonetici') sunucuDurumu.hocaHesap = Object.assign({}, kayit);
+          await kaydetSistemAnahtariD1(env, 'hoca_yonetim', {
+            hocaListesi: sunucuDurumu.hocaListesi,
+            hocaHesap: sunucuDurumu.hocaHesap,
+            davetKodu: sunucuDurumu.davetKodu
+          });
+          await kaydetSistemAnahtariD1(env, 'hoca_oturumlari', Array.from(sunucuDurumu.aktifHocaOturumlari.entries()));
           return gonderJson(200, {
             basarili: true,
             kullaniciAdi: kayit.kullaniciAdi,
@@ -398,6 +505,11 @@ export default {
         }
         if (islem === 'davet_kodu_yenile') {
           sunucuDurumu.davetKodu = Cekirdek.uretYeniDavetKodu('AKADEMI');
+          await kaydetSistemAnahtariD1(env, 'hoca_yonetim', {
+            hocaListesi: sunucuDurumu.hocaListesi,
+            hocaHesap: sunucuDurumu.hocaHesap,
+            davetKodu: sunucuDurumu.davetKodu
+          });
           return gonderJson(200, {
             basarili: true,
             davetKodu: sunucuDurumu.davetKodu,
@@ -412,6 +524,11 @@ export default {
         const hedefKayit = sunucuDurumu.hocaListesi[idx];
         if (islem === 'onayla') {
           hedefKayit.durum = 'aktif';
+          await kaydetSistemAnahtariD1(env, 'hoca_yonetim', {
+            hocaListesi: sunucuDurumu.hocaListesi,
+            hocaHesap: sunucuDurumu.hocaHesap,
+            davetKodu: sunucuDurumu.davetKodu
+          });
           return gonderJson(200, { basarili: true, kullaniciAdi: hedefKayit.kullaniciAdi, durum: 'aktif', hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi) });
         }
         if (islem === 'askiya_al') {
@@ -423,6 +540,12 @@ export default {
               sunucuDurumu.aktifHocaTokenlar.delete(tok);
             }
           }
+          await kaydetSistemAnahtariD1(env, 'hoca_yonetim', {
+            hocaListesi: sunucuDurumu.hocaListesi,
+            hocaHesap: sunucuDurumu.hocaHesap,
+            davetKodu: sunucuDurumu.davetKodu
+          });
+          await kaydetSistemAnahtariD1(env, 'hoca_oturumlari', Array.from(sunucuDurumu.aktifHocaOturumlari.entries()));
           return gonderJson(200, { basarili: true, kullaniciAdi: hedefKayit.kullaniciAdi, durum: 'askida', hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi) });
         }
         if (islem === 'sil') {
@@ -434,6 +557,12 @@ export default {
               sunucuDurumu.aktifHocaTokenlar.delete(tok);
             }
           }
+          await kaydetSistemAnahtariD1(env, 'hoca_yonetim', {
+            hocaListesi: sunucuDurumu.hocaListesi,
+            hocaHesap: sunucuDurumu.hocaHesap,
+            davetKodu: sunucuDurumu.davetKodu
+          });
+          await kaydetSistemAnahtariD1(env, 'hoca_oturumlari', Array.from(sunucuDurumu.aktifHocaOturumlari.entries()));
           return gonderJson(200, { basarili: true, silinenKullaniciAdi: silinen.kullaniciAdi, hocalar: hocaListesiGuvenliOzet(sunucuDurumu.hocaListesi) });
         }
         return gonderJson(400, { hata: 'Geçersiz yönetim işlemi.' });
@@ -482,6 +611,8 @@ export default {
             }
           });
         }
+        await kaydetSistemAnahtariD1(env, 'aktif_sinav', sunucuDurumu.aktifSinav);
+        await kaydetSistemAnahtariD1(env, 'kayitli_ogrenciler', Array.from(sunucuDurumu.kayitliOgrenciler.entries()));
         return gonderJson(200, {
           kaydedildi: true,
           sinavId: sunucuDurumu.aktifSinav.sinavId,
@@ -617,6 +748,7 @@ export default {
           cevaplar: {},
           bitti: false
         });
+        await kaydetSistemAnahtariD1(env, 'aktif_tokenlar', Array.from(sunucuDurumu.aktifTokenlar.entries()));
         return gonderJson(200, {
           token,
           ogrNo: ogr.ogrNo,
@@ -679,6 +811,7 @@ export default {
         }
 
         oturum.cevaplar[kanonikSoruId] = secim;
+        await kaydetSistemAnahtariD1(env, 'aktif_tokenlar', Array.from(sunucuDurumu.aktifTokenlar.entries()));
         return gonderJson(200, { kaydedildi: true, soruId: kanonikSoruId });
       } catch (err) {
         return gonderJson(400, { hata: err.message });
@@ -729,6 +862,8 @@ export default {
         oturum.puan = puan;
         oturum.dogruSayisi = dogruSayisi;
         oturum.teslimKodu = teslimKodu;
+        const manuelDegerlendirmeBekliyor = sinavSorulari.some((s) => s.tur === 'klasik');
+        await kaydetSistemAnahtariD1(env, 'aktif_tokenlar', Array.from(sunucuDurumu.aktifTokenlar.entries()));
 
         return gonderJson(200, {
           bitti: true,
@@ -738,7 +873,8 @@ export default {
           dogruSayisi,
           toplamSoru: sinavSorulari.length,
           puan,
-          teslimKodu
+          teslimKodu,
+          manuelDegerlendirmeBekliyor
         });
       } catch (err) {
         return gonderJson(400, { hata: err.message });
@@ -771,6 +907,7 @@ export default {
           oncekiHash
         );
         sunucuDurumu.kioskDelilLoglari.push(kayit);
+        await kaydetSistemAnahtariD1(env, 'kiosk_loglar', sunucuDurumu.kioskDelilLoglari.slice(-5000));
         return gonderJson(201, { kaydedildi: true, log: kayit });
       } catch (err) {
         return gonderJson(400, { hata: err.message });
@@ -896,10 +1033,256 @@ export default {
           }
           const temiz = Cekirdek.semaDogrulaVeTemizle({ kurumsalSablonlar: govde.kurumsalSablonlar || [] });
           sunucuDurumu.kurumsalSablonlar = temiz.kurumsalSablonlar;
+          await kaydetSistemAnahtariD1(env, 'kurumsal_sablonlar', sunucuDurumu.kurumsalSablonlar);
           return gonderJson(200, { basarili: true, adet: sunucuDurumu.kurumsalSablonlar.length });
         } catch (err) {
           return gonderJson(400, { hata: err.message });
         }
+      }
+    }
+
+    // Kalıcı Bulut Kasası (Cloudflare D1 SINAV_DB + Otomatik Yedek Geçmişi) — Doğrulanmış Hoca Oturumu Zorunlu
+    if (yol === '/api/bulut-kasa' || yol === '/api/bulut-kasa/gecmis' || yol === '/api/bulut-kasa/geri-yukle') {
+      let govde = null;
+      if (metot === 'PUT' || metot === 'POST') {
+        try {
+          govde = await okuJsonGovde(request, 4194304);
+        } catch (err) {
+          return gonderJson(400, { hata: err.message });
+        }
+      }
+      const hTok = cozHocaTokenIstekten(request, govde, urlNesne);
+      const oturum = hTok ? sunucuDurumu.aktifHocaOturumlari.get(hTok) : null;
+      if (!hTok || !sunucuDurumu.aktifHocaTokenlar.has(hTok) || !oturum) {
+        return gonderJson(401, { hata: 'Bulut kasasına erişmek için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+      }
+      const kullaniciAdi = String(oturum.kullaniciAdi || 'hoca').trim().toLowerCase();
+
+      const okuMevcutKasa = async () => {
+        if (env && env.SINAV_DB) {
+          const sat = await env.SINAV_DB.prepare(
+            'SELECT kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms FROM bulut_kasalar WHERE kullanici_adi = ?1'
+          ).bind(kullaniciAdi).first();
+          if (sat) {
+            let veri = null;
+            try { veri = JSON.parse(sat.veri_json); } catch (_) { veri = null; }
+            return {
+              kullaniciAdi,
+              revizyonNo: Number(sat.revizyon_no) || 0,
+              veri,
+              veriJson: sat.veri_json,
+              ozetBilgi: sat.ozet_bilgi || '',
+              guncellemeMs: Number(sat.guncelleme_ms) || 0
+            };
+          }
+          return null;
+        }
+        return sunucuDurumu.bulutKasalarBellek.get(kullaniciAdi) || null;
+      };
+
+      const ekleYedekGecmisi = async (revNo, veriJson, islemNotu) => {
+        const simdi = Date.now();
+        if (env && env.SINAV_DB) {
+          await env.SINAV_DB.prepare(
+            'INSERT INTO bulut_yedek_gecmisi (kullanici_adi, revizyon_no, islem_notu, veri_json, olusturma_ms) VALUES (?1, ?2, ?3, ?4, ?5)'
+          ).bind(kullaniciAdi, revNo, String(islemNotu || '').slice(0, 180), veriJson, simdi).run();
+          await env.SINAV_DB.prepare(
+            `DELETE FROM bulut_yedek_gecmisi WHERE kullanici_adi = ?1 AND id NOT IN (
+               SELECT id FROM bulut_yedek_gecmisi WHERE kullanici_adi = ?1 ORDER BY id DESC LIMIT 25
+             )`
+          ).bind(kullaniciAdi).run();
+        } else {
+          const liste = sunucuDurumu.bulutGecmisBellek.get(kullaniciAdi) || [];
+          const yeniId = (liste[0] ? liste[0].id : 0) + 1;
+          liste.unshift({ id: yeniId, kullaniciAdi, revizyonNo: revNo, islemNotu: String(islemNotu || ''), veriJson, olusturmaMs: simdi });
+          sunucuDurumu.bulutGecmisBellek.set(kullaniciAdi, liste.slice(0, 25));
+        }
+      };
+
+      if (yol === '/api/bulut-kasa' && metot === 'GET') {
+        const mevcut = await okuMevcutKasa();
+        return gonderJson(200, {
+          basarili: true,
+          bulundu: Boolean(mevcut && mevcut.veri),
+          kullaniciAdi,
+          revizyonNo: mevcut ? mevcut.revizyonNo : 0,
+          ozetBilgi: mevcut ? mevcut.ozetBilgi : '',
+          guncellemeMs: mevcut ? mevcut.guncellemeMs : 0,
+          veri: mevcut ? mevcut.veri : null,
+          veriPaketi: mevcut ? mevcut.veri : null
+        });
+      }
+
+      if (yol === '/api/bulut-kasa' && (metot === 'PUT' || metot === 'POST')) {
+        const gelenVeri = govde && (govde.veri || govde.veriPaketi);
+        if (!gelenVeri || typeof gelenVeri !== 'object' || Array.isArray(gelenVeri)) {
+          return gonderJson(400, { hata: 'Kaydedilecek geçerli bulut kasa verisi (veri nesnesi) bulunamadı.' });
+        }
+        const mevcut = await okuMevcutKasa();
+        const mevcutRev = mevcut ? (Number(mevcut.revizyonNo) || 0) : 0;
+        const bazRev = govde.bazRevizyonNo !== undefined ? Number(govde.bazRevizyonNo) : null;
+        const zorlaEz = govde.zorlaEz === true;
+
+        const yeniOzet = hesaplaKasaOzeti(gelenVeri);
+        const eskiOzet = mevcut && mevcut.veri ? hesaplaKasaOzeti(mevcut.veri) : { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
+
+        if (mevcut && !zorlaEz) {
+          if (bazRev !== null && Number.isFinite(bazRev) && bazRev < mevcutRev) {
+            return gonderJson(409, {
+              hata: 'Bulutta başka bir sekme veya cihazdan kaydedilmiş daha güncel veri var.',
+              cakisma: true,
+              bulutRevizyonNo: mevcutRev,
+              revizyonNo: mevcutRev,
+              ozetBilgi: mevcut.ozetBilgi,
+              bulutVeri: mevcut.veri,
+              veriPaketi: mevcut.veri
+            });
+          }
+          // Kör veri silme engeli: Bulutta soru/öğrenci varken istemci 0 soru/öğrenci ile ezmeye kalkarsa
+          if (
+            (eskiOzet.soru > 0 && yeniOzet.soru === 0) ||
+            (eskiOzet.ogrenci > 0 && yeniOzet.ogrenci === 0)
+          ) {
+            return gonderJson(409, {
+              hata: 'Veri kaybı koruması: Buluttaki soru veya öğrenci listesi boş veri ile ezilemez.',
+              cakisma: true,
+              veriKaybiKorumasi: true,
+              bulutRevizyonNo: mevcutRev,
+              revizyonNo: mevcutRev,
+              ozetBilgi: mevcut.ozetBilgi,
+              bulutVeri: mevcut.veri,
+              veriPaketi: mevcut.veri
+            });
+          }
+        }
+
+        if (
+          mevcut &&
+          mevcut.veriJson &&
+          (govde.anlikYedekAl === true ||
+            zorlaEz ||
+            yeniOzet.soru !== eskiOzet.soru ||
+            yeniOzet.ogrenci !== eskiOzet.ogrenci ||
+            yeniOzet.ders !== eskiOzet.ders ||
+            yeniOzet.sinav !== eskiOzet.sinav ||
+            Date.now() - (mevcut.guncellemeMs || 0) > 180000)
+        ) {
+          await ekleYedekGecmisi(mevcutRev, mevcut.veriJson, mevcut.ozetBilgi || 'Otomatik yedek');
+        }
+
+        const yeniRev = Math.max(mevcutRev + 1, (Number(govde.revizyonNo) || 0));
+        const simdi = Date.now();
+        const ozetBilgi = String(govde.islemNotu || yeniOzet.metin).slice(0, 180);
+        const veriJson = JSON.stringify(gelenVeri);
+
+        if (env && env.SINAV_DB) {
+          await env.SINAV_DB.prepare(
+            `INSERT INTO bulut_kasalar (kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(kullanici_adi) DO UPDATE SET
+               revizyon_no = excluded.revizyon_no,
+               veri_json = excluded.veri_json,
+               ozet_bilgi = excluded.ozet_bilgi,
+               guncelleme_ms = excluded.guncelleme_ms`
+          ).bind(kullaniciAdi, yeniRev, veriJson, ozetBilgi, simdi).run();
+        } else {
+          sunucuDurumu.bulutKasalarBellek.set(kullaniciAdi, {
+            kullaniciAdi,
+            revizyonNo: yeniRev,
+            veri: gelenVeri,
+            veriJson,
+            ozetBilgi,
+            guncellemeMs: simdi
+          });
+        }
+
+        return gonderJson(200, {
+          basarili: true,
+          kaydedildi: true,
+          kullaniciAdi,
+          revizyonNo: yeniRev,
+          ozetBilgi,
+          guncellemeMs: simdi
+        });
+      }
+
+      if (yol === '/api/bulut-kasa/gecmis' && metot === 'GET') {
+        if (env && env.SINAV_DB) {
+          const sat = await env.SINAV_DB.prepare(
+            'SELECT id, revizyon_no, islem_notu, olusturma_ms FROM bulut_yedek_gecmisi WHERE kullanici_adi = ?1 ORDER BY id DESC LIMIT 25'
+          ).bind(kullaniciAdi).all();
+          const gecmis = ((sat && sat.results) || []).map((r) => ({
+            id: r.id,
+            revizyonNo: r.revizyon_no,
+            islemNotu: r.islem_notu,
+            olusturmaMs: r.olusturma_ms
+          }));
+          return gonderJson(200, { basarili: true, gecmis });
+        }
+        const gecmis = (sunucuDurumu.bulutGecmisBellek.get(kullaniciAdi) || []).map((r) => ({
+          id: r.id,
+          revizyonNo: r.revizyonNo,
+          islemNotu: r.islemNotu,
+          olusturmaMs: r.olusturmaMs
+        }));
+        return gonderJson(200, { basarili: true, gecmis });
+      }
+
+      if (yol === '/api/bulut-kasa/geri-yukle' && metot === 'POST') {
+        const yedekId = Number(govde && (govde.id !== undefined ? govde.id : govde.yedekId));
+        if (!Number.isFinite(yedekId) || yedekId <= 0) {
+          return gonderJson(400, { hata: 'Geri yüklenecek geçerli yedek kimliği (id) belirtilmelidir.' });
+        }
+        let hedefVeriJson = null;
+        if (env && env.SINAV_DB) {
+          const sat = await env.SINAV_DB.prepare(
+            'SELECT veri_json FROM bulut_yedek_gecmisi WHERE id = ?1 AND kullanici_adi = ?2'
+          ).bind(yedekId, kullaniciAdi).first();
+          if (sat) hedefVeriJson = sat.veri_json;
+        } else {
+          const liste = sunucuDurumu.bulutGecmisBellek.get(kullaniciAdi) || [];
+          const bul = liste.find((x) => x.id === yedekId);
+          if (bul) hedefVeriJson = bul.veriJson;
+        }
+        if (!hedefVeriJson) {
+          return gonderJson(404, { hata: 'Belirtilen yedek kaydı bulunamadı.' });
+        }
+        const mevcut = await okuMevcutKasa();
+        if (mevcut && mevcut.veriJson) {
+          await ekleYedekGecmisi(mevcut.revizyonNo, mevcut.veriJson, 'Geri yükleme öncesi otomatik yedek');
+        }
+        const geriVeri = JSON.parse(hedefVeriJson);
+        const yeniRev = (mevcut ? mevcut.revizyonNo : 0) + 1;
+        const simdi = Date.now();
+        const ozetBilgi = `Geri yüklendi (#${yedekId}) · ${hesaplaKasaOzeti(geriVeri).metin}`;
+        if (env && env.SINAV_DB) {
+          await env.SINAV_DB.prepare(
+            `INSERT INTO bulut_kasalar (kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(kullanici_adi) DO UPDATE SET
+               revizyon_no = excluded.revizyon_no,
+               veri_json = excluded.veri_json,
+               ozet_bilgi = excluded.ozet_bilgi,
+               guncelleme_ms = excluded.guncelleme_ms`
+          ).bind(kullaniciAdi, yeniRev, hedefVeriJson, ozetBilgi, simdi).run();
+        } else {
+          sunucuDurumu.bulutKasalarBellek.set(kullaniciAdi, {
+            kullaniciAdi,
+            revizyonNo: yeniRev,
+            veri: geriVeri,
+            veriJson: hedefVeriJson,
+            ozetBilgi,
+            guncellemeMs: simdi
+          });
+        }
+        return gonderJson(200, {
+          basarili: true,
+          geriYuklendi: true,
+          revizyonNo: yeniRev,
+          ozetBilgi,
+          veri: geriVeri,
+          veriPaketi: geriVeri
+        });
       }
     }
 
@@ -912,6 +1295,8 @@ export default {
       kucukYol === '/package-lock.json' ||
       kucukYol === '/wrangler.jsonc' ||
       kucukYol === '/wrangler.toml' ||
+      kucukYol === '/d1-sema.sql' ||
+      kucukYol.endsWith('.sql') ||
       kucukYol === '/test-suite.js' ||
       kucukYol === '/omr-geometri-denetim.js' ||
       kucukYol.startsWith('/test-artifacts/') ||

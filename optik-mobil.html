@@ -63,7 +63,7 @@
       grid-template-columns: repeat(3, 1fr);
       max-width: 640px;
       margin: 0 auto;
-      z-index: 200;
+      z-index: 250;
     }
     .mobil-sekme-btn {
       padding: 0.65rem 0.4rem;
@@ -86,27 +86,107 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0.35rem 0.5rem;
+      gap: 0.35rem;
+      padding: 0.35rem 0.35rem;
       border-bottom: 1px solid var(--kenar);
     }
     .dokunmatik-balon {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
+      min-width: 40px;
+      min-height: 44px;
+      width: 40px;
+      height: 44px;
+      border-radius: 12px;
       border: 1.5px solid var(--kenar-koyu);
       background: var(--bg);
       color: var(--metin);
       font-weight: 800;
-      font-size: 0.82rem;
+      font-size: 0.86rem;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      padding: 0;
+      touch-action: manipulation;
     }
     .dokunmatik-balon.secili {
       background: var(--birincil);
       color: #fff;
       border-color: var(--birincil);
+    }
+    .vizor-canli-hud {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      right: 8px;
+      z-index: 25;
+      padding: 0.45rem 0.6rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(6px);
+    }
+    .vizor-canli-hud[hidden] {
+      display: none !important;
+    }
+    .vizor-canli-hud.hud-basarili {
+      background: rgba(21, 128, 61, 0.94);
+      color: #ffffff;
+      border: 1px solid #4ade80;
+    }
+    .vizor-canli-hud.hud-uyari {
+      background: rgba(180, 83, 9, 0.95);
+      color: #ffffff;
+      border: 1px solid #fbbf24;
+    }
+    .mobil-sticky-sutun {
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      background: var(--bg-kart);
+      box-shadow: 2px 0 6px rgba(0, 0, 0, 0.22);
+      min-width: 118px;
+      max-width: 148px;
+    }
+    .mobil-alt-cekmecesi {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 58px;
+      max-width: 640px;
+      margin: 0 auto;
+      z-index: 190;
+      background: var(--bg-kart);
+      border-top: 2px solid var(--birincil);
+      border-radius: 16px 16px 0 0;
+      box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.6);
+      max-height: calc(100vh - 115px);
+      overflow-y: auto;
+      padding: 0.75rem;
+    }
+    .eslestir-aday-satir {
+      width: 100%;
+      text-align: left;
+      padding: 0.55rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--kenar);
+      background: var(--bg-ikincil);
+      color: var(--metin);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+      cursor: pointer;
+      margin-bottom: 0.35rem;
+      font-size: 0.82rem;
+    }
+    .eslestir-aday-satir.aday-oncelikli {
+      border-color: #f59e0b;
+      background: rgba(245, 158, 11, 0.14);
     }
   </style>
   <link rel="manifest" href="manifest.webmanifest" />
@@ -172,6 +252,7 @@
 
       <!-- Kamera / Canvas Vizörü -->
       <div class="vizor-kutu">
+        <div id="mobil-vizor-canli-hud" class="vizor-canli-hud" hidden></div>
         <video id="mobil-video" autoplay playsinline muted style="width:100%; max-height:380px; object-fit:contain; display:none;"></video>
         <canvas id="mobil-canvas-vizor" width="800" height="420" style="width:100%; display:block;"></canvas>
         <div class="vizor-kilavuz"></div>
@@ -313,6 +394,26 @@
 
         <div class="form-satir">
           <div>
+            <label class="etiket" for="m-ayar-dy-toplam-puan">✔️ D/Y Toplam Puan</label>
+            <input type="number" id="m-ayar-dy-toplam-puan" min="0" max="100" step="1" value="20" />
+          </div>
+          <div>
+            <label class="etiket" for="m-ayar-test-toplam-puan">🔘 Test Toplam Puan</label>
+            <input type="number" id="m-ayar-test-toplam-puan" min="0" max="100" step="1" value="60" />
+          </div>
+          <div>
+            <label class="etiket" for="m-ayar-klasik-toplam-puan">✍️ Klasik Toplam Puan</label>
+            <input type="number" id="m-ayar-klasik-toplam-puan" min="0" max="100" step="1" value="20" />
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+          <span class="rozet rozet-yesil" id="m-ayar-toplam-puan-rozet">🎯 Toplam: 100 Tam Puan</span>
+          <span style="font-size:0.74rem; color:var(--metin-ikincil);">Soru sayısı değiştiğinde otomatik 100 puana dengelenir.</span>
+        </div>
+
+        <div class="form-satir">
+          <div>
             <label class="etiket" for="m-ayar-grup-sec">Düzenlenen Kitapçık</label>
             <select id="m-ayar-grup-sec">
               <option value="A">A Kitapçığı Anahtarı</option>
@@ -327,6 +428,11 @@
             </button>
           </div>
         </div>
+
+        <button type="button" class="btn btn-basari" id="btn-mobil-anahtar-kaydet-puanla" style="width:100%; margin-top:0.45rem; font-weight:800; padding:0.65rem;">
+          💾 Anahtarı &amp; Puanları Kaydet (Okunanları Yeniden Puanla)
+        </button>
+        <div id="mobil-anahtar-kayit-onay" hidden style="margin-top:0.45rem; padding:0.45rem 0.65rem; border-radius:6px; background:rgba(22,163,74,0.18); border:1px solid #22c55e; color:#4ade80; font-size:0.79rem; font-weight:700;"></div>
       </div>
 
       <div class="kart">
@@ -341,6 +447,9 @@
           </div>
         </div>
         <div id="mobil-dokunmatik-anahtar-alani"></div>
+        <button type="button" class="btn btn-basari" id="btn-mobil-anahtar-alt-kaydet" style="width:100%; margin-top:0.65rem; font-weight:800; padding:0.65rem;">
+          ✅ Cevap Anahtarını Onayla &amp; Kaydet
+        </button>
       </div>
 
       <!-- Telefona Doğrudan Öğrenci Listesi Aktarma / Yükleme & QR ile Bilgisayara Aktarma -->
@@ -400,6 +509,7 @@
             <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-obs-csv">🏛️ OBS Resmi (.csv)</button>
             <button type="button" class="btn btn-basari btn-kucuk" id="btn-mobil-csv-indir">📥 Okunanlar (.csv)</button>
             <button type="button" class="btn btn-mor btn-kucuk" id="btn-mobil-sonuc-json-indir" title="Stüdyo Madde Analizi &amp; ÖÇ Karnesi için soru bazlı detaylı sonuç paketi">📦 Stüdyo Paketi (.json)</button>
+            <button type="button" class="btn btn-kucuk" id="btn-mobil-geri-al" hidden>↩️ Geri Al</button>
             <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-mobil-temizle">🗑️ Sıfırla</button>
           </div>
         </div>
@@ -418,17 +528,17 @@
           <div id="etiket-mobil-sonuc-aktar-bilgi" style="font-size:0.75rem; color:var(--metin-ikincil); margin-top:0.3rem;"></div>
         </div>
 
-        <div class="tablo-sarmal">
-          <table class="veri-tablo">
+        <div class="tablo-sarmal" style="overflow-x:auto; max-width:100%;">
+          <table class="veri-tablo" id="mobil-sonuc-tablo-el">
             <thead>
               <tr>
-                <th>Öğr. No</th>
-                <th>Ad Soyad</th>
+                <th class="mobil-sticky-sutun">Öğrenci</th>
+                <th>Puan</th>
+                <th>İşlem</th>
                 <th>Grup</th>
                 <th>D/Y</th>
                 <th>Test</th>
                 <th>Klasik</th>
-                <th>Puan</th>
               </tr>
             </thead>
             <tbody id="mobil-tablo-okunanlar"></tbody>
@@ -438,6 +548,24 @@
     </section>
 
   </main>
+
+  <!-- DOKUNMATİK ANINDA ÖĞRENCİ EŞLEŞTİRME ALT ÇEKMECESİ (BOTTOM-SHEET) -->
+  <div id="modal-mobil-ogrenci-eslestir" class="mobil-alt-cekmecesi" style="display:none;" role="dialog" aria-label="Öğrenci Eşleştirme">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.45rem;">
+      <strong style="font-size:0.9rem; color:#fbbf24;">👤 Kağıdı Öğrenciyle Eşleştir</strong>
+      <button type="button" class="btn btn-kucuk" id="btn-eslestir-beklet">⏳ Şimdilik Beklet</button>
+    </div>
+    <div id="eslestir-okunan-ozet" style="font-size:0.78rem; color:var(--metin-ikincil); margin-bottom:0.5rem; padding:0.4rem 0.55rem; background:var(--bg-ikincil); border-radius:6px;"></div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr auto; gap:0.35rem; margin-bottom:0.5rem;">
+      <input type="text" id="girdi-eslestir-ogrno" inputmode="numeric" placeholder="Öğr. No (Örn: 2004)" style="font-size:0.8rem;" />
+      <input type="text" id="girdi-eslestir-adsoyad" placeholder="Ad Soyad (isteğe bağlı)" style="font-size:0.8rem;" />
+      <button type="button" class="btn btn-basari btn-kucuk" id="btn-eslestir-elle-ata">✅ Ata</button>
+    </div>
+
+    <input type="text" id="girdi-eslestir-ara" placeholder="🔍 Sınıf listesinde isim veya numara ara..." style="width:100%; font-size:0.8rem; margin-bottom:0.45rem;" />
+    <div id="liste-eslestir-adaylar" style="max-height:210px; overflow-y:auto;"></div>
+  </div>
 
   <!-- ALT DOKUNMATİK SEKME ÇUBUĞU -->
   <nav class="mobil-alt-bar" aria-label="Mobil Modüller">
@@ -461,13 +589,18 @@
     (function () {
       'use strict';
       const C = window.SinavOptikCekirdek;
-      const DEPO_ANAHTAR = 'SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2';
+      const MOBIL_DEPO_ANAHTAR = 'SINAV_MOBIL_OMR_DEPO_V2';
+      const MASAUSTU_DEPO_ANAHTAR = 'SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2';
 
       let sesAcik = true;
       let seriTaramaAktif = false;
       let kameraStream = null;
       let simSayac = 0;
       let mobilQrParcaIdx = 0;
+      let aktifEslestirKayitId = '';
+      let eslestirmeModalAcikMi = false;
+      let sonSilinenMobilYedek = null;
+      let bekleyenKagitOqv2 = '';
 
       function uretMobilQrSvg(metin, boyutPx) {
         if (typeof window.qrcode !== 'function' || !metin) return '';
@@ -576,26 +709,122 @@
         }
       } catch (_) {}
 
-      /* Test/teşhis için salt-okunur öğrenci listesi erişimi */
+      /* Test/teşhis için salt-okunur öğrenci ve durum erişimi */
       window.__mobilOgrenciler = () => mobilDurum.ogrenciler.slice();
+      window.__mobilDurumOku = () => ({
+        depoAnahtari: MOBIL_DEPO_ANAHTAR,
+        sinavYapisi: JSON.parse(JSON.stringify(mobilDurum.sinavYapisi)),
+        ogrenciSayisi: mobilDurum.ogrenciler.length,
+        okumaSayisi: mobilDurum.okumaSonuclari.length,
+        okumaSonuclari: mobilDurum.okumaSonuclari.map((s) => ({
+          id: s.id,
+          ogrNo: s.ogrNo,
+          adSoyad: s.adSoyad,
+          okunanNoKod: s.okunanNoKod,
+          grup: s.grup,
+          toplamPuan: s.toplamPuan,
+          numaraEslesmediMi: Boolean(s.numaraEslesmediMi),
+          kimlikEslesmeBekliyor: Boolean(s.kimlikEslesmeBekliyor)
+        }))
+      });
 
-      /* #setup= Parametresinden veya localStorage'dan Sınav Yapısını Yükle */
+      function senkronizeBolumPuanGirdileriUI() {
+        const y = mobilDurum.sinavYapisi;
+        const dyTop = Number((y.dyToplamPuan !== undefined ? y.dyToplamPuan : (y.dySayisi * (y.dySoruPuan || 0))).toFixed(2));
+        const testTop = Number((y.testToplamPuan !== undefined ? y.testToplamPuan : (y.testSayisi * (y.testSoruPuan || 0))).toFixed(2));
+        const klasikTop = Number((y.klasikToplamPuan !== undefined ? y.klasikToplamPuan : (y.klasikSayisi * (y.klasikSoruPuan || 0))).toFixed(2));
+        const dyEl = document.getElementById('m-ayar-dy-toplam-puan');
+        const testEl = document.getElementById('m-ayar-test-toplam-puan');
+        const klEl = document.getElementById('m-ayar-klasik-toplam-puan');
+        if (dyEl) { dyEl.value = String(dyTop); dyEl.disabled = y.dySayisi <= 0; }
+        if (testEl) { testEl.value = String(testTop); testEl.disabled = y.testSayisi <= 0; }
+        if (klEl) { klEl.value = String(klasikTop); klEl.disabled = y.klasikSayisi <= 0; }
+        const rozetEl = document.getElementById('m-ayar-toplam-puan-rozet');
+        if (rozetEl) {
+          const top = Number((dyTop + testTop + klasikTop).toFixed(2));
+          rozetEl.className = Math.abs(top - 100) < 0.05 ? 'rozet rozet-yesil' : 'rozet rozet-sari';
+          rozetEl.textContent = `🎯 Toplam: ${top} Tam Puan`;
+        }
+      }
+
+      function uygulaMobil100PuanNormalizasyon(ozelBolumPuanlari = null, okunanlariYenidenPuanla = false) {
+        const y = mobilDurum.sinavYapisi;
+        if (
+          y.soruPuanlari &&
+          ((Array.isArray(y.soruPuanlari.dy) && y.soruPuanlari.dy.length !== y.dySayisi) ||
+           (Array.isArray(y.soruPuanlari.test) && y.soruPuanlari.test.length !== y.testSayisi) ||
+           (Array.isArray(y.soruPuanlari.klasik) && y.soruPuanlari.klasik.length !== y.klasikSayisi) ||
+           ozelBolumPuanlari)
+        ) {
+          delete y.soruPuanlari;
+        }
+        const girdi = Object.assign({
+          dySayisi: y.dySayisi,
+          testSayisi: y.testSayisi,
+          klasikSayisi: y.klasikSayisi,
+          dySoruPuan: y.dySoruPuan,
+          testSoruPuan: y.testSoruPuan,
+          klasikSoruPuan: y.klasikSoruPuan
+        }, ozelBolumPuanlari || {});
+
+        if (typeof C.normalizeSinav100PuanYapisi === 'function') {
+          const norm = C.normalizeSinav100PuanYapisi(girdi, true);
+          y.dyToplamPuan = norm.dyToplamPuan;
+          y.testToplamPuan = norm.testToplamPuan;
+          y.klasikToplamPuan = norm.klasikToplamPuan;
+          y.dySoruPuan = norm.dySoruPuan !== undefined ? norm.dySoruPuan : norm.dyBirimPuan;
+          y.testSoruPuan = norm.testSoruPuan !== undefined ? norm.testSoruPuan : norm.testBirimPuan;
+          y.klasikSoruPuan = norm.klasikSoruPuan !== undefined ? norm.klasikSoruPuan : norm.klasikBirimPuan;
+          y.toplamAzamiPuan = 100;
+        }
+        senkronizeBolumPuanGirdileriUI();
+
+        if (okunanlariYenidenPuanla && Array.isArray(mobilDurum.okumaSonuclari) && mobilDurum.okumaSonuclari.length > 0 && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
+          const yeniden = C.yenidenPuanlaOkumaSonuclari(mobilDurum.okumaSonuclari, y);
+          mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.map((eski, idx) => {
+            if (eski && eski.formTipi === 'standart') return eski;
+            return Object.assign({}, eski, yeniden[idx] || {});
+          });
+        }
+      }
+
+      /* #setup= Parametresinden veya izole mobil localStorage'dan Sınav Yapısını Yükle */
       function yukleBaslangicVerisi() {
         try { localStorage.removeItem('SINAV_OPTIK_STUDYO_VERI_V1'); } catch (_) {}
         const hashToken = ayiklaHashParametresi(location.hash, 'omrToken');
         if (hashToken) kaydetMobilHocaToken(hashToken);
+
+        let mobilVeriYuklendiMi = false;
         try {
-          const hamDepo = localStorage.getItem(DEPO_ANAHTAR);
-          if (hamDepo) {
-            const hamJson = JSON.parse(hamDepo);
+          const hamMobilDepo = localStorage.getItem(MOBIL_DEPO_ANAHTAR);
+          if (hamMobilDepo) {
+            const hamJson = JSON.parse(hamMobilDepo);
             const veri = C.semaDogrulaVeTemizle(hamJson);
-            if (Array.isArray(veri.ogrenciler)) mobilDurum.ogrenciler = veri.ogrenciler;
+            if (Array.isArray(veri.ogrenciler) && veri.ogrenciler.length > 0) mobilDurum.ogrenciler = veri.ogrenciler;
             if (Array.isArray(veri.okumaSonuclari)) mobilDurum.okumaSonuclari = veri.okumaSonuclari;
             if (hamJson && hamJson.mobilSinavYapisi && typeof hamJson.mobilSinavYapisi === 'object') {
               Object.assign(mobilDurum.sinavYapisi, hamJson.mobilSinavYapisi);
             }
+            mobilVeriYuklendiMi = true;
           }
         } catch (_) {}
+
+        // Tek yönlü salt-okunur yedek: Mobil depo boşsa ve aynı tarayıcıda masaüstü stüdyoda öğrenci varsa yalnız OKU (asla geri yazma!)
+        if (mobilDurum.ogrenciler.length === 0) {
+          try {
+            const hamMasaustu = localStorage.getItem(MASAUSTU_DEPO_ANAHTAR);
+            if (hamMasaustu) {
+              const mJson = JSON.parse(hamMasaustu);
+              const mVeri = C.semaDogrulaVeTemizle(mJson);
+              if (Array.isArray(mVeri.ogrenciler) && mVeri.ogrenciler.length > 0) {
+                mobilDurum.ogrenciler = mVeri.ogrenciler;
+              }
+              if (!mobilVeriYuklendiMi && mJson && mJson.mobilSinavYapisi && typeof mJson.mobilSinavYapisi === 'object') {
+                Object.assign(mobilDurum.sinavYapisi, mJson.mobilSinavYapisi);
+              }
+            }
+          } catch (_) {}
+        }
 
         if (location.hash && location.hash.includes('ogr=')) {
           try {
@@ -613,15 +842,33 @@
           try {
             const cozulmusSetup = C.cozKompaktSetupQrPaketi(location.hash);
             if (cozulmusSetup) {
+              delete mobilDurum.sinavYapisi.soruPuanlari;
               Object.assign(mobilDurum.sinavYapisi, cozulmusSetup);
               if (Array.isArray(cozulmusSetup.ogrenciler) && cozulmusSetup.ogrenciler.length > 0) {
                 mobilDurum.ogrenciler = cozulmusSetup.ogrenciler;
               }
+              uygulaMobil100PuanNormalizasyon({
+                dyToplamPuan: cozulmusSetup.dyToplamPuan,
+                testToplamPuan: cozulmusSetup.testToplamPuan,
+                klasikToplamPuan: cozulmusSetup.klasikToplamPuan
+              }, true);
               kaydetYerelDepoya();
             }
           } catch (err) {
             console.warn('Setup QR parametresi çözülemedi:', err.message);
           }
+        } else {
+          // Eski oturumdan kalan 90 tavanlı (örn. 15 D/Y + 10 Test = 90) yapıları da otomatik 100 puana normalize et
+          uygulaMobil100PuanNormalizasyon(
+            mobilDurum.sinavYapisi.dyToplamPuan !== undefined
+              ? {
+                  dyToplamPuan: mobilDurum.sinavYapisi.dyToplamPuan,
+                  testToplamPuan: mobilDurum.sinavYapisi.testToplamPuan,
+                  klasikToplamPuan: mobilDurum.sinavYapisi.klasikToplamPuan
+                }
+              : null,
+            true
+          );
         }
 
         if (location.hash && location.hash.startsWith('#pc-aktar=')) {
@@ -645,6 +892,7 @@
         document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
         document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
         document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
+        senkronizeBolumPuanGirdileriUI();
         const ogrSayacEl = document.getElementById('mobil-ogr-sayac');
         if (ogrSayacEl) ogrSayacEl.textContent = String(mobilDurum.ogrenciler.length);
         const altSayacEl = document.getElementById('mobil-alt-sayac');
@@ -654,8 +902,12 @@
 
       function guncelleUstOzet() {
         const y = mobilDurum.sinavYapisi;
+        const dyTop = Number((y.dyToplamPuan !== undefined ? y.dyToplamPuan : (y.dySayisi * (y.dySoruPuan || 0))).toFixed(1));
+        const testTop = Number((y.testToplamPuan !== undefined ? y.testToplamPuan : (y.testSayisi * (y.testSoruPuan || 0))).toFixed(1));
+        const klTop = Number((y.klasikToplamPuan !== undefined ? y.klasikToplamPuan : (y.klasikSayisi * (y.klasikSoruPuan || 0))).toFixed(1));
+        const genelTop = Number((dyTop + testTop + klTop).toFixed(1));
         document.getElementById('mobil-aktif-sinav-ozet').textContent =
-          `${y.dySayisi} D/Y + ${y.testSayisi} Test + ${y.klasikSayisi} Klasik · ${y.kimlikModu === 'tam' ? 'Tam No' : 'Son 2 Hane'}`;
+          `${y.dySayisi} D/Y (${dyTop}p) + ${y.testSayisi} Test (${testTop}p)${y.klasikSayisi > 0 ? ` + ${y.klasikSayisi} Klasik (${klTop}p)` : ''} = ${genelTop}p`;
         const ogrRozet = document.getElementById('mobil-tara-ogr-rozet');
         if (ogrRozet) ogrRozet.textContent = `${mobilDurum.ogrenciler.length} Öğrenci`;
         const ogrSayacEl = document.getElementById('mobil-ogr-sayac');
@@ -665,17 +917,89 @@
           const a = (y.cevapAnahtarlari && y.cevapAnahtarlari.A) || { dy: [], test: [] };
           const dyStr = y.dySayisi > 0 ? a.dy.slice(0, y.dySayisi).map((v, i) => `${i + 1}${v}`).join(' ') : 'Yok';
           const testStr = y.testSayisi > 0 ? a.test.slice(0, y.testSayisi).map((v, i) => `${i + 1}${v}`).join(' ') : 'Yok';
+          const sifreliRozet = y.sinavGizliAnahtar ? ' · 🔐 OQV2 Şifre Çözücü Hazır' : '';
           ozetKutu.innerHTML = `
-            <div><strong>📚 Sınav Yapısı:</strong> ${C.kacisHTML(y.dersAd || 'Aktif Sınav')} (${y.dySayisi} D/Y · ${y.testSayisi} Test · ${y.klasikSayisi} Klasik)</div>
-            <div class="mono" style="margin-top:2px;"><strong>🔑 A Grubu D/Y:</strong> ${C.kacisHTML(dyStr)}</div>
-            <div class="mono"><strong>🔘 A Grubu Test:</strong> ${C.kacisHTML(testStr)}</div>
+            <div><strong>📚 Sınav Yapısı:</strong> ${C.kacisHTML(y.dersAd || 'Aktif Sınav')} (🎯 <strong>${genelTop} Tam Puan</strong>${sifreliRozet})</div>
+            <div class="mono" style="margin-top:2px;"><strong>🔑 A Grubu D/Y (${dyTop}p):</strong> ${C.kacisHTML(dyStr)}</div>
+            <div class="mono"><strong>🔘 A Grubu Test (${testTop}p):</strong> ${C.kacisHTML(testStr)}</div>
           `;
         }
       }
 
+      function uygulaKagitSifreliQrSonuca(sonuc, qrMetin) {
+        if (!sonuc || !qrMetin || typeof C.cozSifreliOptikKagitQrPaketi !== 'function') return false;
+        const temizQr = String(qrMetin).trim();
+        if (!temizQr.startsWith('OQV2:')) return false;
+        const cozulen = C.cozSifreliOptikKagitQrPaketi(temizQr, mobilDurum.sinavYapisi.sinavGizliAnahtar || '');
+        if (!cozulen || !cozulen.gecerli) {
+          if (cozulen && cozulen.hata) mobilUyariGoster('⚠️ ' + cozulen.hata);
+          return false;
+        }
+        if (cozulen.grup) sonuc.grup = cozulen.grup;
+        if (cozulen.ogrNo) {
+          const kayitliOgr = mobilDurum.ogrenciler.find((o) => String(o.ogrNo) === String(cozulen.ogrNo));
+          sonuc.ogrNo = String(cozulen.ogrNo);
+          sonuc.adSoyad = kayitliOgr ? kayitliOgr.adSoyad : (sonuc.adSoyad && !sonuc.numaraEslesmediMi ? sonuc.adSoyad : `Öğrenci (${cozulen.ogrNo})`);
+          sonuc.numaraEslesmediMi = false;
+          sonuc.kimlikEslesmeBekliyor = false;
+          sonuc.cakisanAdaylar = kayitliOgr ? [kayitliOgr] : [];
+          sonuc.supheliMi = false;
+        }
+        if (cozulen.cevapAnahtari && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
+          const ozelYapi = Object.assign({}, mobilDurum.sinavYapisi, {
+            dySayisi: cozulen.dySayisi,
+            testSayisi: cozulen.testSayisi,
+            klasikSayisi: cozulen.klasikSayisi,
+            dyToplamPuan: cozulen.puanYapi ? cozulen.puanYapi.dyToplamPuan : mobilDurum.sinavYapisi.dyToplamPuan,
+            testToplamPuan: cozulen.puanYapi ? cozulen.puanYapi.testToplamPuan : mobilDurum.sinavYapisi.testToplamPuan,
+            klasikToplamPuan: cozulen.puanYapi ? cozulen.puanYapi.klasikToplamPuan : mobilDurum.sinavYapisi.klasikToplamPuan,
+            dySoruPuan: cozulen.puanYapi ? (cozulen.puanYapi.dySoruPuan !== undefined ? cozulen.puanYapi.dySoruPuan : cozulen.puanYapi.dyBirimPuan) : mobilDurum.sinavYapisi.dySoruPuan,
+            testSoruPuan: cozulen.puanYapi ? (cozulen.puanYapi.testSoruPuan !== undefined ? cozulen.puanYapi.testSoruPuan : cozulen.puanYapi.testBirimPuan) : mobilDurum.sinavYapisi.testSoruPuan,
+            klasikSoruPuan: cozulen.puanYapi ? (cozulen.puanYapi.klasikSoruPuan !== undefined ? cozulen.puanYapi.klasikSoruPuan : cozulen.puanYapi.klasikBirimPuan) : mobilDurum.sinavYapisi.klasikSoruPuan,
+            cevapAnahtarlari: Object.assign({}, mobilDurum.sinavYapisi.cevapAnahtarlari, {
+              [sonuc.grup || 'A']: cozulen.cevapAnahtari
+            })
+          });
+          delete ozelYapi.soruPuanlari;
+          const yeniden = C.yenidenPuanlaOkumaSonuclari([sonuc], ozelYapi)[0];
+          if (yeniden) Object.assign(sonuc, yeniden);
+          sonuc.ozelKagitQrCozuldu = true;
+        }
+        return true;
+      }
+
+      window.__mobilDurumOku = () => ({
+        depoAnahtari: MOBIL_DEPO_ANAHTAR,
+        sinavYapisi: mobilDurum.sinavYapisi,
+        ogrenciler: mobilDurum.ogrenciler,
+        okumaSonuclari: mobilDurum.okumaSonuclari,
+        okumaSayisi: mobilDurum.okumaSonuclari.length
+      });
+
+      window.__mobilOqv2TestUygula = (qrMetin, secenek = {}) => {
+        if (secenek && secenek.hemenSonKaydaUygula && mobilDurum.okumaSonuclari.length > 0) {
+          const hedef = mobilDurum.okumaSonuclari[0];
+          const ok = uygulaKagitSifreliQrSonuca(hedef, qrMetin);
+          if (ok) isleMobilOkumaSonucu(hedef, { modalAcma: true });
+          return ok;
+        }
+        bekleyenKagitOqv2 = String(qrMetin || '').trim();
+        return Boolean(bekleyenKagitOqv2);
+      };
+
       function uygulaPwaQrMetni(hamMetin, kaynakEtiket = 'QR') {
         const metin = String(hamMetin || '').trim();
         if (!metin) return false;
+        if (metin.startsWith('OQV2:')) {
+          if (mobilDurum.okumaSonuclari.length > 0 && uygulaKagitSifreliQrSonuca(mobilDurum.okumaSonuclari[0], metin)) {
+            isleMobilOkumaSonucu(mobilDurum.okumaSonuclari[0], { modalAcma: true });
+            mobilUyariGoster(`🔐 ${kaynakEtiket}: Kişiye özel şifreli kağıt QR kodu çözüldü ve puanlandı!`);
+            return true;
+          }
+          bekleyenKagitOqv2 = metin;
+          mobilUyariGoster(`🔐 ${kaynakEtiket}: Kişiye özel kağıt QR kodu alındı; şimdi kağıdı okutabilirsiniz.`);
+          return true;
+        }
         if (metin.includes('omrToken=')) {
           const qrTok = ayiklaHashParametresi(metin.slice(metin.indexOf('#') >= 0 ? metin.indexOf('#') : 0), 'omrToken');
           if (qrTok) kaydetMobilHocaToken(qrTok);
@@ -684,6 +1008,7 @@
           const parca = metin.slice(metin.indexOf('setup='));
           const cozulmusSetup = C.cozKompaktSetupQrPaketi('#' + parca);
           if (cozulmusSetup) {
+            delete mobilDurum.sinavYapisi.soruPuanlari;
             Object.assign(mobilDurum.sinavYapisi, cozulmusSetup);
             if (Array.isArray(cozulmusSetup.ogrenciler) && cozulmusSetup.ogrenciler.length > 0) {
               mobilDurum.ogrenciler = cozulmusSetup.ogrenciler;
@@ -691,11 +1016,17 @@
             document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
             document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
             document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
+            uygulaMobil100PuanNormalizasyon({
+              dyToplamPuan: cozulmusSetup.dyToplamPuan,
+              testToplamPuan: cozulmusSetup.testToplamPuan,
+              klasikToplamPuan: cozulmusSetup.klasikToplamPuan
+            }, true);
             kaydetYerelDepoya();
             guncelleUstOzet();
             cizDokunmatikAnahtarEditoru();
+            guncelleMobilSonucListesi();
             bipCal(true);
-            mobilUyariGoster(`✅ ${kaynakEtiket}: Sınav yapısı (${mobilDurum.sinavYapisi.dySayisi} D/Y + ${mobilDurum.sinavYapisi.testSayisi} Test), Cevap Anahtarı ve ${mobilDurum.ogrenciler.length} öğrenci yüklendi!`);
+            mobilUyariGoster(`✅ ${kaynakEtiket}: Sınav yapısı (${mobilDurum.sinavYapisi.dySayisi} D/Y + ${mobilDurum.sinavYapisi.testSayisi} Test = 100p), Cevap Anahtarı ve ${mobilDurum.ogrenciler.length} öğrenci yüklendi!`);
             return true;
           }
         }
@@ -714,19 +1045,19 @@
 
       function kaydetYerelDepoya() {
         try {
-          const mevcutHam = localStorage.getItem(DEPO_ANAHTAR);
+          const mevcutHam = localStorage.getItem(MOBIL_DEPO_ANAHTAR);
           const mevcut = mevcutHam ? JSON.parse(mevcutHam) : {};
-          // 1.3 MB piksel dizilerini (kanonikIkili / kanonikGri / kanonikHarita) ayıklayarak QuotaExceededError'u önle
+          // 1.3 MB piksel dizilerini (kanonikIkili / kanonikGri / kanonikHarita) ayıklayarak QuotaExceededError'u önle; masaüstü deposuna ASLA yazma!
           mevcut.okumaSonuclari = (mobilDurum.okumaSonuclari || []).map((s) => {
             if (!s || typeof s !== 'object') return s;
             const { kanonikIkili, kanonikGri, kanonikHarita, ...hafifSonuc } = s;
             return hafifSonuc;
           });
           mevcut.mobilSinavYapisi = mobilDurum.sinavYapisi;
-          if (Array.isArray(mobilDurum.ogrenciler) && mobilDurum.ogrenciler.length > 0) {
+          if (Array.isArray(mobilDurum.ogrenciler)) {
             mevcut.ogrenciler = mobilDurum.ogrenciler;
           }
-          localStorage.setItem(DEPO_ANAHTAR, JSON.stringify(mevcut));
+          localStorage.setItem(MOBIL_DEPO_ANAHTAR, JSON.stringify(mevcut));
         } catch (err) {
           mobilUyariGoster('⚠️ Yerel depolama alanı dolu (' + (err && err.message ? err.message : 'Quota') + '). Lütfen sonuçları CSV/JSON olarak dışa aktarın.');
         }
@@ -861,21 +1192,218 @@
         });
       }
 
-      /* Okuma Sonucunu Ekranda Göster ve Kaydet */
-      function isleMobilOkumaSonucu(sonuc) {
+      function imzaHesaplaMobilKagit(sonuc) {
+        if (!sonuc) return '';
+        const dyStr = (sonuc.dyDetay || []).map((d) => d.verilen || '_').join('');
+        const testStr = (sonuc.testDetay || []).map((t) => t.verilen || '_').join('');
+        return `${sonuc.grup || '-'}|${dyStr}|${testStr}`;
+      }
+
+      function kagitKimlikBelirsizMi(sonuc) {
+        if (!sonuc) return false;
+        return Boolean(
+          sonuc.numaraEslesmediMi ||
+          sonuc.kimlikEslesmeBekliyor ||
+          String(sonuc.okunanNoKod || '').includes('?') ||
+          (Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1)
+        );
+      }
+
+      function guncelleVizorCanliHud(sonuc) {
+        const hud = document.getElementById('mobil-vizor-canli-hud');
+        if (!hud || !sonuc) return;
+        const belirsiz = kagitKimlikBelirsizMi(sonuc);
+        hud.hidden = false;
+        hud.className = `vizor-canli-hud ${belirsiz ? 'hud-uyari' : 'hud-basarili'}`;
+        if (belirsiz) {
+          hud.innerHTML = `
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">⚠️ No Okunamadı (${C.kacisHTML(sonuc.okunanNoKod || '?')}) · ${C.kacisHTML(sonuc.grup)} · 🎯 ${sonuc.toplamPuan}p</span>
+            <button type="button" class="btn btn-kucuk" data-hud-eslestir-id="${C.kacisHTML(sonuc.id)}" style="background:#fff; color:#78350f; font-weight:800; padding:0.2rem 0.45rem;">👤 Seç</button>
+          `;
+        } else {
+          hud.innerHTML = `
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">✅ ${C.kacisHTML(sonuc.ogrNo)} — ${C.kacisHTML(sonuc.adSoyad)} · ${C.kacisHTML(sonuc.grup)}</span>
+            <span style="white-space:nowrap;">🎯 ${sonuc.toplamPuan}p</span>
+          `;
+        }
+      }
+
+      function kapatOgrenciEslestirModal() {
+        eslestirmeModalAcikMi = false;
+        aktifEslestirKayitId = '';
+        const modal = document.getElementById('modal-mobil-ogrenci-eslestir');
+        if (modal) modal.style.display = 'none';
+      }
+
+      function cizEslestirAdayListesi(aramaMetni = '') {
+        const kutu = document.getElementById('liste-eslestir-adaylar');
+        if (!kutu) return;
+        const kayit = mobilDurum.okumaSonuclari.find((s) => s.id === aktifEslestirKayitId);
+        const okunanKod = String((kayit && kayit.okunanNoKod) || '');
+        const bilinenRakamlar = okunanKod.replace(/\D/g, '');
+        const okunanSonRakam = okunanKod.length >= 2 && /\d/.test(okunanKod.slice(-1)) ? okunanKod.slice(-1) : '';
+        const okunanIlkRakam = okunanKod.length >= 2 && /\d/.test(okunanKod[0]) ? okunanKod[0] : '';
+        const okunmusSet = new Set(
+          mobilDurum.okumaSonuclari
+            .filter((s) => s && !s.numaraEslesmediMi && !s.kimlikEslesmeBekliyor && s.id !== aktifEslestirKayitId)
+            .map((s) => String(s.ogrNo))
+        );
+        const aranan = String(aramaMetni || '').trim().toLocaleLowerCase('tr-TR');
+
+        if (!Array.isArray(mobilDurum.ogrenciler) || mobilDurum.ogrenciler.length === 0) {
+          kutu.innerHTML = '<div style="font-size:0.78rem; color:var(--metin-ikincil); padding:0.35rem;">Telefonda kayıtlı sınıf listesi yok. Yukarıdaki kutuya öğrenci numarasını yazıp <strong>"✅ Ata"</strong> düğmesine dokunun.</div>';
+          return;
+        }
+
+        const adaylar = mobilDurum.ogrenciler
+          .filter((o) => {
+            if (!aranan) return true;
+            return String(o.ogrNo || '').toLowerCase().includes(aranan) ||
+              String(o.adSoyad || '').toLocaleLowerCase('tr-TR').includes(aranan);
+          })
+          .map((o) => {
+            const son2 = String(o.ogrNo || '').slice(-2);
+            const okundu = okunmusSet.has(String(o.ogrNo));
+            let eslesmePuan = 0;
+            if (Array.isArray(kayit && kayit.cakisanAdaylar) && kayit.cakisanAdaylar.some((c) => String(c.ogrNo) === String(o.ogrNo))) eslesmePuan += 100;
+            if (bilinenRakamlar && son2 === bilinenRakamlar) eslesmePuan += 80;
+            else if (okunanSonRakam && son2.endsWith(okunanSonRakam)) eslesmePuan += 50;
+            else if (okunanIlkRakam && son2.startsWith(okunanIlkRakam)) eslesmePuan += 40;
+            if (!okundu) eslesmePuan += 15;
+            return { ogr: o, okundu, oncelikli: eslesmePuan >= 40, eslesmePuan };
+          })
+          .sort((a, b) => b.eslesmePuan - a.eslesmePuan);
+
+        kutu.innerHTML = adaylar
+          .slice(0, 60)
+          .map(({ ogr, okundu, oncelikli }) => `
+            <button type="button" class="eslestir-aday-satir ${oncelikli ? 'aday-oncelikli' : ''}" data-eslestir-sec-no="${C.kacisHTML(ogr.ogrNo)}" data-eslestir-sec-ad="${C.kacisHTML(ogr.adSoyad)}">
+              <span>
+                <strong>${C.kacisHTML(ogr.adSoyad)}</strong>
+                <span class="mono" style="font-size:0.75rem; color:var(--metin-ikincil);"> (${C.kacisHTML(ogr.ogrNo)})</span>
+              </span>
+              <span>
+                ${oncelikli ? '<span class="rozet rozet-sari">🎯 Aday</span> ' : ''}
+                ${okundu ? '<span class="rozet rozet-mavi">✓ Okundu</span>' : '<span class="rozet rozet-yesil">Seç</span>'}
+              </span>
+            </button>
+          `)
+          .join('');
+      }
+
+      function acOgrenciEslestirModal(kayitId) {
+        const kayit = mobilDurum.okumaSonuclari.find((s) => s.id === kayitId);
+        if (!kayit) return;
+        aktifEslestirKayitId = kayit.id;
+        eslestirmeModalAcikMi = true;
+        const modal = document.getElementById('modal-mobil-ogrenci-eslestir');
+        const ozet = document.getElementById('eslestir-okunan-ozet');
+        const noInp = document.getElementById('girdi-eslestir-ogrno');
+        const adInp = document.getElementById('girdi-eslestir-adsoyad');
+        const araInp = document.getElementById('girdi-eslestir-ara');
+        if (ozet) {
+          ozet.innerHTML = `Kodlanan: <strong>${C.kacisHTML(kayit.okunanNoKod || '?')}</strong> · Kitapçık: <strong>${C.kacisHTML(kayit.grup)}</strong> · D/Y: <strong>${kayit.dyDogru}D/${kayit.dyYanlis}Y</strong> · Test: <strong>${kayit.testDogru}D/${kayit.testYanlis}Y</strong> · 🎯 <strong>${kayit.toplamPuan} Puan</strong>`;
+        }
+        if (noInp) noInp.value = (!kayit.numaraEslesmediMi && kayit.ogrNo && !String(kayit.ogrNo).startsWith('BEKLEYEN')) ? String(kayit.ogrNo) : '';
+        if (adInp) adInp.value = (!kayit.numaraEslesmediMi && kayit.adSoyad && !String(kayit.adSoyad).startsWith('Kodlanan')) ? String(kayit.adSoyad) : '';
+        if (araInp) araInp.value = '';
+        cizEslestirAdayListesi('');
+        if (modal) modal.style.display = 'block';
+      }
+
+      function ataOgrenciKayda(kayitId, ogrNoGirdi, adSoyadGirdi) {
+        const temizNo = String(ogrNoGirdi || '').trim();
+        if (!temizNo) return false;
+        const kayit = mobilDurum.okumaSonuclari.find((s) => s.id === kayitId);
+        if (!kayit) return false;
+        const listedeki = mobilDurum.ogrenciler.find((o) => String(o.ogrNo) === temizNo || (temizNo.length >= 2 && String(o.ogrNo).endsWith(temizNo) && mobilDurum.ogrenciler.filter((x) => String(x.ogrNo).endsWith(temizNo)).length === 1));
+        const kesinNo = listedeki ? String(listedeki.ogrNo) : temizNo;
+        const kesinAd = String(adSoyadGirdi || '').trim() || (listedeki ? listedeki.adSoyad : `Öğrenci (${kesinNo})`);
+
+        kayit.ogrNo = kesinNo;
+        kayit.adSoyad = kesinAd;
+        kayit.numaraEslesmediMi = false;
+        kayit.kimlikEslesmeBekliyor = false;
+        kayit.cakisanAdaylar = listedeki ? [listedeki] : [];
+        kayit.supheliMi = false;
+
+        // Aynı öğrenciye ait başka eski satır varsa tekilleştir
+        mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.filter((s) => s.id === kayit.id || String(s.ogrNo) !== kesinNo || s.numaraEslesmediMi);
+
+        // Kişiye özel anahtar haritası varsa bu öğrenci için yeniden puanla
+        if (mobilDurum.sinavYapisi.ogrenciOzelAnahtarlar && mobilDurum.sinavYapisi.ogrenciOzelAnahtarlar[kesinNo] && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
+          const ozelYapi = Object.assign({}, mobilDurum.sinavYapisi, {
+            cevapAnahtarlari: Object.assign({}, mobilDurum.sinavYapisi.cevapAnahtarlari, {
+              [kayit.grup || 'A']: mobilDurum.sinavYapisi.ogrenciOzelAnahtarlar[kesinNo]
+            })
+          });
+          const yp = C.yenidenPuanlaOkumaSonuclari([kayit], ozelYapi)[0];
+          if (yp) Object.assign(kayit, yp);
+        }
+
+        kapatOgrenciEslestirModal();
+        isleMobilOkumaSonucu(kayit, { modalAcma: true });
+        return true;
+      }
+
+      function kaydetMobilSilmeYedegi(aciklama) {
+        sonSilinenMobilYedek = {
+          aciklama: aciklama || 'Silme',
+          okumaSonuclari: JSON.parse(JSON.stringify(mobilDurum.okumaSonuclari || []))
+        };
+        const btnGeri = document.getElementById('btn-mobil-geri-al');
+        if (btnGeri) btnGeri.hidden = false;
+      }
+
+      /* Okuma Sonucunu Ekranda Göster ve Kaydet (Mükerrer ?0/00 Engelleyici + Canlı HUD + Öğrenci Eşleştirici) */
+      function isleMobilOkumaSonucu(sonuc, secenekler = {}) {
         if (!sonuc || sonuc.formBulundu === false) return;
-        const idx = sonuc.numaraEslesmediMi ? -1 : mobilDurum.okumaSonuclari.findIndex((s) => s.ogrNo === sonuc.ogrNo && !s.numaraEslesmediMi);
-        if (idx >= 0) mobilDurum.okumaSonuclari[idx] = sonuc;
-        else mobilDurum.okumaSonuclari.unshift(sonuc);
+        if (!sonuc.id) sonuc.id = 'MOB-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+
+        const belirsiz = kagitKimlikBelirsizMi(sonuc);
+        if (sonuc.numaraEslesmediMi) {
+          sonuc.kimlikEslesmeBekliyor = true;
+          if (!sonuc.ogrNo || sonuc.ogrNo === '00' || String(sonuc.ogrNo).includes('?')) {
+            sonuc.ogrNo = `BEKLEYEN-${String(sonuc.okunanNoKod || '00').replace(/[^0-9A-Za-z]/g, 'X')}-${sonuc.id.slice(-4)}`;
+          }
+        }
+
+        const cevapImza = imzaHesaplaMobilKagit(sonuc);
+        const gercekCevapVarMi = ((sonuc.dyDetay || []).some((d) => d.verilen) || (sonuc.testDetay || []).some((t) => t.verilen));
+        sonuc.cevapImza = cevapImza;
+
+        let idx = -1;
+        if (!sonuc.numaraEslesmediMi) {
+          idx = mobilDurum.okumaSonuclari.findIndex((s) => s.id === sonuc.id || (String(s.ogrNo) === String(sonuc.ogrNo) && !s.numaraEslesmediMi));
+          if (idx < 0 && gercekCevapVarMi) {
+            idx = mobilDurum.okumaSonuclari.findIndex((s) => (s.numaraEslesmediMi || s.kimlikEslesmeBekliyor) && (s.cevapImza || imzaHesaplaMobilKagit(s)) === cevapImza);
+          }
+        } else {
+          idx = mobilDurum.okumaSonuclari.findIndex((s) => s.id === sonuc.id);
+          // Mükerrer ?0 / 00 Koruması: Aynı cevap dizilimine sahip eşleşmemiş kağıt 4 kez üst üste ekleneceğine mevcut kaydı günceller!
+          if (idx < 0 && gercekCevapVarMi) {
+            idx = mobilDurum.okumaSonuclari.findIndex(
+              (s) => (s.numaraEslesmediMi || s.kimlikEslesmeBekliyor) && (s.cevapImza || imzaHesaplaMobilKagit(s)) === cevapImza
+            );
+          }
+        }
+
+        if (idx >= 0) {
+          sonuc.id = mobilDurum.okumaSonuclari[idx].id || sonuc.id;
+          mobilDurum.okumaSonuclari[idx] = sonuc;
+        } else {
+          mobilDurum.okumaSonuclari.unshift(sonuc);
+        }
 
         kaydetYerelDepoya();
         cizMobilRontgen(sonuc);
-        bipCal(!sonuc.supheliMi);
+        guncelleVizorCanliHud(sonuc);
+        bipCal(!sonuc.supheliMi && !belirsiz);
 
         document.getElementById('mobil-alt-sayac').textContent = String(mobilDurum.okumaSonuclari.length);
         const rozet = document.getElementById('mobil-guven-rozet');
-        rozet.className = sonuc.supheliMi ? 'rozet rozet-sari' : 'rozet rozet-yesil';
-        rozet.textContent = `%${Math.round(sonuc.ortalamaGuven * 100)} Güven`;
+        rozet.className = (sonuc.supheliMi || belirsiz) ? 'rozet rozet-sari' : 'rozet rozet-yesil';
+        rozet.textContent = belirsiz ? '⚠️ Kimlik Seçin' : `%${Math.round(sonuc.ortalamaGuven * 100)} Güven`;
 
         const dyPiller = sonuc.dyDetay
           .map((d) => `<span class="rozet ${d.sonuc === 'DOGRU' ? 'rozet-yesil' : (d.sonuc === 'BOS' ? 'rozet-sari' : 'rozet-kirmizi')}">${d.soruNo}:${d.verilen || '-'}</span>`)
@@ -884,7 +1412,7 @@
           .map((t) => `<span class="rozet ${t.sonuc === 'DOGRU' ? 'rozet-yesil' : (t.sonuc === 'BOS' ? 'rozet-sari' : 'rozet-kirmizi')}">${t.soruNo}:${t.verilen || '-'}</span>`)
           .join(' ');
 
-        // Sonu aynı numara olan öğrenciler için Dokunmatik Seçici
+        // Sonu aynı numara olan veya numarası okunamayan öğrenciler için Dokunmatik Seçici
         let cakismaHTML = '';
         if (Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1) {
           const adayBtnler = sonuc.cakisanAdaylar
@@ -905,16 +1433,26 @@
               <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">${adayBtnler}</div>
             </div>
           `;
+        } else if (belirsiz) {
+          cakismaHTML = `
+            <div style="margin-top:0.5rem; padding:0.5rem; background:rgba(245,158,11,0.16); border:1px solid #f59e0b; border-radius:6px; display:flex; justify-content:space-between; align-items:center; gap:0.4rem; flex-wrap:wrap;">
+              <span style="font-size:0.78rem; font-weight:700; color:#fbbf24;">⚠️ Kodlanan numara (${C.kacisHTML(sonuc.okunanNoKod || '?')}) sınıf listesiyle eşleşmedi.</span>
+              <button type="button" class="btn btn-birincil btn-kucuk" data-m-eslestir-ac="${C.kacisHTML(sonuc.id)}">👤 Öğrenci Seç / No Gir</button>
+            </div>
+          `;
         }
 
         document.getElementById('mobil-sonuc-icerik').innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.45rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:0.4rem; margin-bottom:0.45rem;">
             <div>
               <div style="font-weight:800; font-size:1rem;">👤 ${C.kacisHTML(sonuc.adSoyad)}</div>
-              <div class="mono" style="font-size:0.76rem; color:var(--metin-ikincil);">No: ${C.kacisHTML(sonuc.ogrNo)} · Kitapçık: ${C.kacisHTML(sonuc.grup)}</div>
+              <div class="mono" style="font-size:0.76rem; color:var(--metin-ikincil);">No: ${C.kacisHTML(sonuc.numaraEslesmediMi ? (sonuc.okunanNoKod || '?') : sonuc.ogrNo)} · Kitapçık: ${C.kacisHTML(sonuc.grup)}${sonuc.ozelKagitQrCozuldu ? ' · 🔐 Özel Anahtar' : ''}</div>
             </div>
-            <div style="font-size:1.35rem; font-weight:900; color:var(--basari);">
-              ${sonuc.toplamPuan} Puan (${C.hesaplaHarfNotu(sonuc.toplamPuan)})
+            <div style="text-align:right;">
+              <div style="font-size:1.35rem; font-weight:900; color:var(--basari);">
+                ${sonuc.toplamPuan} Puan (${C.hesaplaHarfNotu(sonuc.toplamPuan)})
+              </div>
+              <button type="button" class="btn btn-kucuk" data-m-eslestir-ac="${C.kacisHTML(sonuc.id)}" style="font-size:0.7rem; padding:0.15rem 0.4rem; margin-top:2px;">✏️ Öğrenci Değiştir</button>
             </div>
           </div>
           <div style="font-size:0.8rem; margin-bottom:0.45rem;">
@@ -928,6 +1466,10 @@
         `;
 
         guncelleMobilSonucListesi();
+
+        if (belirsiz && !secenekler.modalAcma && (secenekler.gercekTarama || mobilDurum.ogrenciler.length > 0)) {
+          acOgrenciEslestirModal(sonuc.id);
+        }
       }
 
       /* Kamera Açık Değilse Sentetik Gerçekçi Kağıt Üretip OMR Motorundan Geçir */
@@ -1007,6 +1549,7 @@
       /* Kamera karesi / fotoğrafı doğal oranıyla (en çok 1600 px) okur; form bulunamazsa KAYDETMEZ ve uyarır.
          seri=true: aynı kağıt iki ardışık karede aynı okunmadan kaydedilmez (çöp kare koruması). */
       function mobilGoruntuyuOku(kaynak, kaynakGen, kaynakYuk, seri = false) {
+        if (seri && eslestirmeModalAcikMi) return null;
         const vizorCanvas = document.getElementById('mobil-canvas-vizor');
         const ctx = vizorCanvas.getContext('2d', { willReadFrequently: true });
         const olcek = Math.min(1, 1600 / Math.max(kaynakGen, kaynakYuk));
@@ -1014,15 +1557,12 @@
         vizorCanvas.height = Math.max(1, Math.round(kaynakYuk * olcek));
         ctx.drawImage(kaynak, 0, 0, vizorCanvas.width, vizorCanvas.height);
 
-        // Kamera karesinde bilgisayardan gösterilen Kurulum (#setup=) veya Öğrenci Listesi (#ogr= / OGR-QR) QR kodu varsa otomatik yakala
+        // Kamera karesinde Kurulum (#setup=), Öğrenci Listesi (#ogr=) veya Şifreli Kağıt QR (OQV2:...) varsa yakala
+        let tespitSozu = null;
         if (typeof window.BarcodeDetector === 'function') {
           try {
             const dedektor = new window.BarcodeDetector({ formats: ['qr_code'] });
-            dedektor.detect(vizorCanvas).then((kodlar) => {
-              if (kodlar && kodlar.length > 0 && kodlar[0].rawValue) {
-                uygulaPwaQrMetni(kodlar[0].rawValue, 'Kamera QR');
-              }
-            }).catch(() => {});
+            tespitSozu = dedektor.detect(vizorCanvas).catch(() => []);
           } catch (_) {}
         }
 
@@ -1040,21 +1580,44 @@
           sonuc = C.okuStandartOptikFormImageData(imgData, standartAyarOku());
         }
         if (!sonuc.formBulundu) {
+          if (tespitSozu) {
+            tespitSozu.then((kodlar) => {
+              (kodlar || []).forEach((k) => { if (k && k.rawValue) uygulaPwaQrMetni(k.rawValue, 'Kamera QR'); });
+            });
+          }
           seriSon.imza = ''; seriSon.sayi = 0; seriSon.kaydedildi = false;
           mobilUyariGoster('⚠️ Form bulunamadı: ' + sonuc.mesaj);
           if (!seri) bipCal(false);
           return null;
         }
-        // Kağıttaki optik kutudan soru sayıları (örn. 15 D/Y + 10 Test + 0 Klasik) otomatik algılandıysa sınav yapısını senkronize et
+        // Kağıttaki optik kutudan soru sayıları (örn. 15 D/Y + 10 Test + 0 Klasik) otomatik algılandıysa sınav yapısını DERHAL 100 puana normalize et ve bu kağıdı da 100 üzerinden puanla!
         if (!standart && sonuc.algilananYapi && sonuc.algilananYapi.otomatikAlgilandiMi) {
+          const degistiMi =
+            mobilDurum.sinavYapisi.dySayisi !== sonuc.algilananYapi.dySayisi ||
+            mobilDurum.sinavYapisi.testSayisi !== sonuc.algilananYapi.testSayisi ||
+            mobilDurum.sinavYapisi.klasikSayisi !== sonuc.algilananYapi.klasikSayisi;
           mobilDurum.sinavYapisi.dySayisi = sonuc.algilananYapi.dySayisi;
           mobilDurum.sinavYapisi.testSayisi = sonuc.algilananYapi.testSayisi;
           mobilDurum.sinavYapisi.klasikSayisi = sonuc.algilananYapi.klasikSayisi;
           document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
           document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
           document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
+          if (degistiMi) {
+            delete mobilDurum.sinavYapisi.dyToplamPuan;
+            delete mobilDurum.sinavYapisi.testToplamPuan;
+            delete mobilDurum.sinavYapisi.klasikToplamPuan;
+          }
+          uygulaMobil100PuanNormalizasyon(null, true);
+          if (typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
+            const guncelIlk = C.yenidenPuanlaOkumaSonuclari([sonuc], mobilDurum.sinavYapisi)[0];
+            if (guncelIlk) Object.assign(sonuc, guncelIlk);
+          }
           guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
+        }
+        if (!standart && bekleyenKagitOqv2) {
+          uygulaKagitSifreliQrSonuca(sonuc, bekleyenKagitOqv2);
+          bekleyenKagitOqv2 = '';
         }
         mobilUyariGoster('');
         if (seri) {
@@ -1066,7 +1629,23 @@
           if (seriSon.kaydedildi) return sonuc;
           seriSon.kaydedildi = true;
         }
-        if (standart) isleStandartOkumaSonucu(sonuc); else isleMobilOkumaSonucu(sonuc);
+        if (standart) isleStandartOkumaSonucu(sonuc); else isleMobilOkumaSonucu(sonuc, { gercekTarama: true });
+
+        if (!standart && tespitSozu) {
+          tespitSozu.then((kodlar) => {
+            (kodlar || []).forEach((k) => {
+              if (!k || !k.rawValue) return;
+              if (String(k.rawValue).trim().startsWith('OQV2:')) {
+                if (uygulaKagitSifreliQrSonuca(sonuc, k.rawValue)) {
+                  kapatOgrenciEslestirModal();
+                  isleMobilOkumaSonucu(sonuc, { modalAcma: true });
+                }
+              } else {
+                uygulaPwaQrMetni(k.rawValue, 'Kamera QR');
+              }
+            });
+          });
+        }
         return sonuc;
       }
 
@@ -1151,8 +1730,8 @@
               .join('');
             html += `
               <div class="dokunmatik-anahtar-satir">
-                <strong>Test Soru ${i + 1}</strong>
-                <div style="display:flex; gap:0.3rem;">${balonlar}</div>
+                <strong style="font-size:0.82rem; white-space:nowrap;">Test ${i + 1}</strong>
+                <div style="display:flex; gap:0.25rem;">${balonlar}</div>
               </div>
             `;
           }
@@ -1161,29 +1740,41 @@
         document.getElementById('mobil-dokunmatik-anahtar-alani').innerHTML = html;
       }
 
-      /* Mod 3: Okunan Kağıtlar Listesi ve İstatistik */
+      /* Mod 3: Okunan Kağıtlar Listesi (Sabit Öğrenci Sütunu + Anında Puan + Eşleştir/Sil) ve İstatistik */
       function guncelleMobilSonucListesi() {
         const analiz = C.hesaplaSinifVeMaddeAnalizi(mobilDurum.okumaSonuclari, mobilDurum.sinavYapisi);
+        const bekleyenSayisi = mobilDurum.okumaSonuclari.filter((s) => kagitKimlikBelirsizMi(s)).length;
         document.getElementById('mobil-sinif-istatistik-ozet').innerHTML = `
           Okunan: <strong>${analiz.ogrenciSayisi}</strong> ·
           Ortalama: <strong>${analiz.ortalama}</strong> ·
           Std. Sapma: <strong>${analiz.standartSapma}</strong> ·
           En Yüksek: <strong>${analiz.enYuksek}</strong>
+          ${bekleyenSayisi > 0 ? ` · <span class="rozet rozet-sari">⚠️ ${bekleyenSayisi} Eşleşme Bekliyor</span>` : ''}
         `;
 
         const tbody = document.getElementById('mobil-tablo-okunanlar');
         tbody.innerHTML = mobilDurum.okumaSonuclari
-          .map((s) => `
-            <tr>
-              <td class="mono">${C.kacisHTML(String(s.ogrNo).slice(-4))}</td>
-              <td><strong>${C.kacisHTML(s.adSoyad)}</strong></td>
-              <td>${C.kacisHTML(s.grup)}</td>
-              <td class="mono">${s.dyDogru}D/${s.dyYanlis}Y</td>
-              <td class="mono">${s.testDogru}D/${s.testYanlis}Y</td>
-              <td class="mono">${s.klasikToplamPuan}p</td>
-              <td><strong>${s.toplamPuan}</strong></td>
-            </tr>
-          `)
+          .map((s) => {
+            const belirsiz = kagitKimlikBelirsizMi(s);
+            const gosterilenNo = belirsiz ? (s.okunanNoKod || '?0') : String(s.ogrNo);
+            return `
+              <tr style="${belirsiz ? 'background:rgba(245,158,11,0.12);' : ''}">
+                <td class="mobil-sticky-sutun">
+                  <div style="font-weight:800; font-size:0.8rem; line-height:1.2; word-break:break-word;">${belirsiz ? '⚠️ ' : ''}${C.kacisHTML(s.adSoyad)}</div>
+                  <div class="mono" style="font-size:0.72rem; color:var(--metin-ikincil);">No: ${C.kacisHTML(gosterilenNo)}</div>
+                </td>
+                <td><strong style="font-size:0.98rem; color:var(--basari);">${s.toplamPuan}</strong></td>
+                <td style="white-space:nowrap;">
+                  <button type="button" class="btn ${belirsiz ? 'btn-birincil' : ''} btn-kucuk" data-tablo-eslestir="${C.kacisHTML(s.id)}" title="Öğrenci Ata / Değiştir" style="padding:0.25rem 0.45rem;">${belirsiz ? '👤 Seç' : '✏️'}</button>
+                  <button type="button" class="btn btn-tehlike btn-kucuk" data-tablo-sil="${C.kacisHTML(s.id)}" title="Bu okumayı sil" style="padding:0.25rem 0.45rem;">🗑️</button>
+                </td>
+                <td>${C.kacisHTML(s.grup)}</td>
+                <td class="mono">${s.dyDogru}D/${s.dyYanlis}Y</td>
+                <td class="mono">${s.testDogru}D/${s.testYanlis}Y</td>
+                <td class="mono">${s.klasikToplamPuan}p</td>
+              </tr>
+            `;
+          })
           .join('');
       }
 
@@ -1196,6 +1787,7 @@
         // Alt Sekme Geçişi
         document.querySelectorAll('.mobil-sekme-btn').forEach((btn) => {
           btn.addEventListener('click', () => {
+            kapatOgrenciEslestirModal();
             document.querySelectorAll('.mobil-sekme-btn').forEach((b) => b.classList.remove('aktif'));
             document.querySelectorAll('.sekme-panel').forEach((p) => p.classList.remove('aktif'));
             btn.classList.add('aktif');
@@ -1203,6 +1795,51 @@
             if (hedef) hedef.classList.add('aktif');
           });
         });
+
+        // Canlı HUD üzerinden tek dokunuşla öğrenci eşleştirme
+        const canliHudEl = document.getElementById('mobil-vizor-canli-hud');
+        if (canliHudEl) {
+          canliHudEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-hud-eslestir-id]');
+            if (btn) acOgrenciEslestirModal(btn.getAttribute('data-hud-eslestir-id'));
+          });
+        }
+
+        // Öğrenci Eşleştirme Alt Çekmecesi (Bottom-Sheet) kontrolleri
+        const btnEslestirBeklet = document.getElementById('btn-eslestir-beklet');
+        if (btnEslestirBeklet) btnEslestirBeklet.addEventListener('click', kapatOgrenciEslestirModal);
+
+        const girdiEslestirAra = document.getElementById('girdi-eslestir-ara');
+        if (girdiEslestirAra) {
+          girdiEslestirAra.addEventListener('input', () => cizEslestirAdayListesi(girdiEslestirAra.value));
+        }
+
+        const listeEslestirAdaylar = document.getElementById('liste-eslestir-adaylar');
+        if (listeEslestirAdaylar) {
+          listeEslestirAdaylar.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-eslestir-sec-no]');
+            if (!btn || !aktifEslestirKayitId) return;
+            ataOgrenciKayda(
+              aktifEslestirKayitId,
+              btn.getAttribute('data-eslestir-sec-no'),
+              btn.getAttribute('data-eslestir-sec-ad')
+            );
+          });
+        }
+
+        const btnEslestirElleAta = document.getElementById('btn-eslestir-elle-ata');
+        if (btnEslestirElleAta) {
+          btnEslestirElleAta.addEventListener('click', () => {
+            if (!aktifEslestirKayitId) return;
+            const noEl = document.getElementById('girdi-eslestir-ogrno');
+            const adEl = document.getElementById('girdi-eslestir-adsoyad');
+            if (!noEl || !noEl.value.trim()) {
+              if (noEl) noEl.focus();
+              return;
+            }
+            ataOgrenciKayda(aktifEslestirKayitId, noEl.value.trim(), adEl ? adEl.value.trim() : '');
+          });
+        }
 
         document.getElementById('btn-mobil-kare-oku').addEventListener('click', taraAktifKareVeyaSimuleEt);
         const btnVizorUstuOku = document.getElementById('btn-vizor-ustu-oku');
@@ -1226,7 +1863,7 @@
             if (inp && uygulaPwaQrMetni(inp.value, 'Yapıştırılan QR Paketi')) {
               inp.value = '';
             } else {
-              mobilUyariGoster('⚠️ Geçerli bir #setup= (Cevap Anahtarı) veya #ogr= / OGR-QR (Öğrenci Listesi) paketi bulunamadı.');
+              mobilUyariGoster('⚠️ Geçerli bir #setup= (Cevap Anahtarı), OQV2:... (Şifreli Kağıt) veya #ogr= / OGR-QR (Öğrenci Listesi) paketi bulunamadı.');
             }
           });
         }
@@ -1254,6 +1891,7 @@
         }
 
         document.getElementById('m-form-turu').addEventListener('change', (e) => {
+          kapatOgrenciEslestirModal();
           const std = e.target.value === 'standart';
           document.getElementById('m-standart-ayar').hidden = !std;
           mobilUyariGoster(std ? 'ℹ️ Standart form modu: kamerayı açın veya fotoğraf seçin.' : '');
@@ -1306,7 +1944,7 @@
             document.getElementById('btn-mobil-seri-tara').textContent = '⏹️ Seri Tarama: Açık';
             C.kurGuvenliInterval('mobil-seri', taraAktifKareVeyaSimuleEt, 950);
           } catch (err) {
-            alert('Kamera açılamadı, simülasyon veya fotoğraf yükleme modunu kullanabilirsiniz: ' + err.message);
+            mobilUyariGoster('⚠️ Kamera açılamadı; fotoğraf seçme veya simülasyon modunu kullanabilirsiniz (' + (err && err.message ? err.message : 'Kamera yok') + ').');
           }
         });
 
@@ -1321,13 +1959,67 @@
           img.src = url;
         });
 
-        // Mod 2 Kontrolleri
-        document.getElementById('btn-mobil-yapi-uygula').addEventListener('click', () => {
-          mobilDurum.sinavYapisi.dySayisi = Math.max(0, Math.min(25, parseInt(document.getElementById('m-ayar-dy').value, 10) || 0));
-          mobilDurum.sinavYapisi.testSayisi = Math.max(0, Math.min(35, parseInt(document.getElementById('m-ayar-test').value, 10) || 0));
-          mobilDurum.sinavYapisi.klasikSayisi = Math.max(0, Math.min(5, parseInt(document.getElementById('m-ayar-klasik').value, 10) || 0));
+        // Mod 2 Kontrolleri (100 Puan Dengeleme + Kaydet ve Yeniden Puanla)
+        const kaydetVeYenidenPuanlaMod2 = (ozelPuanOku = true) => {
+          const yeniDy = Math.max(0, Math.min(25, parseInt(document.getElementById('m-ayar-dy').value, 10) || 0));
+          const yeniTest = Math.max(0, Math.min(35, parseInt(document.getElementById('m-ayar-test').value, 10) || 0));
+          const yeniKlasik = Math.max(0, Math.min(5, parseInt(document.getElementById('m-ayar-klasik').value, 10) || 0));
+          const sayilarDegistiMi =
+            yeniDy !== mobilDurum.sinavYapisi.dySayisi ||
+            yeniTest !== mobilDurum.sinavYapisi.testSayisi ||
+            yeniKlasik !== mobilDurum.sinavYapisi.klasikSayisi;
+
+          mobilDurum.sinavYapisi.dySayisi = yeniDy;
+          mobilDurum.sinavYapisi.testSayisi = yeniTest;
+          mobilDurum.sinavYapisi.klasikSayisi = yeniKlasik;
+
+          let ozelPuan = null;
+          if (ozelPuanOku && !sayilarDegistiMi) {
+            ozelPuan = {
+              dyToplamPuan: yeniDy > 0 ? Math.max(0, Number(document.getElementById('m-ayar-dy-toplam-puan').value) || 0) : 0,
+              testToplamPuan: yeniTest > 0 ? Math.max(0, Number(document.getElementById('m-ayar-test-toplam-puan').value) || 0) : 0,
+              klasikToplamPuan: yeniKlasik > 0 ? Math.max(0, Number(document.getElementById('m-ayar-klasik-toplam-puan').value) || 0) : 0
+            };
+          } else {
+            delete mobilDurum.sinavYapisi.dyToplamPuan;
+            delete mobilDurum.sinavYapisi.testToplamPuan;
+            delete mobilDurum.sinavYapisi.klasikToplamPuan;
+          }
+
+          uygulaMobil100PuanNormalizasyon(ozelPuan, true);
+          kaydetYerelDepoya();
           guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
+          guncelleMobilSonucListesi();
+          if (mobilDurum.okumaSonuclari[0]) guncelleVizorCanliHud(mobilDurum.okumaSonuclari[0]);
+          bipCal(true);
+
+          const onayKutu = document.getElementById('mobil-anahtar-kayit-onay');
+          if (onayKutu) {
+            onayKutu.textContent = `✅ Anahtar ve puan dağılımı (${mobilDurum.sinavYapisi.dyToplamPuan}p + ${mobilDurum.sinavYapisi.testToplamPuan}p${mobilDurum.sinavYapisi.klasikSayisi > 0 ? ' + ' + mobilDurum.sinavYapisi.klasikToplamPuan + 'p' : ''} = 100p) kaydedildi; ${mobilDurum.okumaSonuclari.length} kağıt yeniden puanlandı!`;
+            onayKutu.hidden = false;
+          }
+        };
+
+        document.getElementById('btn-mobil-yapi-uygula').addEventListener('click', () => kaydetVeYenidenPuanlaMod2(false));
+        const btnAnahtarKaydetPuanla = document.getElementById('btn-mobil-anahtar-kaydet-puanla');
+        if (btnAnahtarKaydetPuanla) btnAnahtarKaydetPuanla.addEventListener('click', () => kaydetVeYenidenPuanlaMod2(true));
+        const btnAnahtarAltKaydet = document.getElementById('btn-mobil-anahtar-alt-kaydet');
+        if (btnAnahtarAltKaydet) btnAnahtarAltKaydet.addEventListener('click', () => kaydetVeYenidenPuanlaMod2(true));
+
+        ['m-ayar-dy-toplam-puan', 'm-ayar-test-toplam-puan', 'm-ayar-klasik-toplam-puan'].forEach((id) => {
+          const inp = document.getElementById(id);
+          if (inp) {
+            inp.addEventListener('input', () => {
+              const rozetEl = document.getElementById('m-ayar-toplam-puan-rozet');
+              if (!rozetEl) return;
+              const top = (Number(document.getElementById('m-ayar-dy-toplam-puan').value) || 0)
+                + (Number(document.getElementById('m-ayar-test-toplam-puan').value) || 0)
+                + (Number(document.getElementById('m-ayar-klasik-toplam-puan').value) || 0);
+              rozetEl.className = Math.abs(top - 100) < 0.05 ? 'rozet rozet-yesil' : 'rozet rozet-sari';
+              rozetEl.textContent = Math.abs(top - 100) < 0.05 ? '🎯 Toplam: 100 Tam Puan' : `⚠️ Toplam: ${top}p (Kaydedince 100p'ye dengelenir)`;
+            });
+          }
         });
 
         document.getElementById('m-ayar-grup-sec').addEventListener('change', cizDokunmatikAnahtarEditoru);
@@ -1341,7 +2033,15 @@
           const grup = document.getElementById('m-ayar-grup-sec').value || 'A';
           if (tur === 'dy') mobilDurum.sinavYapisi.cevapAnahtarlari[grup].dy[idx] = deger;
           else if (tur === 'test') mobilDurum.sinavYapisi.cevapAnahtarlari[grup].test[idx] = deger;
+          uygulaMobil100PuanNormalizasyon({
+            dyToplamPuan: mobilDurum.sinavYapisi.dyToplamPuan,
+            testToplamPuan: mobilDurum.sinavYapisi.testToplamPuan,
+            klasikToplamPuan: mobilDurum.sinavYapisi.klasikToplamPuan
+          }, true);
+          kaydetYerelDepoya();
+          guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
+          guncelleMobilSonucListesi();
         });
 
         const okutOgretmenMasterKagidi = () => {
@@ -1363,6 +2063,9 @@
             mobilDurum.sinavYapisi.dySayisi = okuma.algilananYapi.dySayisi;
             mobilDurum.sinavYapisi.testSayisi = okuma.algilananYapi.testSayisi;
             mobilDurum.sinavYapisi.klasikSayisi = okuma.algilananYapi.klasikSayisi;
+            delete mobilDurum.sinavYapisi.dyToplamPuan;
+            delete mobilDurum.sinavYapisi.testToplamPuan;
+            delete mobilDurum.sinavYapisi.klasikToplamPuan;
           }
           const grup = okuma.grup || 'A';
           mobilDurum.sinavYapisi.cevapAnahtarlari[grup] = {
@@ -1374,17 +2077,19 @@
           document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
           document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
           document.getElementById('m-ayar-grup-sec').value = grup;
+          uygulaMobil100PuanNormalizasyon(null, true);
           kaydetYerelDepoya();
           guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
+          guncelleMobilSonucListesi();
           bipCal(true);
-          mobilUyariGoster(`✅ ${grup} Kitapçığı Cevap Anahtarı kağıttan okundu ve kaydedildi (${okuma.dyDetay.length} D/Y + ${okuma.testDetay.length} Test)!`);
+          mobilUyariGoster(`✅ ${grup} Kitapçığı Cevap Anahtarı kağıttan okundu, 100 tam puana dengelendi ve kaydedildi (${okuma.dyDetay.length} D/Y + ${okuma.testDetay.length} Test)!`);
         };
         document.getElementById('btn-master-kagit-okut').addEventListener('click', okutOgretmenMasterKagidi);
         const btnTaraMasterOkut = document.getElementById('btn-tara-master-kagit-okut');
         if (btnTaraMasterOkut) btnTaraMasterOkut.addEventListener('click', okutOgretmenMasterKagidi);
 
-        // Mod 3 Kontrolleri
+        // Mod 3 Kontrolleri (CSV + Satır Eşleştir/Sil + 1 Tıkla Geri Al)
         document.getElementById('btn-mobil-csv-indir').addEventListener('click', () => {
           const baslik = 'OgrenciNo;AdSoyad;Grup;DY_Dogru;Test_Dogru;Klasik_Puan;Toplam_Puan\n';
           const satirlar = mobilDurum.okumaSonuclari
@@ -1399,26 +2104,61 @@
         });
 
         document.getElementById('btn-mobil-temizle').addEventListener('click', () => {
+          if (mobilDurum.okumaSonuclari.length > 0) {
+            kaydetMobilSilmeYedegi('Tüm Okumaları Sıfırlama');
+          }
           mobilDurum.okumaSonuclari = [];
           kaydetYerelDepoya();
           document.getElementById('mobil-alt-sayac').textContent = '0';
+          const hud = document.getElementById('mobil-vizor-canli-hud');
+          if (hud) hud.hidden = true;
           guncelleMobilSonucListesi();
         });
 
-        // Telefonda Sonu Aynı Numara Olan Öğrenciyi Dokunarak Seçme
+        const btnMobilGeriAl = document.getElementById('btn-mobil-geri-al');
+        if (btnMobilGeriAl) {
+          btnMobilGeriAl.addEventListener('click', () => {
+            if (!sonSilinenMobilYedek || !Array.isArray(sonSilinenMobilYedek.okumaSonuclari)) return;
+            mobilDurum.okumaSonuclari = sonSilinenMobilYedek.okumaSonuclari;
+            sonSilinenMobilYedek = null;
+            btnMobilGeriAl.hidden = true;
+            kaydetYerelDepoya();
+            document.getElementById('mobil-alt-sayac').textContent = String(mobilDurum.okumaSonuclari.length);
+            guncelleMobilSonucListesi();
+            bipCal(true);
+          });
+        }
+
+        document.getElementById('mobil-tablo-okunanlar').addEventListener('click', (e) => {
+          const btnEs = e.target.closest('[data-tablo-eslestir]');
+          if (btnEs) {
+            acOgrenciEslestirModal(btnEs.getAttribute('data-tablo-eslestir'));
+            return;
+          }
+          const btnSil = e.target.closest('[data-tablo-sil]');
+          if (btnSil) {
+            const silId = btnSil.getAttribute('data-tablo-sil');
+            kaydetMobilSilmeYedegi('Tekil Satır Silme');
+            mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.filter((s) => s.id !== silId);
+            kaydetYerelDepoya();
+            document.getElementById('mobil-alt-sayac').textContent = String(mobilDurum.okumaSonuclari.length);
+            guncelleMobilSonucListesi();
+          }
+        });
+
+        // Telefonda Sonu Aynı Numara Olan Öğrenciyi veya Eşleşmeyeni Dokunarak Seçme
         document.getElementById('mobil-sonuc-icerik').addEventListener('click', (e) => {
+          const btnEsAc = e.target.closest('[data-m-eslestir-ac]');
+          if (btnEsAc) {
+            acOgrenciEslestirModal(btnEsAc.getAttribute('data-m-eslestir-ac'));
+            return;
+          }
           const btn = e.target.closest('[data-m-cakisma-id]');
           if (!btn) return;
           const id = btn.getAttribute('data-m-cakisma-id');
           const ogrNo = btn.getAttribute('data-m-ogrno');
           const adSoyad = btn.getAttribute('data-m-ad');
-          const kayit = mobilDurum.okumaSonuclari.find((s) => s.id === id);
-          if (kayit) {
-            kayit.ogrNo = ogrNo;
-            kayit.adSoyad = adSoyad;
-            kayit.supheliMi = false;
-            isleMobilOkumaSonucu(kayit);
-          }
+          ataOgrenciKayda(id, ogrNo, adSoyad);
         });
 
         // Telefondan Boş Cevap Anahtarı CSV İndir / Yükle ve Öğrenci CSV İndir / Yükle
@@ -1441,8 +2181,13 @@
               mobilDurum.sinavYapisi.cevapAnahtarlari = yeniAnahtar;
               mobilDurum.sinavYapisi.dySayisi = yeniAnahtar.A.dy.length;
               mobilDurum.sinavYapisi.testSayisi = yeniAnahtar.A.test.length;
+              delete mobilDurum.sinavYapisi.dyToplamPuan;
+              delete mobilDurum.sinavYapisi.testToplamPuan;
+              uygulaMobil100PuanNormalizasyon(null, true);
+              kaydetYerelDepoya();
               guncelleUstOzet();
               cizDokunmatikAnahtarEditoru();
+              guncelleMobilSonucListesi();
               bipCal(true);
             }
           };

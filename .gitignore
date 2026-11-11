@@ -11,6 +11,7 @@ Thumbs.db
 
 # wrangler files
 .wrangler
+.yerel-bulut-kasa.json
 .dev.vars*
 !.dev.vars.example
 .env*

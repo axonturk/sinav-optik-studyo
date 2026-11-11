@@ -13,4 +13,7 @@ package.json
 package-lock.json
 wrangler.toml
 wrangler.jsonc
+d1-sema.sql
+*.sql
+.yerel-bulut-kasa.json
 *.log

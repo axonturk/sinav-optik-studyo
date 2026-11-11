@@ -39,8 +39,71 @@ const sunucuDurumu = {
   aktifHocaOturumlari: new Map(), // hocaToken -> { kullaniciAdi, adSoyad, rol }
   aktifTokenlar: new Map(), // token -> { ogrNo, adSoyad, bitisMs, cevaplar, bitti }
   kioskDelilLoglari: [],
-  omrSonuclari: []
+  omrSonuclari: [],
+  bulutKasalar: new Map(),
+  bulutYedekGecmisi: new Map()
 };
+
+const YEREL_KASA_DOSYASI = path.join(KOK_DIZIN, '.yerel-bulut-kasa.json');
+const DISK_KALICILIK_AKTIF = require.main === module || process.env.SINAV_YEREL_KASA_AKTIF === '1';
+
+function hesaplaKasaOzeti(veri) {
+  if (!veri || typeof veri !== 'object') return { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0, metin: '0 ders' };
+  const ders = Array.isArray(veri.dersler) ? veri.dersler.length : 0;
+  const soru = Array.isArray(veri.sorular) ? veri.sorular.length : 0;
+  const ogrenci = Array.isArray(veri.ogrenciKayitlari)
+    ? veri.ogrenciKayitlari.length
+    : (Array.isArray(veri.ogrenciler) ? veri.ogrenciler.length : 0);
+  const sinav = Array.isArray(veri.kayitliSinavlar) ? veri.kayitliSinavlar.length : 0;
+  let okuma = Array.isArray(veri.okumaSonuclari) ? veri.okumaSonuclari.length : 0;
+  if (veri.okumaSonuclariHaritasi && typeof veri.okumaSonuclariHaritasi === 'object') {
+    const toplamHarita = Object.values(veri.okumaSonuclariHaritasi)
+      .reduce((t, d) => t + (Array.isArray(d) ? d.length : 0), 0);
+    if (toplamHarita > okuma) okuma = toplamHarita;
+  }
+  return {
+    ders,
+    soru,
+    ogrenci,
+    sinav,
+    okuma,
+    metin: `${ders} ders · ${soru} soru · ${ogrenci} öğrenci · ${sinav} sınav`
+  };
+}
+
+function yukleYerelDiskKasasi() {
+  if (!DISK_KALICILIK_AKTIF) return;
+  try {
+    if (!fs.existsSync(YEREL_KASA_DOSYASI)) return;
+    const ham = fs.readFileSync(YEREL_KASA_DOSYASI, 'utf8');
+    const parsed = JSON.parse(ham);
+    if (parsed && Array.isArray(parsed.kasalar)) {
+      sunucuDurumu.bulutKasalar = new Map(parsed.kasalar);
+    }
+    if (parsed && Array.isArray(parsed.gecmis)) {
+      sunucuDurumu.bulutYedekGecmisi = new Map(parsed.gecmis);
+    }
+  } catch (_) {}
+}
+
+function kaydetYerelDiskKasasi() {
+  if (!DISK_KALICILIK_AKTIF) return;
+  try {
+    const gecici = `${YEREL_KASA_DOSYASI}.tmp`;
+    fs.writeFileSync(
+      gecici,
+      JSON.stringify({
+        kasalar: Array.from(sunucuDurumu.bulutKasalar.entries()),
+        gecmis: Array.from(sunucuDurumu.bulutYedekGecmisi.entries()),
+        kayitMs: Date.now()
+      }),
+      'utf8'
+    );
+    fs.renameSync(gecici, YEREL_KASA_DOSYASI);
+  } catch (_) {}
+}
+
+yukleYerelDiskKasasi();
 
 function cozHocaTokenIstekten(req, govde = null, urlNesne = null) {
   const auth = String(req.headers.authorization || '').trim();
@@ -862,6 +925,7 @@ function istekIsleyici(req, res) {
         oturum.puan = puan;
         oturum.dogruSayisi = dogruSayisi;
         oturum.teslimKodu = teslimKodu;
+        const manuelDegerlendirmeBekliyor = sinavSorulari.some((s) => s.tur === 'klasik');
 
         return gonderJson(res, 200, {
           bitti: true,
@@ -871,7 +935,8 @@ function istekIsleyici(req, res) {
           dogruSayisi,
           toplamSoru: sinavSorulari.length,
           puan,
-          teslimKodu
+          teslimKodu,
+          manuelDegerlendirmeBekliyor
         });
       })
       .catch((err) => gonderJson(res, 400, { hata: err.message }));
@@ -1044,6 +1109,185 @@ function istekIsleyici(req, res) {
     }
   }
 
+  // 2g. Kalıcı Bulut / Sunucu Kasası ve Otomatik Yedek Geçmişi API (Öğretmen Yetkisi Zorunlu)
+  if (yol === '/api/bulut-kasa' || yol === '/api/bulut-kasa/gecmis' || yol === '/api/bulut-kasa/geri-yukle') {
+    const metot = String(req.method || 'GET').toUpperCase();
+    const islemYap = (govde) => {
+      const hTok = cozHocaTokenIstekten(req, govde, urlNesne);
+      const oturum = hTok ? sunucuDurumu.aktifHocaOturumlari.get(hTok) : null;
+      if (!hTok || !sunucuDurumu.aktifHocaTokenlar.has(hTok) || !oturum) {
+        return gonderJson(res, 401, { hata: 'Bulut kasasına erişmek için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+      }
+      const kullaniciAdi = String(oturum.kullaniciAdi || 'hoca').trim().toLowerCase();
+      if (!sunucuDurumu.bulutKasalar) sunucuDurumu.bulutKasalar = new Map();
+      if (!sunucuDurumu.bulutYedekGecmisi) sunucuDurumu.bulutYedekGecmisi = new Map();
+
+      const ekleGecmis = (revNo, veriJson, islemNotu) => {
+        const liste = sunucuDurumu.bulutYedekGecmisi.get(kullaniciAdi) || [];
+        const yeniId = (liste[0] ? liste[0].id : 0) + 1;
+        liste.unshift({
+          id: yeniId,
+          kullaniciAdi,
+          revizyonNo: revNo,
+          islemNotu: String(islemNotu || '').slice(0, 180),
+          veriJson,
+          olusturmaMs: Date.now()
+        });
+        sunucuDurumu.bulutYedekGecmisi.set(kullaniciAdi, liste.slice(0, 25));
+      };
+
+      if (yol === '/api/bulut-kasa' && metot === 'GET') {
+        const mevcut = sunucuDurumu.bulutKasalar.get(kullaniciAdi) || null;
+        return gonderJson(res, 200, {
+          basarili: true,
+          bulundu: Boolean(mevcut && mevcut.veri),
+          kullaniciAdi,
+          revizyonNo: mevcut ? mevcut.revizyonNo : 0,
+          ozetBilgi: mevcut ? mevcut.ozetBilgi : '',
+          guncellemeMs: mevcut ? mevcut.guncellemeMs : 0,
+          veri: mevcut ? mevcut.veri : null,
+          veriPaketi: mevcut ? mevcut.veri : null
+        });
+      }
+
+      if (yol === '/api/bulut-kasa' && (metot === 'PUT' || metot === 'POST')) {
+        const gelenVeri = govde && (govde.veri || govde.veriPaketi);
+        if (!gelenVeri || typeof gelenVeri !== 'object' || Array.isArray(gelenVeri)) {
+          return gonderJson(res, 400, { hata: 'Kaydedilecek geçerli bulut kasa verisi (veri nesnesi) bulunamadı.' });
+        }
+        const mevcut = sunucuDurumu.bulutKasalar.get(kullaniciAdi) || null;
+        const mevcutRev = mevcut ? (Number(mevcut.revizyonNo) || 0) : 0;
+        const bazRev = govde.bazRevizyonNo !== undefined ? Number(govde.bazRevizyonNo) : null;
+        const zorlaEz = govde.zorlaEz === true;
+
+        const yeniOzet = hesaplaKasaOzeti(gelenVeri);
+        const eskiOzet = mevcut && mevcut.veri ? hesaplaKasaOzeti(mevcut.veri) : { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
+
+        if (mevcut && !zorlaEz) {
+          if (bazRev !== null && Number.isFinite(bazRev) && bazRev < mevcutRev) {
+            return gonderJson(res, 409, {
+              hata: 'Bulutta başka bir sekme veya cihazdan kaydedilmiş daha güncel veri var.',
+              cakisma: true,
+              bulutRevizyonNo: mevcutRev,
+              revizyonNo: mevcutRev,
+              ozetBilgi: mevcut.ozetBilgi,
+              bulutVeri: mevcut.veri,
+              veriPaketi: mevcut.veri
+            });
+          }
+          if (
+            (eskiOzet.soru > 0 && yeniOzet.soru === 0) ||
+            (eskiOzet.ogrenci > 0 && yeniOzet.ogrenci === 0)
+          ) {
+            return gonderJson(res, 409, {
+              hata: 'Veri kaybı koruması: Buluttaki soru veya öğrenci listesi boş veri ile ezilemez.',
+              cakisma: true,
+              veriKaybiKorumasi: true,
+              bulutRevizyonNo: mevcutRev,
+              revizyonNo: mevcutRev,
+              ozetBilgi: mevcut.ozetBilgi,
+              bulutVeri: mevcut.veri,
+              veriPaketi: mevcut.veri
+            });
+          }
+        }
+
+        if (
+          mevcut &&
+          mevcut.veriJson &&
+          (govde.anlikYedekAl === true ||
+            zorlaEz ||
+            yeniOzet.soru !== eskiOzet.soru ||
+            yeniOzet.ogrenci !== eskiOzet.ogrenci ||
+            yeniOzet.ders !== eskiOzet.ders ||
+            yeniOzet.sinav !== eskiOzet.sinav ||
+            Date.now() - (mevcut.guncellemeMs || 0) > 180000)
+        ) {
+          ekleGecmis(mevcutRev, mevcut.veriJson, mevcut.ozetBilgi || 'Otomatik yedek');
+        }
+
+        const yeniRev = Math.max(mevcutRev + 1, (Number(govde.revizyonNo) || 0));
+        const simdi = Date.now();
+        const ozetBilgi = String(govde.islemNotu || yeniOzet.metin).slice(0, 180);
+        const veriJson = JSON.stringify(gelenVeri);
+        sunucuDurumu.bulutKasalar.set(kullaniciAdi, {
+          kullaniciAdi,
+          revizyonNo: yeniRev,
+          veri: gelenVeri,
+          veriJson,
+          ozetBilgi,
+          guncellemeMs: simdi
+        });
+        kaydetYerelDiskKasasi();
+        return gonderJson(res, 200, {
+          basarili: true,
+          kaydedildi: true,
+          kullaniciAdi,
+          revizyonNo: yeniRev,
+          ozetBilgi,
+          guncellemeMs: simdi
+        });
+      }
+
+      if (yol === '/api/bulut-kasa/gecmis' && metot === 'GET') {
+        const gecmis = (sunucuDurumu.bulutYedekGecmisi.get(kullaniciAdi) || []).map((r) => ({
+          id: r.id,
+          revizyonNo: r.revizyonNo,
+          islemNotu: r.islemNotu,
+          olusturmaMs: r.olusturmaMs
+        }));
+        return gonderJson(res, 200, { basarili: true, gecmis });
+      }
+
+      if (yol === '/api/bulut-kasa/geri-yukle' && metot === 'POST') {
+        const yedekId = Number(govde && (govde.id !== undefined ? govde.id : govde.yedekId));
+        if (!Number.isFinite(yedekId) || yedekId <= 0) {
+          return gonderJson(res, 400, { hata: 'Geri yüklenecek geçerli yedek kimliği (id) belirtilmelidir.' });
+        }
+        const liste = sunucuDurumu.bulutYedekGecmisi.get(kullaniciAdi) || [];
+        const bul = liste.find((x) => x.id === yedekId);
+        if (!bul || !bul.veriJson) {
+          return gonderJson(res, 404, { hata: 'Belirtilen yedek kaydı bulunamadı.' });
+        }
+        const mevcut = sunucuDurumu.bulutKasalar.get(kullaniciAdi) || null;
+        if (mevcut && mevcut.veriJson) {
+          ekleGecmis(mevcut.revizyonNo, mevcut.veriJson, 'Geri yükleme öncesi otomatik yedek');
+        }
+        const geriVeri = JSON.parse(bul.veriJson);
+        const yeniRev = (mevcut ? mevcut.revizyonNo : 0) + 1;
+        const simdi = Date.now();
+        const ozetBilgi = `Geri yüklendi (#${yedekId}) · ${hesaplaKasaOzeti(geriVeri).metin}`;
+        sunucuDurumu.bulutKasalar.set(kullaniciAdi, {
+          kullaniciAdi,
+          revizyonNo: yeniRev,
+          veri: geriVeri,
+          veriJson: bul.veriJson,
+          ozetBilgi,
+          guncellemeMs: simdi
+        });
+        kaydetYerelDiskKasasi();
+        return gonderJson(res, 200, {
+          basarili: true,
+          geriYuklendi: true,
+          revizyonNo: yeniRev,
+          ozetBilgi,
+          veri: geriVeri,
+          veriPaketi: geriVeri
+        });
+      }
+      return gonderJson(res, 405, { hata: 'Desteklenmeyen HTTP metodu.' });
+    };
+
+    if (metot === 'PUT' || metot === 'POST') {
+      okuJsonGovde(req, 4194304)
+        .then((govde) => islemYap(govde))
+        .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    } else {
+      islemYap(null);
+    }
+    return;
+  }
+
   // 3. Statik Dosya Sunumu (Sunucu Kaynak Kodları, Test Betikleri ve İç Veri Klasörleri Engellenir)
   const temizYol = yol === '/' ? '/index.html' : yol;
   const kucukYol = temizYol.toLowerCase();
@@ -1054,6 +1298,8 @@ function istekIsleyici(req, res) {
     kucukYol === '/package-lock.json' ||
     kucukYol === '/wrangler.jsonc' ||
     kucukYol === '/wrangler.toml' ||
+    kucukYol === '/d1-sema.sql' ||
+    kucukYol.endsWith('.sql') ||
     kucukYol === '/test-suite.js' ||
     kucukYol === '/omr-geometri-denetim.js' ||
     kucukYol.startsWith('/test-artifacts/') ||
