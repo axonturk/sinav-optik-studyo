@@ -1,7 +1,7 @@
 /* Uygulama kabuğunu çevrimdışı çalıştıran servis işçisi (PWA).
    - Statik dosyalar: ağ öncelikli, ağ yoksa önbellek (güncel sürüm her zaman önceliklidir).
    - /api/ uçları ASLA önbelleğe alınmaz (Zero-Trust: sınav/puan verisi sunucudan canlı gelir). */
-const SURUM = 'sinav-optik-v11';
+const SURUM = 'sinav-optik-v12';
 const KABUK = [
   './',
   './optik-mobil.html',
@@ -41,7 +41,7 @@ self.addEventListener('fetch', (olay) => {
   if (url.pathname.includes('/api/')) return;
 
   olay.respondWith(
-    fetch(istek)
+    fetch(istek, { cache: 'no-cache' })
       .then((yanit) => {
         if (yanit && yanit.ok) {
           const kopya = yanit.clone();
@@ -49,6 +49,6 @@ self.addEventListener('fetch', (olay) => {
         }
         return yanit;
       })
-      .catch(() => caches.match(istek).then((kayit) => kayit || (istek.mode === 'navigate' ? caches.match('./optik-mobil.html') : undefined)))
+      .catch(() => caches.match(istek, { ignoreSearch: true }).then((kayit) => kayit || (istek.mode === 'navigate' ? caches.match('./optik-mobil.html') : undefined)))
   );
 });

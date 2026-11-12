@@ -363,21 +363,24 @@ function kontrastOrani(r1, r2) {
     kontrol('İlk Kurulum: "Örnek dersle dene" tek tıkla örnek ders ve soru havuzunu yükleyip boş durum kartını kapatır',
       ornekSonrasi.bosGizli && ornekSonrasi.bankaSayisi >= 10, JSON.stringify(ornekSonrasi));
 
-    // Soru Bankasından 1 soru sil -> Geri Al Toast -> Geri Al
+    // Soru Bankasından 1 soru sil -> Geri Al Toast + X Kapatma + Geri Al
     await sayfa.click('[data-sekme="sekme-banka"]');
     await bekle(200);
     const geriAlSonuc = await sayfa.evaluate(async () => {
+      const toastEl = document.getElementById('toast-geri-al');
       const once = Number(document.getElementById('rozet-banka-toplam').textContent.trim());
       const silBtn = document.querySelector('#tablo-soru-bankasi [data-sil-soru]');
       if (silBtn) silBtn.click();
       const silSonrasi = Number(document.getElementById('rozet-banka-toplam').textContent.trim());
-      const toastGorunur = !document.getElementById('toast-geri-al').hidden;
-      document.getElementById('btn-toast-geri-al').click();
+      const toastGorunur = !toastEl.hidden && getComputedStyle(toastEl).display !== 'none';
+      document.getElementById('btn-toast-kapat').click();
+      const xKapatildi = toastEl.hidden && getComputedStyle(toastEl).display === 'none';
+      document.getElementById('btn-son-silineni-geri-al').click();
       const geriSonrasi = Number(document.getElementById('rozet-banka-toplam').textContent.trim());
-      return { once, silSonrasi, toastGorunur, geriSonrasi };
+      return { once, silSonrasi, toastGorunur, xKapatildi, geriSonrasi };
     });
-    kontrol('8 Saniyelik Geri Al Toast: Soru silindiğinde bildirim açılır ve tek tıkla silinen soru kayıpsız geri yüklenir',
-      geriAlSonuc.silSonrasi === geriAlSonuc.once - 1 && geriAlSonuc.toastGorunur && geriAlSonuc.geriSonrasi === geriAlSonuc.once,
+    kontrol('8 Saniyelik Geri Al Toast: Soru silindiğinde bildirim açılır, X düğmesiyle anında kapanır ve silinen soru kayıpsız geri yüklenir',
+      geriAlSonuc.silSonrasi === geriAlSonuc.once - 1 && geriAlSonuc.toastGorunur && geriAlSonuc.xKapatildi && geriAlSonuc.geriSonrasi === geriAlSonuc.once,
       JSON.stringify(geriAlSonuc));
 
     // 7) Akıllı Yapıştırma Çekmecesi (%90) + Canlı Önizleme + XSS Etkisizleştirme

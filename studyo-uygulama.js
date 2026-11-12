@@ -516,7 +516,10 @@
       } else {
         btnGeriAl.hidden = true;
         btnGeriAl.style.display = 'none';
-        if (toastGeriAl) toastGeriAl.hidden = true;
+        if (toastGeriAl) {
+          toastGeriAl.hidden = true;
+          toastGeriAl.style.display = 'none';
+        }
       }
     }
   }
@@ -550,9 +553,11 @@
       if (toastGeriAl && toastMetin && durum.hocaOturumAcik) {
         toastMetin.textContent = `${kisaEtiket} — geri almak ister misiniz?`;
         toastGeriAl.hidden = false;
+        toastGeriAl.style.display = 'inline-flex';
         clearTimeout(__geriAlToastZamanlayici);
         __geriAlToastZamanlayici = setTimeout(() => {
           toastGeriAl.hidden = true;
+          toastGeriAl.style.display = 'none';
         }, 8000);
       }
     } catch (_) {}
@@ -12162,7 +12167,10 @@
       btnToastGeriAl.addEventListener('click', () => {
         clearTimeout(__geriAlToastZamanlayici);
         const t = document.getElementById('toast-geri-al');
-        if (t) t.hidden = true;
+        if (t) {
+          t.hidden = true;
+          t.style.display = 'none';
+        }
         uygulaSonGeriAlYedegi();
       });
     }
@@ -12171,7 +12179,10 @@
       btnToastKapat.addEventListener('click', () => {
         clearTimeout(__geriAlToastZamanlayici);
         const t = document.getElementById('toast-geri-al');
-        if (t) t.hidden = true;
+        if (t) {
+          t.hidden = true;
+          t.style.display = 'none';
+        }
       });
     }
 

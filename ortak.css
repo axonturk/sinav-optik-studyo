@@ -399,6 +399,10 @@ textarea {
   font-weight: 400;
 }
 
+select {
+  padding-right: 28px;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--metin-soluk);
@@ -1673,9 +1677,9 @@ body.yan-menu-dar .yan-menu #btn-hoca-giris-ac {
 
 .baglam-secici {
   width: auto !important;
-  max-width: 220px;
+  max-width: 240px;
   min-height: 32px;
-  padding: 4px 8px !important;
+  padding: 4px 26px 4px 8px !important;
   font-size: var(--yazi-sm) !important;
   font-weight: 500 !important;
   border-color: var(--kenar) !important;
