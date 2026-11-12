@@ -226,11 +226,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v13), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v14), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v13, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v13'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v14, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v14'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
@@ -1010,6 +1010,265 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
       JSON.stringify({ mobilUx, mobilHatalar })
     );
     await mobilSayfa.close();
+
+    // -------------------------------------------------------------------------
+    // 4i. GERÇEK CİHAZ KİLİDİ (SAHTE SKOR UYDURMAMA), DERS İZOLASYONU & KAĞITTAN ANAHTAR OKU
+    // -------------------------------------------------------------------------
+    const giris3 = await httpHamIstek(port, 'POST', '/api/hoca-giris', { kullaniciAdi: 'hoca', sifre: 'Demo!Hoca2026' });
+    const token3 = giris3.body && giris3.body.token;
+    const yetkisizMobilPaket = await httpHamIstek(port, 'GET', '/api/mobil-ders-paketleri');
+    kontrol(
+      'GET /api/mobil-ders-paketleri yetkisiz erişimi 401 ile reddeder',
+      yetkisizMobilPaket.status === 401
+    );
+
+    const blgOgrenciler = Array.from({ length: 12 }, (_, idx) => ({
+      ogrNo: String(257411001 + idx),
+      adSoyad: `BLG Öğrenci ${idx + 1}`
+    }));
+    const agOgrenciler = [
+      { ogrNo: '2004', adSoyad: 'BURAK DEMİRBÜKER' },
+      { ogrNo: '2017', adSoyad: 'ENES BATIN KIRILMAZ' },
+      { ogrNo: '2021', adSoyad: 'BAHAR ÖNCEL' }
+    ];
+    const ikiDersKasa = {
+      aktifDersId: 'ders-blg-101',
+      dersler: [
+        {
+          id: 'ders-blg-101',
+          kod: 'BLG-101',
+          ad: 'Bilgisayar Ağları',
+          ogrenciler: blgOgrenciler,
+          sinavYapisi: { sinavKodu: 'BLG101-VIZE', dersAd: 'Bilgisayar Ağları', dySayisi: 10, testSayisi: 10, klasikSayisi: 0 },
+          kayitliSinavlar: [{ id: 'sin-blg-1', ad: 'Vize', yapi: { dySayisi: 10, testSayisi: 10, klasikSayisi: 0 } }]
+        },
+        {
+          id: 'ders-ag-202',
+          kod: 'AG-202',
+          ad: 'Yönlendirme ve Anahtarlama',
+          ogrenciler: agOgrenciler,
+          sinavYapisi: { sinavKodu: 'AG202-VIZE', dersAd: 'Yönlendirme ve Anahtarlama', dySayisi: 15, testSayisi: 10, klasikSayisi: 0 },
+          kayitliSinavlar: []
+        }
+      ],
+      hocaHesap: { kullaniciAdi: 'hoca', sifre: 'PAROLA_SIZMAZ', adSoyad: 'Demo Hoca' }
+    };
+    const kasaOnce = await httpHamIstek(port, 'GET', '/api/bulut-kasa', null, { Authorization: `Bearer ${token3}` });
+    const putIkiDers = await httpHamIstek(
+      port,
+      'PUT',
+      '/api/bulut-kasa',
+      {
+        veri: ikiDersKasa,
+        bazRevizyonNo: kasaOnce.body && kasaOnce.body.revizyonNo,
+        silmeOnayi: true,
+        zorlaEz: true,
+        islemNotu: 'Mobil ders izolasyon testi'
+      },
+      { Authorization: `Bearer ${token3}` }
+    );
+    const mobilDersYanit = await httpHamIstek(port, 'GET', '/api/mobil-ders-paketleri', null, { Authorization: `Bearer ${token3}` });
+    const mobilDersMetin = JSON.stringify(mobilDersYanit.body || {});
+    kontrol(
+      'GET /api/mobil-ders-paketleri 2 dersi tam öğrenci listeleriyle döner ve parola sızdırmaz',
+      putIkiDers.status === 200 &&
+        mobilDersYanit.status === 200 &&
+        mobilDersYanit.body.basarili === true &&
+        Array.isArray(mobilDersYanit.body.dersler) &&
+        mobilDersYanit.body.dersler.length === 2 &&
+        mobilDersYanit.body.dersler[0].ogrenciler.length === 12 &&
+        mobilDersYanit.body.dersler[1].ogrenciler.length === 3 &&
+        !mobilDersMetin.includes('PAROLA_SIZMAZ'),
+      JSON.stringify({ status: mobilDersYanit.status, adet: mobilDersYanit.body && mobilDersYanit.body.dersler && mobilDersYanit.body.dersler.length })
+    );
+
+    // Test A + Test B + Test C (Mobil PWA)
+    const pwaTestSayfa = await tarayici.newPage();
+    const pwaTestHatalar = [];
+    pwaTestSayfa.on('pageerror', (e) => pwaTestHatalar.push(e.message));
+    await pwaTestSayfa.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await pwaTestSayfa.evaluateOnNewDocument(() => {
+      window.__mobilGercekKullaniciZorla = true;
+    });
+    const omrTokRes = await httpHamIstek(port, 'POST', '/api/omr-eslesme-token', {}, { Authorization: `Bearer ${token3}` });
+    const omrTok3 = omrTokRes.body && omrTokRes.body.omrToken;
+    const ogrQrBlg = Cekirdek.uretOgrenciQrPaketi(blgOgrenciler, {
+      tabanAdres: taban,
+      hedefSayfa: 'optik-mobil.html',
+      dersId: 'ders-blg-101',
+      dersKod: 'BLG-101',
+      dersAd: 'Bilgisayar Ağları',
+      omrToken: omrTok3
+    });
+    await pwaTestSayfa.goto(ogrQrBlg.tekUrl, { waitUntil: 'networkidle0' });
+    await bekle(450);
+
+    // Test A: Gerçek kullanıcı modunda kamera yokken Oku / Oto basınca ASLA sahte sonuç üretilmez
+    await pwaTestSayfa.click('#btn-mobil-kare-oku');
+    await bekle(200);
+    await pwaTestSayfa.click('#btn-mobil-seri-tara');
+    await bekle(200);
+    const gercekKullaniciKoruma = await pwaTestSayfa.evaluate(() => {
+      const d = window.__mobilDurumOku();
+      const bildirim = document.getElementById('mobil-genel-bildirim');
+      return {
+        okumaSayisi: d.okumaSonuclari.length,
+        bildirimGorunur: Boolean(bildirim && !bildirim.hidden),
+        bildirimMetin: bildirim ? bildirim.textContent : ''
+      };
+    });
+    kontrol(
+      'Mobil PWA gerçek kullanıcı modunda kamera yokken asla sahte öğrenci puanı uydurmaz',
+      gercekKullaniciKoruma.okumaSayisi === 0 && gercekKullaniciKoruma.bildirimGorunur,
+      JSON.stringify(gercekKullaniciKoruma)
+    );
+
+    // Test B: Liste sekmesinde 2 ders + 12 öğrenci + 0 yatay taşma ve ders bazlı izolasyon
+    await pwaTestSayfa.click('[data-msekme="m-panel-liste"]');
+    await bekle(250);
+    const blgListeDurum = await pwaTestSayfa.evaluate(() => {
+      const sel = document.getElementById('mobil-aktif-ders-sec');
+      const satirlar = document.querySelectorAll('#mobil-tablo-sinif-yoklama tr');
+      return {
+        dersSecenekSayisi: sel ? sel.options.length : 0,
+        seciliDers: sel ? sel.value : '',
+        satirSayisi: satirlar.length,
+        ilkSatirMetin: satirlar[0] ? satirlar[0].textContent : '',
+        yoklamaRozet: document.getElementById('mobil-yoklama-ozet-rozet').textContent,
+        tasmaYok: document.documentElement.scrollWidth <= window.innerWidth
+      };
+    });
+    // İkinci derse (ders-ag-202) geç -> 3 öğrenci ve 0 okuma görmeliyiz
+    await pwaTestSayfa.select('#mobil-aktif-ders-sec', 'ders-ag-202');
+    await bekle(200);
+    const agListeDurum = await pwaTestSayfa.evaluate(() => ({
+      satirSayisi: document.querySelectorAll('#mobil-tablo-sinif-yoklama tr').length,
+      ilkSatir: document.getElementById('mobil-tablo-sinif-yoklama').textContent,
+      okumaSayi: window.__mobilDurumOku().okumaSonuclari.length,
+      tasmaYok: document.documentElement.scrollWidth <= window.innerWidth
+    }));
+    // Tekrar BLG-101'e dön
+    await pwaTestSayfa.select('#mobil-aktif-ders-sec', 'ders-blg-101');
+    await bekle(200);
+    kontrol(
+      'Mobil PWA Liste sekmesinde dersler ve tüm sınıf öğrencileri ders bazında izole listelenir (0 yatay taşma)',
+      blgListeDurum.dersSecenekSayisi === 2 &&
+        blgListeDurum.satirSayisi === 12 &&
+        blgListeDurum.yoklamaRozet.includes('0 / 12') &&
+        blgListeDurum.tasmaYok &&
+        agListeDurum.satirSayisi === 3 &&
+        agListeDurum.ilkSatir.includes('BURAK DEMİRBÜKER') &&
+        agListeDurum.okumaSayi === 0 &&
+        agListeDurum.tasmaYok,
+      JSON.stringify({ blgListeDurum, agListeDurum })
+    );
+
+    // Test C (Mobil): Kağıttan Anahtar Oku -> 10 D/Y=Y + 10 Test=C kağıdını okuyup anahtarı günceller, öğrenci puanı eklemez
+    await pwaTestSayfa.click('[data-msekme="m-panel-anahtar"]');
+    await bekle(200);
+    await pwaTestSayfa.evaluate(() => {
+      const C = window.SinavOptikCekirdek;
+      const canvas = document.getElementById('mobil-canvas-vizor');
+      const d = window.__mobilDurumOku();
+      C.cizSentetikOptikFormCanvas(canvas, d.sinavYapisi, {
+        grup: 'A',
+        ogrNoKod: '01',
+        dyCevaplar: Array(d.sinavYapisi.dySayisi).fill('Y'),
+        testCevaplar: Array(d.sinavYapisi.testSayisi).fill('C'),
+        klasikPuanlar: []
+      });
+    });
+    await pwaTestSayfa.click('#btn-master-kagit-okut');
+    await bekle(300);
+    const mobilAnahtarOkuDurum = await pwaTestSayfa.evaluate(() => {
+      const d = window.__mobilDurumOku();
+      const onay = document.getElementById('mobil-anahtar-kayit-onay');
+      const dyHepsiY = d.sinavYapisi.cevapAnahtarlari.A.dy.slice(0, d.sinavYapisi.dySayisi).every((v) => v === 'Y');
+      const testHepsiC = d.sinavYapisi.cevapAnahtarlari.A.test.slice(0, d.sinavYapisi.testSayisi).every((v) => v === 'C');
+      return {
+        dyHepsiY,
+        testHepsiC,
+        okumaSayisi: d.okumaSonuclari.length,
+        onayGorunur: Boolean(onay && !onay.hidden),
+        onayMetin: onay ? onay.textContent : '',
+        tasmaYok: document.documentElement.scrollWidth <= window.innerWidth
+      };
+    });
+    kontrol(
+      'Mobil "Kağıttan Anahtar Oku" işaretli öğretmen kağıdından D/Y ve Test cevaplarını çıkarır ve sahte öğrenci kaydı eklemez',
+      mobilAnahtarOkuDurum.dyHepsiY &&
+        mobilAnahtarOkuDurum.testHepsiC &&
+        mobilAnahtarOkuDurum.okumaSayisi === 0 &&
+        mobilAnahtarOkuDurum.onayGorunur &&
+        mobilAnahtarOkuDurum.tasmaYok &&
+        pwaTestHatalar.length === 0,
+      JSON.stringify({ mobilAnahtarOkuDurum, pwaTestHatalar })
+    );
+
+    // Test C (Masaüstü): index.html dosya yüklemeli "Kağıttan Anahtar Oku" (temiz sekmede)
+    const masterPngDataUrl = await pwaTestSayfa.evaluate(() => {
+      const C = window.SinavOptikCekirdek;
+      const tmp = document.createElement('canvas');
+      const d = window.__mobilDurumOku();
+      C.cizSentetikOptikFormCanvas(tmp, d.sinavYapisi, {
+        grup: 'A',
+        ogrNoKod: '01',
+        dyCevaplar: Array(d.sinavYapisi.dySayisi).fill('Y'),
+        testCevaplar: Array(d.sinavYapisi.testSayisi).fill('C'),
+        klasikPuanlar: []
+      });
+      return tmp.toDataURL('image/png');
+    });
+    await pwaTestSayfa.close();
+
+    const masaMasterSayfa = await tarayici.newPage();
+    const masaMasterHatalar = [];
+    masaMasterSayfa.on('pageerror', (e) => masaMasterHatalar.push(e.message));
+    await masaMasterSayfa.setViewport({ width: 1280, height: 840 });
+    await masaMasterSayfa.goto(`${taban}/index.html`, { waitUntil: 'networkidle0' });
+    await masaMasterSayfa.evaluate(() => {
+      document.getElementById('hoca-giris-kullanici').value = 'hoca';
+      document.getElementById('hoca-giris-sifre').value = 'Demo!Hoca2026';
+      document.getElementById('btn-hoca-giris-yap').click();
+    });
+    await bekle(650);
+    await masaMasterSayfa.evaluate(() => {
+      const kapat = document.getElementById('btn-modal-hoca-kapat');
+      const m = document.getElementById('modal-hoca-giris');
+      if (kapat && m && getComputedStyle(m).display !== 'none') kapat.click();
+    });
+    await masaMasterSayfa.click('[data-sekme="sekme-omr"]');
+    await bekle(200);
+    const geciciMasterPng = path.join(KOK, '.gecici-master-anahtar.png');
+    fs.writeFileSync(geciciMasterPng, Buffer.from(masterPngDataUrl.split(',')[1], 'base64'));
+    const masaMasterInput = await masaMasterSayfa.$('#input-omr-ogretmen-kagit-foto');
+    await masaMasterInput.uploadFile(geciciMasterPng);
+    await bekle(550);
+    try { fs.unlinkSync(geciciMasterPng); } catch (_) {}
+    const masaMasterSonuc = await masaMasterSayfa.evaluate(() => {
+      const el = document.getElementById('etiket-omr-anahtar-oku-sonuc');
+      const dyInp = document.getElementById('omr-anahtar-a-dy');
+      const testInp = document.getElementById('omr-anahtar-a-test');
+      const hariciAktif = document.getElementById('ayar-omr-harici-anahtar-aktif');
+      return {
+        sonucGorunur: Boolean(el && !el.hidden),
+        sonucMetin: el ? el.textContent : '',
+        dyVal: dyInp ? dyInp.value.trim() : '',
+        testVal: testInp ? testInp.value.trim() : '',
+        hariciAktif: Boolean(hariciAktif && hariciAktif.checked)
+      };
+    });
+    await masaMasterSayfa.close();
+    kontrol(
+      'Masaüstü Stüdyo "Kağıttan Anahtar Oku" dosya yüklemesinden anahtarı çıkarır ve geri bildirim gösterir',
+      masaMasterSonuc.sonucGorunur &&
+        masaMasterSonuc.sonucMetin.includes('anahtarı otomatik çıkarıldı') &&
+        masaMasterSonuc.hariciAktif &&
+        masaMasterSonuc.dyVal === 'YYYYYYYYYY' &&
+        masaMasterSonuc.testVal.startsWith('CCCCCCCCCC') &&
+        masaMasterHatalar.length === 0,
+      JSON.stringify({ masaMasterSonuc, masaMasterHatalar })
+    );
 
     kontrol('Masaüstü oturumu boyunca sıfır sayfa JS hatası', sayfaHatalari.length === 0, sayfaHatalari.join(' | '));
     await sayfa.close();

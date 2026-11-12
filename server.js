@@ -580,6 +580,26 @@ function istekIsleyici(req, res) {
     return;
   }
 
+  // 0a-1d. Mobil OMR için Ders Bazlı Hafif Paketler (Öğretmen veya OMR Eşleşme Tokenı ile)
+  if (req.method === 'GET' && yol === '/api/mobil-ders-paketleri') {
+    const token = cozHocaTokenIstekten(req, null, urlNesne);
+    const yetki = dogrulaOmrVeyaHocaToken(token, '');
+    if (!yetki) {
+      return gonderJson(res, 401, { hata: 'Ders ve öğrenci listelerini çekmek için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+    }
+    const kullaniciAdi = String((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca';
+    const mevcut = sunucuDurumu.bulutKasalar.get(kullaniciAdi) || null;
+    const temizVeri = mevcut && mevcut.veri ? Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(mevcut.veri))) : {};
+    const dersler = Cekirdek.uretMobilDersPaketleriOzeti(temizVeri);
+    return gonderJson(res, 200, {
+      basarili: true,
+      kullaniciAdi,
+      revizyonNo: mevcut ? (mevcut.revizyonNo || 0) : 0,
+      guncellemeMs: mevcut ? (mevcut.guncellemeMs || 0) : 0,
+      dersler
+    });
+  }
+
   // 0a-2. Davet Kodlu Yeni Hoca Başvurusu (Yönetici Onayına Düşer — Asla Otomatik Oturum Açmaz)
   if (req.method === 'POST' && yol === '/api/hoca-basvuru') {
     okuJsonGovde(req)

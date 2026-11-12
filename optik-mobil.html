@@ -160,6 +160,58 @@
       margin: 0;
       touch-action: manipulation;
     }
+    .mobil-genel-bildirim {
+      position: fixed;
+      top: 50px;
+      left: 10px;
+      right: 10px;
+      z-index: 260;
+      padding: 9px 12px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid #38bdf8;
+      color: #f8fafc;
+      font-size: 12.5px;
+      font-weight: 600;
+      line-height: 1.35;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .mobil-genel-bildirim[hidden] {
+      display: none !important;
+    }
+    .mobil-genel-bildirim.tur-basari {
+      background: rgba(20, 83, 45, 0.96);
+      border-color: #4ade80;
+    }
+    .mobil-genel-bildirim.tur-uyari {
+      background: rgba(146, 64, 14, 0.96);
+      border-color: #fbbf24;
+    }
+    .vizor-master-mod-bant {
+      position: absolute;
+      top: 56px;
+      left: 12px;
+      right: 12px;
+      z-index: 27;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(30, 58, 138, 0.95);
+      border: 1px solid #60a5fa;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .vizor-master-mod-bant[hidden] {
+      display: none !important;
+    }
     .vizor-uyari-bant {
       position: absolute;
       left: 12px;
@@ -441,6 +493,11 @@
     </div>
   </header>
 
+  <div id="mobil-genel-bildirim" class="mobil-genel-bildirim" role="status" aria-live="polite" hidden>
+    <span id="mobil-genel-bildirim-metin"></span>
+    <button type="button" class="btn btn-kucuk" id="btn-mobil-genel-bildirim-kapat" style="padding:2px 8px; min-height:28px;">✕</button>
+  </div>
+
   <main>
 
     <!-- ====================================================================
@@ -452,6 +509,10 @@
       <div class="vizor-kutu" id="mobil-vizor-dis-kutu">
         <div id="mobil-vizor-canli-hud" class="vizor-canli-hud" hidden></div>
         <div id="m-uyari" class="vizor-uyari-bant" role="alert" hidden></div>
+        <div id="mobil-master-mod-bant" class="vizor-master-mod-bant" hidden>
+          <span>🔑 Anahtar Okuma Modu: Öğretmen cevap kağıdını hizalayın veya fotoğraf seçin.</span>
+          <button type="button" class="btn btn-kucuk" id="btn-master-mod-iptal" style="padding:3px 8px; min-height:30px;">İptal</button>
+        </div>
         <video id="mobil-video" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover; display:none;"></video>
         <canvas id="mobil-canvas-vizor" width="800" height="420" style="width:100%; max-height:100%; object-fit:contain; display:block;"></canvas>
         <div class="vizor-kilavuz"></div>
@@ -565,11 +626,17 @@
          ==================================================================== -->
     <section class="sekme-panel" id="m-panel-anahtar">
       <div class="kart">
-        <div class="kart-baslik">
+        <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;">
           <span>1. Optik Form Soru Yapısı</span>
-          <button type="button" class="btn btn-kucuk" id="btn-master-kagit-okut" title="İşaretlenmiş öğretmen kağıdını okutarak cevap anahtarı yap">
-            Kağıttan Anahtar Oku
-          </button>
+          <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-master-kagit-okut" title="İşaretlenmiş öğretmen kağıdının fotoğrafını seçerek veya kameradan okuyarak cevap anahtarı yap">
+              Kağıttan Anahtar Oku
+            </button>
+            <button type="button" class="btn btn-kucuk" id="btn-master-kameradan-okut" title="Canlı kamerayı açıp öğretmen cevap kağıdını doğrudan vizörden okut">
+              Kameradan Oku
+            </button>
+            <input type="file" id="input-mobil-master-foto" accept="image/*" style="display:none;" />
+          </div>
         </div>
 
         <div class="form-satir">
@@ -693,6 +760,31 @@
          MOD 3: OKUNAN KAĞITLAR, İNCELEME KUYRUĞU VE DIŞA AKTARIM
          ==================================================================== -->
     <section class="sekme-panel" id="m-panel-liste">
+      <div class="kart" id="mobil-ders-secici-kart" style="margin-bottom:0.75rem;">
+        <div class="kart-baslik" style="flex-wrap:wrap; gap:0.35rem;">
+          <span>📚 Aktif Ders & Bulut Senkron</span>
+          <span class="rozet rozet-mavi" id="mobil-ders-ogr-sayac-rozet">0 Öğrenci</span>
+        </div>
+        <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap; margin-bottom:0.4rem;">
+          <select id="mobil-aktif-ders-sec" aria-label="Aktif Ders Seçimi" style="flex:1; min-width:160px; font-size:0.82rem;"></select>
+          <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-bulut-ders-cek" style="white-space:nowrap;">☁️ Buluttan Çek</button>
+          <button type="button" class="btn btn-kucuk" id="btn-mobil-hoca-giris-ac" style="white-space:nowrap;">🔑 Giriş</button>
+        </div>
+        <div id="mobil-bulut-ders-durum" style="font-size:0.74rem; color:var(--metin-ikincil);"></div>
+        <div id="kutu-mobil-hoca-giris" hidden style="margin-top:0.5rem; padding:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px;">
+          <div style="font-size:0.76rem; font-weight:600; margin-bottom:0.35rem;">Eğitmen Bulut Girişi (Ders ve Öğrenci Listesi Eşitleme)</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.35rem; margin-bottom:0.35rem;">
+            <input type="text" id="mobil-hoca-kadi" placeholder="Kullanıcı adı" autocomplete="username" style="font-size:0.8rem; min-width:0;" />
+            <input type="password" id="mobil-hoca-sifre" placeholder="Şifre" autocomplete="current-password" style="font-size:0.8rem; min-width:0;" />
+          </div>
+          <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;">
+            <button type="button" class="btn btn-basari btn-kucuk" id="btn-mobil-hoca-giris-yap">Giriş Yap ve Dersleri Çek</button>
+            <button type="button" class="btn btn-kucuk" id="btn-mobil-hoca-giris-kapat">Kapat</button>
+          </div>
+          <div id="mobil-hoca-hata" hidden style="margin-top:0.35rem; font-size:0.76rem; color:#fca5a5; font-weight:600;"></div>
+        </div>
+      </div>
+
       <div class="kart">
         <div class="kart-baslik">
           <span>Sınıf Özeti ve Dışa Aktarım</span>
@@ -733,6 +825,28 @@
               </tr>
             </thead>
             <tbody id="mobil-tablo-okunanlar"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="kart" id="mobil-ders-ogrenci-listesi-kart" style="margin-top:0.75rem;">
+        <div class="kart-baslik" style="flex-wrap:wrap; gap:0.35rem;">
+          <span>👥 Ders Öğrenci Listesi</span>
+          <span class="rozet rozet-yesil" id="mobil-yoklama-ozet-rozet">0 / 0 Okundu</span>
+        </div>
+        <div style="margin-bottom:0.45rem;">
+          <input type="text" id="girdi-mobil-sinif-ara" placeholder="Ders listesinde numara veya ad ara..." style="width:100%; font-size:0.8rem; box-sizing:border-box;" />
+        </div>
+        <div class="tablo-sarmal" style="overflow-x:auto; max-width:100%;">
+          <table class="veri-tablo" id="mobil-tablo-sinif-yoklama-el">
+            <thead>
+              <tr>
+                <th>Öğr. No</th>
+                <th>Ad Soyad</th>
+                <th>Durum / Puan</th>
+              </tr>
+            </thead>
+            <tbody id="mobil-tablo-sinif-yoklama"></tbody>
           </table>
         </div>
       </div>
@@ -799,6 +913,8 @@
       let mobilQrParcaIdx = 0;
       let aktifEslestirKayitId = '';
       let eslestirmeModalAcikMi = false;
+      let masterAnahtarModu = false;
+      let mobilBildirimZamanlayici = null;
       let sonSilinenMobilYedek = null;
       let bekleyenKagitOqv2 = '';
       let mobilUzlasmaZamanlayici = null;
@@ -874,10 +990,278 @@
             }
           }
         },
+        dersId: 'varsayilan',
+        dersKod: '',
+        dersPaketleriHaritasi: {},
         ogrenciler: [],
         okumaSonuclari: [],
         omrYetkiToken: ''
       };
+
+      function gercekKullaniciTarayicisiMi() {
+        return Boolean(
+          window.__mobilGercekKullaniciZorla ||
+          (!navigator.webdriver && !window.__mobilSentetikTestModu)
+        );
+      }
+
+      function setMasterAnahtarModu(acikMi) {
+        masterAnahtarModu = Boolean(acikMi);
+        const bant = document.getElementById('mobil-master-mod-bant');
+        if (bant) bant.hidden = !masterAnahtarModu;
+      }
+
+      function temizDersAnahtari(ham) {
+        const s = String(ham || '').trim().replace(/[^0-9A-Za-z_.-]/g, '_').slice(0, 64);
+        return s || 'varsayilan';
+      }
+
+      function kopyalaMobilSinavYapisi(y) {
+        try {
+          return JSON.parse(JSON.stringify(y || {}));
+        } catch (_) {
+          return Object.assign({}, y || {});
+        }
+      }
+
+      function guncelleMobilDersPaketKaydi() {
+        const id = temizDersAnahtari(mobilDurum.dersId || 'varsayilan');
+        mobilDurum.dersId = id;
+        const mevcut = mobilDurum.dersPaketleriHaritasi[id] || {};
+        mobilDurum.dersPaketleriHaritasi[id] = {
+          id,
+          kod: mobilDurum.dersKod || mevcut.kod || (mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.sinavKodu) || '',
+          ad: (mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.dersAd) || mevcut.ad || 'Aktif Ders',
+          ogrenciler: Array.isArray(mobilDurum.ogrenciler) ? mobilDurum.ogrenciler.slice() : [],
+          sinavYapisi: kopyalaMobilSinavYapisi(mobilDurum.sinavYapisi),
+          okumaSonuclari: Array.isArray(mobilDurum.okumaSonuclari) ? mobilDurum.okumaSonuclari.slice() : [],
+          guncellemeMs: Date.now()
+        };
+      }
+
+      function guncelleMobilDersSeciciUI() {
+        const sel = document.getElementById('mobil-aktif-ders-sec');
+        const rozet = document.getElementById('mobil-ders-ogr-sayac-rozet');
+        if (rozet) rozet.textContent = `${mobilDurum.ogrenciler.length} Öğrenci`;
+        if (!sel) return;
+        guncelleMobilDersPaketKaydi();
+        if (mobilDurum.dersId !== 'varsayilan' && mobilDurum.dersPaketleriHaritasi.varsayilan) {
+          const vp = mobilDurum.dersPaketleriHaritasi.varsayilan;
+          if ((!vp.ogrenciler || vp.ogrenciler.length === 0) && (!vp.okumaSonuclari || vp.okumaSonuclari.length === 0)) {
+            delete mobilDurum.dersPaketleriHaritasi.varsayilan;
+          }
+        }
+        const kayitlar = Object.values(mobilDurum.dersPaketleriHaritasi || {});
+        if (kayitlar.length === 0) {
+          sel.innerHTML = `<option value="varsayilan">Genel Sınav (${mobilDurum.ogrenciler.length} Öğr.)</option>`;
+          sel.value = 'varsayilan';
+          return;
+        }
+        sel.innerHTML = kayitlar
+          .map((d) => {
+            const etiket = d.kod && !String(d.ad || '').includes(d.kod) ? `${d.kod} — ${d.ad}` : (d.ad || d.kod || d.id);
+            const ogrAdet = Array.isArray(d.ogrenciler) ? d.ogrenciler.length : 0;
+            const okunanAdet = Array.isArray(d.okumaSonuclari) ? d.okumaSonuclari.length : 0;
+            return `<option value="${C.kacisHTML(d.id)}">${C.kacisHTML(etiket)} (${ogrAdet} Öğr. · ${okunanAdet} Okunan)</option>`;
+          })
+          .join('');
+        if (mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId]) {
+          sel.value = mobilDurum.dersId;
+        }
+      }
+
+      function secMobilAktifDers(hedefDersId, secenek = {}) {
+        const hedefId = temizDersAnahtari(hedefDersId || 'varsayilan');
+        if (!secenek.kaydetmeAtla && mobilDurum.dersId) {
+          guncelleMobilDersPaketKaydi();
+        }
+        const hedefPaket = mobilDurum.dersPaketleriHaritasi[hedefId];
+        mobilDurum.dersId = hedefId;
+        if (hedefPaket) {
+          mobilDurum.dersKod = hedefPaket.kod || '';
+          mobilDurum.ogrenciler = Array.isArray(hedefPaket.ogrenciler) ? hedefPaket.ogrenciler.slice() : [];
+          mobilDurum.okumaSonuclari = Array.isArray(hedefPaket.okumaSonuclari) ? hedefPaket.okumaSonuclari.slice() : [];
+          if (hedefPaket.sinavYapisi && typeof hedefPaket.sinavYapisi === 'object') {
+            delete mobilDurum.sinavYapisi.soruPuanlari;
+            Object.assign(mobilDurum.sinavYapisi, kopyalaMobilSinavYapisi(hedefPaket.sinavYapisi));
+          } else if (hedefPaket.ad) {
+            mobilDurum.sinavYapisi.dersAd = hedefPaket.ad;
+          }
+          if (hedefPaket.ad) mobilDurum.sinavYapisi.dersAd = hedefPaket.ad;
+        }
+        const dyEl = document.getElementById('m-ayar-dy');
+        const testEl = document.getElementById('m-ayar-test');
+        const klEl = document.getElementById('m-ayar-klasik');
+        if (dyEl) dyEl.value = String(mobilDurum.sinavYapisi.dySayisi);
+        if (testEl) testEl.value = String(mobilDurum.sinavYapisi.testSayisi);
+        if (klEl) klEl.value = String(mobilDurum.sinavYapisi.klasikSayisi);
+        if (typeof uygulaMobil100PuanNormalizasyon === 'function') {
+          uygulaMobil100PuanNormalizasyon(
+            mobilDurum.sinavYapisi.dyToplamPuan !== undefined
+              ? {
+                  dyToplamPuan: mobilDurum.sinavYapisi.dyToplamPuan,
+                  testToplamPuan: mobilDurum.sinavYapisi.testToplamPuan,
+                  klasikToplamPuan: mobilDurum.sinavYapisi.klasikToplamPuan
+                }
+              : null,
+            true
+          );
+        }
+        if (!secenek.depoyaYazmaAtla && typeof kaydetYerelDepoya === 'function') kaydetYerelDepoya();
+        if (typeof guncelleUstOzet === 'function') guncelleUstOzet();
+        if (typeof cizDokunmatikAnahtarEditoru === 'function') cizDokunmatikAnahtarEditoru();
+        if (typeof guncelleMobilSonucListesi === 'function') guncelleMobilSonucListesi();
+        if (typeof cizMobilOgrenciQrBilgisayara === 'function') cizMobilOgrenciQrBilgisayara();
+        guncelleMobilDersSeciciUI();
+      }
+
+      function uygulaGelenDersOgrenciPaketi(paket, secenek = {}) {
+        if (!paket || !Array.isArray(paket.ogrenciler)) return;
+        const gelenId = String(paket.dersId || '').trim();
+        const gelenKod = String(paket.dersKod || '').trim();
+        const gelenAd = String(paket.dersAd || '').trim();
+        const mevcutVarsayilanBosMu =
+          mobilDurum.dersId === 'varsayilan' &&
+          mobilDurum.ogrenciler.length === 0 &&
+          mobilDurum.okumaSonuclari.length === 0;
+        const hedefId = gelenId
+          ? temizDersAnahtari(gelenId)
+          : (gelenKod || gelenAd ? temizDersAnahtari(gelenKod || gelenAd) : (mevcutVarsayilanBosMu ? 'varsayilan' : mobilDurum.dersId));
+
+        if (!mobilDurum.dersPaketleriHaritasi[hedefId]) {
+          const bazYapi = kopyalaMobilSinavYapisi(mobilDurum.sinavYapisi);
+          if (gelenAd) bazYapi.dersAd = gelenAd;
+          if (gelenKod) bazYapi.sinavKodu = gelenKod + '-SINAV';
+          mobilDurum.dersPaketleriHaritasi[hedefId] = {
+            id: hedefId,
+            kod: gelenKod,
+            ad: gelenAd || bazYapi.dersAd || 'Aktif Ders',
+            ogrenciler: [],
+            sinavYapisi: bazYapi,
+            okumaSonuclari: [],
+            guncellemeMs: Date.now()
+          };
+        }
+        const hedef = mobilDurum.dersPaketleriHaritasi[hedefId];
+        hedef.ogrenciler = paket.ogrenciler.slice();
+        if (gelenKod) hedef.kod = gelenKod;
+        if (gelenAd) {
+          hedef.ad = gelenAd;
+          if (hedef.sinavYapisi) hedef.sinavYapisi.dersAd = gelenAd;
+        }
+        hedef.guncellemeMs = Date.now();
+        secMobilAktifDers(hedefId, {
+          kaydetmeAtla: true,
+          depoyaYazmaAtla: Boolean(secenek.depoyaYazmaAtla)
+        });
+      }
+
+      async function senkronizeEtBulutMobilDersler(secenek = {}) {
+        const sessiz = Boolean(secenek && secenek.sessiz);
+        const durumEl = document.getElementById('mobil-bulut-ders-durum');
+        const girisKutu = document.getElementById('kutu-mobil-hoca-giris');
+        const hataEl = document.getElementById('mobil-hoca-hata');
+        const token = alAktifMobilHocaToken();
+        if (!token) {
+          if (durumEl) durumEl.textContent = '🔒 Buluttan ders listesini çekmek için giriş yapın veya stüdyodan QR okutun.';
+          if (!sessiz && girisKutu) girisKutu.hidden = false;
+          return false;
+        }
+        if (durumEl) durumEl.textContent = '☁️ Bulut ders ve öğrenci paketleri eşitleniyor...';
+        try {
+          const yanit = await fetch('/api/mobil-ders-paketleri', {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store'
+          });
+          if (yanit.status === 401 || yanit.status === 403) {
+            mobilDurum.omrYetkiToken = '';
+            try { sessionStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
+            if (durumEl) durumEl.textContent = '🔒 Oturum süresi doldu (401). Lütfen yeniden giriş yapın.';
+            if (hataEl) {
+              hataEl.textContent = 'Oturum doğrulanamadı (401/403). Tekrar giriş yapın.';
+              hataEl.hidden = false;
+            }
+            if (!sessiz && girisKutu) girisKutu.hidden = false;
+            return false;
+          }
+          const veri = await yanit.json();
+          if (!yanit.ok || !veri || !veri.basarili || !Array.isArray(veri.dersler)) {
+            if (durumEl) durumEl.textContent = `⚠️ Bulut ders yanıtı alınamadı: ${(veri && veri.hata) || yanit.status}`;
+            return false;
+          }
+          let ilkDersId = '';
+          const aktifDersIdSimdi = temizDersAnahtari(mobilDurum.dersId || 'varsayilan');
+          const hashOzelYukVar = Boolean(
+            location.hash && (location.hash.includes('setup=') || location.hash.includes('ogr='))
+          );
+          veri.dersler.forEach((d) => {
+            const id = temizDersAnahtari(d.id);
+            if (!ilkDersId) ilkDersId = id;
+            const eski = mobilDurum.dersPaketleriHaritasi[id] || {};
+            const aktifMi = id === aktifDersIdSimdi;
+            const yapi = aktifMi
+              ? kopyalaMobilSinavYapisi(mobilDurum.sinavYapisi)
+              : kopyalaMobilSinavYapisi(eski.sinavYapisi || d.aktifSinavYapisi || mobilDurum.sinavYapisi);
+            yapi.dersAd = d.ad || d.kod || yapi.dersAd;
+            if (!aktifMi && !eski.sinavYapisi && d.aktifSinavYapisi && typeof d.aktifSinavYapisi === 'object') {
+              Object.assign(yapi, kopyalaMobilSinavYapisi(d.aktifSinavYapisi));
+              yapi.dersAd = d.ad || yapi.dersAd;
+            }
+            const mevcutOkumalar = aktifMi
+              ? (Array.isArray(mobilDurum.okumaSonuclari) ? mobilDurum.okumaSonuclari.slice() : [])
+              : (Array.isArray(eski.okumaSonuclari) ? eski.okumaSonuclari.slice() : []);
+            mobilDurum.dersPaketleriHaritasi[id] = {
+              id,
+              kod: d.kod || eski.kod || '',
+              ad: d.ad || eski.ad || id,
+              ogrenciler: Array.isArray(d.ogrenciler) ? d.ogrenciler.slice() : (eski.ogrenciler || []),
+              sinavYapisi: yapi,
+              okumaSonuclari: mevcutOkumalar,
+              guncellemeMs: Date.now()
+            };
+          });
+          if (ilkDersId) {
+            const telefonTamamenBos =
+              !hashOzelYukVar &&
+              mobilDurum.dersId === 'varsayilan' &&
+              mobilDurum.ogrenciler.length === 0 &&
+              mobilDurum.okumaSonuclari.length === 0;
+            const mevcutSecimGecerli =
+              mobilDurum.dersId !== 'varsayilan' &&
+              Boolean(mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId]);
+            if (!sessiz) {
+              const hedefSecim = mevcutSecimGecerli ? mobilDurum.dersId : ilkDersId;
+              secMobilAktifDers(hedefSecim, { kaydetmeAtla: true });
+            } else if (telefonTamamenBos) {
+              secMobilAktifDers(ilkDersId, { kaydetmeAtla: true });
+            } else {
+              if (mevcutSecimGecerli && mobilDurum.ogrenciler.length === 0) {
+                const eslesen = mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId];
+                if (eslesen && Array.isArray(eslesen.ogrenciler) && eslesen.ogrenciler.length > 0) {
+                  mobilDurum.ogrenciler = eslesen.ogrenciler.slice();
+                }
+              }
+              kaydetYerelDepoya();
+              if (typeof guncelleUstOzet === 'function') guncelleUstOzet();
+              if (typeof guncelleMobilSinifYoklamaListesi === 'function') guncelleMobilSinifYoklamaListesi();
+              guncelleMobilDersSeciciUI();
+            }
+          } else {
+            guncelleMobilDersSeciciUI();
+          }
+          if (hataEl) { hataEl.textContent = ''; hataEl.hidden = true; }
+          if (girisKutu) girisKutu.hidden = true;
+          if (durumEl) durumEl.textContent = `☁️ ${veri.dersler.length} ders ve sınıf listeleri eşitlendi (${veri.kullaniciAdi || 'Eğitmen'}).`;
+          if (!sessiz && typeof mobilUyariGoster === 'function') {
+            mobilUyariGoster(`✅ Buluttan ${veri.dersler.length} ders ve öğrenci listesi yüklendi.`, 'basari');
+          }
+          return true;
+        } catch (err) {
+          if (durumEl) durumEl.textContent = `⚠️ Buluta erişilemedi: ${(err && err.message) || 'Ağ hatası'}`;
+          return false;
+        }
+      }
 
       function kaydetMobilHocaToken(tok) {
         const temiz = String(tok || '').trim();
@@ -929,7 +1313,11 @@
       }
 
       function etkinMobilSinavAnahtari() {
-        return temizSinavAnahtariHesapla(mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.sinavKodu);
+        const sinavKod = temizSinavAnahtariHesapla(mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.sinavKodu);
+        if (mobilDurum.dersId && mobilDurum.dersId !== 'varsayilan') {
+          return temizSinavAnahtariHesapla(mobilDurum.dersId + '__' + sinavKod);
+        }
+        return sinavKod;
       }
 
       function aktifSinavAtomikOnek() {
@@ -1068,6 +1456,28 @@
               sonYerelSifirlamaMs = Number(hamJson.tamSifirlamaMs);
             }
 
+            if (hamJson && hamJson.dersPaketleriHaritasi && typeof hamJson.dersPaketleriHaritasi === 'object') {
+              Object.keys(hamJson.dersPaketleriHaritasi).forEach((kId) => {
+                const dk = hamJson.dersPaketleriHaritasi[kId];
+                if (!dk || typeof dk !== 'object') return;
+                const temizId = temizDersAnahtari(dk.id || kId);
+                mobilDurum.dersPaketleriHaritasi[temizId] = {
+                  id: temizId,
+                  kod: String(dk.kod || ''),
+                  ad: String(dk.ad || 'Aktif Ders'),
+                  ogrenciler: Array.isArray(dk.ogrenciler) ? (C.semaDogrulaVeTemizle({ ogrenciler: dk.ogrenciler }).ogrenciler || []) : [],
+                  sinavYapisi: dk.sinavYapisi && typeof dk.sinavYapisi === 'object' ? dk.sinavYapisi : kopyalaMobilSinavYapisi(mobilDurum.sinavYapisi),
+                  okumaSonuclari: Array.isArray(dk.okumaSonuclari) ? (C.semaDogrulaVeTemizle({ okumaSonuclari: dk.okumaSonuclari }).okumaSonuclari || []) : [],
+                  guncellemeMs: Number(dk.guncellemeMs) || 0
+                };
+              });
+            }
+            if (hamJson && hamJson.aktifDersId) {
+              mobilDurum.dersId = temizDersAnahtari(hamJson.aktifDersId);
+              const aktifPaket = mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId];
+              if (aktifPaket && aktifPaket.kod) mobilDurum.dersKod = aktifPaket.kod;
+            }
+
             if (onCozulmusSetup && hedefAnahtar !== diskAnahtar) {
               const kayitliSinavListesi = hamJson && hamJson.sinavSonuclariHaritasi && hamJson.sinavSonuclariHaritasi[hedefAnahtar];
               mobilDurum.okumaSonuclari = Array.isArray(kayitliSinavListesi)
@@ -1104,8 +1514,16 @@
         if (location.hash && location.hash.includes('ogr=')) {
           try {
             const cozulmusOgr = C.cozOgrenciQrPaketi(location.hash);
+            if (cozulmusOgr && (cozulmusOgr.omrToken || cozulmusOgr.eslesmeToken)) {
+              kaydetMobilHocaToken(cozulmusOgr.omrToken || cozulmusOgr.eslesmeToken);
+            }
             if (cozulmusOgr.gecerli && cozulmusOgr.ogrenciler.length > 0) {
-              mobilDurum.ogrenciler = cozulmusOgr.ogrenciler;
+              uygulaGelenDersOgrenciPaketi({
+                dersId: cozulmusOgr.dersId || '',
+                dersKod: cozulmusOgr.dersKod || '',
+                dersAd: cozulmusOgr.dersAd || '',
+                ogrenciler: cozulmusOgr.ogrenciler
+              }, { depoyaYazmaAtla: true });
               kaydetYerelDepoya();
             }
           } catch (err) {
@@ -1114,6 +1532,12 @@
         }
 
         if (onCozulmusSetup) {
+          if (onCozulmusSetup.dersId) {
+            mobilDurum.dersId = temizDersAnahtari(onCozulmusSetup.dersId);
+          }
+          if (onCozulmusSetup.sinavKodu && !mobilDurum.dersKod) {
+            mobilDurum.dersKod = String(onCozulmusSetup.sinavKodu).replace(/-SINAV$/i, '');
+          }
           delete mobilDurum.sinavYapisi.soruPuanlari;
           Object.assign(mobilDurum.sinavYapisi, onCozulmusSetup);
           if (Array.isArray(onCozulmusSetup.ogrenciler) && onCozulmusSetup.ogrenciler.length > 0) {
@@ -1132,6 +1556,7 @@
             testToplamPuan: onCozulmusSetup.testToplamPuan,
             klasikToplamPuan: onCozulmusSetup.klasikToplamPuan
           }, true);
+          guncelleMobilDersPaketKaydi();
           kaydetYerelDepoya();
         } else {
           const atomikKayitlar = okuTumAtomikMobilKayitlar(sonYerelSifirlamaMs, silinenMobilKayitIdleri);
@@ -1185,6 +1610,7 @@
         if (ogrSayacEl) ogrSayacEl.textContent = String(mobilDurum.ogrenciler.length);
         const altSayacEl = document.getElementById('mobil-alt-sayac');
         if (altSayacEl) altSayacEl.textContent = String(mobilDurum.okumaSonuclari.length);
+        guncelleMobilDersSeciciUI();
         guncelleUstOzet();
       }
 
@@ -1301,8 +1727,14 @@
             if (cozulmusSetup.omrToken || cozulmusSetup.eslesmeToken) {
               kaydetMobilHocaToken(cozulmusSetup.omrToken || cozulmusSetup.eslesmeToken);
             }
+            if (cozulmusSetup.dersId) {
+              mobilDurum.dersId = temizDersAnahtari(cozulmusSetup.dersId);
+            }
             const eskiAnahtar = etkinMobilSinavAnahtari();
-            const yeniAnahtar = temizSinavAnahtariHesapla(cozulmusSetup.sinavKodu);
+            const yeniKodAnahtar = temizSinavAnahtariHesapla(cozulmusSetup.sinavKodu);
+            const yeniAnahtar = mobilDurum.dersId && mobilDurum.dersId !== 'varsayilan'
+              ? temizSinavAnahtariHesapla(mobilDurum.dersId + '__' + yeniKodAnahtar)
+              : yeniKodAnahtar;
             if (yeniAnahtar !== eskiAnahtar) {
               try {
                 const mDepo = JSON.parse(localStorage.getItem(MOBIL_DEPO_ANAHTAR) || '{}');
@@ -1325,23 +1757,35 @@
               testToplamPuan: cozulmusSetup.testToplamPuan,
               klasikToplamPuan: cozulmusSetup.klasikToplamPuan
             }, true);
+            guncelleMobilDersPaketKaydi();
             kaydetYerelDepoya();
             guncelleUstOzet();
             cizDokunmatikAnahtarEditoru();
             guncelleMobilSonucListesi();
             bipCal(true);
-            mobilUyariGoster(`✅ ${kaynakEtiket}: Sınav yapısı (${mobilDurum.sinavYapisi.dySayisi} D/Y + ${mobilDurum.sinavYapisi.testSayisi} Test = 100p), Cevap Anahtarı ve ${mobilDurum.ogrenciler.length} öğrenci yüklendi!`);
+            mobilUyariGoster(`✅ ${kaynakEtiket}: Sınav yapısı (${mobilDurum.sinavYapisi.dySayisi} D/Y + ${mobilDurum.sinavYapisi.testSayisi} Test = 100p), Cevap Anahtarı ve ${mobilDurum.ogrenciler.length} öğrenci yüklendi!`, 'basari');
+            if (alAktifMobilHocaToken() && navigator.onLine !== false && location.protocol.startsWith('http')) {
+              senkronizeEtBulutMobilDersler({ sessiz: true });
+            }
             return true;
           }
         }
         const cozulmusOgr = C.cozOgrenciQrPaketi(metin);
         if (cozulmusOgr && cozulmusOgr.gecerli && cozulmusOgr.ogrenciler.length > 0) {
-          mobilDurum.ogrenciler = cozulmusOgr.ogrenciler;
-          kaydetYerelDepoya();
-          guncelleUstOzet();
-          cizMobilOgrenciQrBilgisayara();
+          if (cozulmusOgr.omrToken || cozulmusOgr.eslesmeToken) {
+            kaydetMobilHocaToken(cozulmusOgr.omrToken || cozulmusOgr.eslesmeToken);
+          }
+          uygulaGelenDersOgrenciPaketi({
+            dersId: cozulmusOgr.dersId || '',
+            dersKod: cozulmusOgr.dersKod || '',
+            dersAd: cozulmusOgr.dersAd || '',
+            ogrenciler: cozulmusOgr.ogrenciler
+          });
           bipCal(true);
-          mobilUyariGoster(`✅ ${kaynakEtiket}: ${cozulmusOgr.ogrenciler.length} kişilik öğrenci listesi telefona yüklendi!`);
+          mobilUyariGoster(`✅ ${kaynakEtiket}: ${cozulmusOgr.ogrenciler.length} kişilik öğrenci listesi (${cozulmusOgr.dersAd || 'Aktif Ders'}) telefona yüklendi!`, 'basari');
+          if (alAktifMobilHocaToken() && navigator.onLine !== false && location.protocol.startsWith('http')) {
+            senkronizeEtBulutMobilDersler({ sessiz: true });
+          }
           return true;
         }
         return false;
@@ -1601,10 +2045,28 @@
           mevcut.mobilSinavYapisi = mobilDurum.sinavYapisi;
           if (Array.isArray(mobilDurum.ogrenciler) && mobilDurum.ogrenciler.length > 0) {
             mevcut.ogrenciler = mobilDurum.ogrenciler;
-          } else if (Array.isArray(mevcut.ogrenciler) && mevcut.ogrenciler.length > 0) {
+          } else if (Array.isArray(mevcut.ogrenciler) && mevcut.ogrenciler.length > 0 && (!mobilDurum.dersId || mobilDurum.dersId === 'varsayilan')) {
             mobilDurum.ogrenciler = mevcut.ogrenciler;
           }
+          guncelleMobilDersPaketKaydi();
+          mevcut.aktifDersId = mobilDurum.dersId;
+          const temizDersHarita = {};
+          Object.keys(mobilDurum.dersPaketleriHaritasi || {}).forEach((dId) => {
+            const dp = mobilDurum.dersPaketleriHaritasi[dId];
+            if (!dp || typeof dp !== 'object') return;
+            temizDersHarita[dId] = {
+              id: dp.id || dId,
+              kod: dp.kod || '',
+              ad: dp.ad || '',
+              ogrenciler: Array.isArray(dp.ogrenciler) ? dp.ogrenciler : [],
+              sinavYapisi: dp.sinavYapisi || {},
+              okumaSonuclari: (Array.isArray(dp.okumaSonuclari) ? dp.okumaSonuclari : []).map((s) => hafifletMobilKayit(s, varsayilanDamgaMs)),
+              guncellemeMs: Number(dp.guncellemeMs) || varsayilanDamgaMs
+            };
+          });
+          mevcut.dersPaketleriHaritasi = temizDersHarita;
           localStorage.setItem(MOBIL_DEPO_ANAHTAR, JSON.stringify(mevcut));
+          guncelleMobilDersSeciciUI();
           const altSayac = document.getElementById('mobil-alt-sayac');
           if (altSayac) altSayac.textContent = String(mobilDurum.okumaSonuclari.length);
           if (mobilDepoBroadcastKanal) {
@@ -2087,11 +2549,33 @@
 
       /* Kamera Açık Değilse Sentetik Gerçekçi Kağıt Üretip OMR Motorundan Geçir */
       /* Form bulunamadı / uyarı çubuğu */
-      function mobilUyariGoster(mesaj) {
+      function mobilUyariGoster(mesaj, tur = 'uyari') {
+        const metin = String(mesaj || '');
         const k = document.getElementById('m-uyari');
-        if (!k) return;
-        k.textContent = mesaj || '';
-        k.hidden = !mesaj;
+        if (k) {
+          k.textContent = metin;
+          k.hidden = !metin;
+        }
+        const genel = document.getElementById('mobil-genel-bildirim');
+        const genelMetin = document.getElementById('mobil-genel-bildirim-metin');
+        if (genel && genelMetin) {
+          if (mobilBildirimZamanlayici) {
+            clearTimeout(mobilBildirimZamanlayici);
+            mobilBildirimZamanlayici = null;
+          }
+          genelMetin.textContent = metin;
+          genel.classList.remove('tur-basari', 'tur-uyari');
+          if (metin) {
+            const basarili = tur === 'basari' || metin.startsWith('✅');
+            genel.classList.add(basarili ? 'tur-basari' : 'tur-uyari');
+            genel.hidden = false;
+            mobilBildirimZamanlayici = setTimeout(() => {
+              genel.hidden = true;
+            }, basarili ? 5500 : 7500);
+          } else {
+            genel.hidden = true;
+          }
+        }
       }
 
       const seriSon = { imza: '', sayi: 0, kaydedildi: false };
@@ -2237,6 +2721,10 @@
           uygulaKagitSifreliQrSonuca(sonuc, bekleyenKagitOqv2);
           bekleyenKagitOqv2 = '';
         }
+        if (masterAnahtarModu) {
+          uygulaMasterKagitOkumaSonucundan(sonuc, standart);
+          return sonuc;
+        }
         mobilUyariGoster('');
         if (seri) {
           const imza = standart
@@ -2283,6 +2771,97 @@
         return sonuc;
       }
 
+      function uygulaMasterKagitOkumaSonucundan(okuma, standartMi = false) {
+        if (!okuma || !okuma.formBulundu) return false;
+        setMasterAnahtarModu(false);
+        seriSon.imza = '';
+        seriSon.sayi = 0;
+        seriSon.kaydedildi = false;
+        sonManuelKameraImza = '';
+
+        if (standartMi) {
+          const anahtarMetin = (okuma.sorular || []).map((s) => (s && s.verilen) || 'A').join('');
+          const stdAnahtarInp = document.getElementById('m-std-anahtar');
+          const stdSoruInp = document.getElementById('m-std-soru');
+          if (stdAnahtarInp) stdAnahtarInp.value = anahtarMetin;
+          if (stdSoruInp && okuma.sorular && okuma.sorular.length > 0) stdSoruInp.value = String(okuma.sorular.length);
+          mobilDurum.sinavYapisi.cevapAnahtarlari.A.test = (okuma.sorular || []).slice(0, 35).map((s) => s.verilen || 'A');
+          kaydetYerelDepoya();
+          guncelleUstOzet();
+          cizDokunmatikAnahtarEditoru();
+          bipCal(true);
+          const bildirim = `✅ Standart form cevap anahtarı kağıttan okundu (${anahtarMetin.length} soru): ${anahtarMetin.slice(0, 20)}${anahtarMetin.length > 20 ? '…' : ''}`;
+          const onayKutu = document.getElementById('mobil-anahtar-kayit-onay');
+          if (onayKutu) { onayKutu.textContent = bildirim; onayKutu.hidden = false; }
+          mobilUyariGoster(bildirim, 'basari');
+          return true;
+        }
+
+        if (okuma.algilananYapi && okuma.algilananYapi.otomatikAlgilandiMi) {
+          mobilDurum.sinavYapisi.dySayisi = okuma.algilananYapi.dySayisi;
+          mobilDurum.sinavYapisi.testSayisi = okuma.algilananYapi.testSayisi;
+          mobilDurum.sinavYapisi.klasikSayisi = okuma.algilananYapi.klasikSayisi;
+          delete mobilDurum.sinavYapisi.dyToplamPuan;
+          delete mobilDurum.sinavYapisi.testToplamPuan;
+          delete mobilDurum.sinavYapisi.klasikToplamPuan;
+        } else {
+          if (Array.isArray(okuma.dyDetay) && okuma.dyDetay.length > 0) {
+            mobilDurum.sinavYapisi.dySayisi = okuma.dyDetay.length;
+          }
+          if (Array.isArray(okuma.testDetay) && okuma.testDetay.length > 0) {
+            mobilDurum.sinavYapisi.testSayisi = okuma.testDetay.length;
+          }
+        }
+        const grupSec = document.getElementById('m-ayar-grup-sec');
+        const grup = (okuma.grup && ['A', 'B', 'C', 'D'].includes(okuma.grup))
+          ? okuma.grup
+          : ((grupSec && grupSec.value) || 'A');
+        mobilDurum.sinavYapisi.cevapAnahtarlari[grup] = {
+          dy: (okuma.dyDetay || []).map((d) => d.verilen || 'D'),
+          test: (okuma.testDetay || []).map((t) => t.verilen || 'A'),
+          klasik: []
+        };
+        document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
+        document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
+        document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
+        if (grupSec) grupSec.value = grup;
+        uygulaMobil100PuanNormalizasyon(null, true);
+        kaydetYerelDepoya();
+        guncelleUstOzet();
+        cizDokunmatikAnahtarEditoru();
+        guncelleMobilSonucListesi();
+        bipCal(true);
+        const anahtarBtn = document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-anahtar"]');
+        if (anahtarBtn && document.body.getAttribute('data-aktif-msekme') !== 'm-panel-anahtar') {
+          anahtarBtn.click();
+        }
+        const msg = `✅ ${grup} Kitapçığı Cevap Anahtarı kağıttan okundu, 100 tam puana dengelendi ve kaydedildi (${okuma.dyDetay.length} D/Y + ${okuma.testDetay.length} Test)!`;
+        const onayKutu = document.getElementById('mobil-anahtar-kayit-onay');
+        if (onayKutu) { onayKutu.textContent = msg; onayKutu.hidden = false; }
+        mobilUyariGoster(msg, 'basari');
+        return true;
+      }
+
+      function uygulaMasterKagitImageData(imgData, secenek = {}) {
+        if (!imgData) return { basarili: false, mesaj: 'Boş görüntü.' };
+        let standartMi = standartFormMu();
+        let okuma = C.okuOptikFormImageData(imgData, mobilDurum.sinavYapisi, mobilDurum.ogrenciler);
+        if (okuma.formBulundu && standartMi) {
+          standartMi = false;
+        } else if (!okuma.formBulundu && standartMi) {
+          okuma = C.okuStandartOptikFormImageData(imgData, standartAyarOku());
+        }
+        if (!okuma.formBulundu) {
+          if (!secenek.sessizBasarisizlik) {
+            mobilUyariGoster('⚠️ Öğretmen kağıdı okunamadı: ' + (okuma.mesaj || '4 köşe optik işaret algılanamadı.'));
+            bipCal(false);
+          }
+          return { basarili: false, mesaj: okuma.mesaj || 'Form bulunamadı' };
+        }
+        uygulaMasterKagitOkumaSonucundan(okuma, standartMi);
+        return { basarili: true, okuma };
+      }
+
       function taraAktifKareVeyaSimuleEt() {
         const y = mobilDurum.sinavYapisi;
         const vizorCanvas = document.getElementById('mobil-canvas-vizor');
@@ -2294,11 +2873,32 @@
           return;
         }
 
+        if (gercekKullaniciTarayicisiMi()) {
+          if (seriTaramaAktif) {
+            seriTaramaAktif = false;
+            C.temizleGuvenliInterval('mobil-seri');
+            const otoBtn = document.getElementById('btn-mobil-seri-tara');
+            if (otoBtn) {
+              otoBtn.classList.remove('aktif');
+              const sp = otoBtn.querySelector('span');
+              if (sp) sp.textContent = 'Oto: Kapalı';
+            }
+          }
+          const taraSekmeBtn = document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-tara"]');
+          if (taraSekmeBtn && document.body.getAttribute('data-aktif-msekme') !== 'm-panel-tara') {
+            taraSekmeBtn.click();
+          }
+          mobilUyariGoster('📷 Kağıt okumak için kamerayı açın veya vizördeki "Fotoğraf Seç" düğmesini kullanın.');
+          const camBtn = document.getElementById('btn-mobil-kamera-ac');
+          if (camBtn) camBtn.click();
+          return;
+        }
+
         if (standartFormMu()) {
           mobilUyariGoster('ℹ️ Standart formda önce kamerayı açın veya bir fotoğraf seçin.');
           return;
         }
-        // Kamera kapalıysa sıradaki öğrenci için gölgeli gerçekçi optik form çiz ve OMR ile oku
+        // Yalnızca headless/otomatik tarayıcı testlerinde (navigator.webdriver === true) örnek optik form çiz
         const ogr = mobilDurum.ogrenciler.length > 0
           ? mobilDurum.ogrenciler[simSayac % mobilDurum.ogrenciler.length]
           : { ogrNo: '2026000011', adSoyad: 'Simülasyon Öğrencisi' };
@@ -2411,6 +3011,58 @@
             `;
           })
           .join('');
+        guncelleMobilSinifYoklamaListesi();
+        guncelleMobilDersSeciciUI();
+      }
+
+      function guncelleMobilSinifYoklamaListesi() {
+        const tbody = document.getElementById('mobil-tablo-sinif-yoklama');
+        const ozetRozet = document.getElementById('mobil-yoklama-ozet-rozet');
+        const ogrSayacRozet = document.getElementById('mobil-ders-ogr-sayac-rozet');
+        const ogrenciler = Array.isArray(mobilDurum.ogrenciler) ? mobilDurum.ogrenciler : [];
+        if (ogrSayacRozet) ogrSayacRozet.textContent = `${ogrenciler.length} Öğrenci`;
+        if (!tbody) return;
+
+        const okunanHarita = new Map();
+        (mobilDurum.okumaSonuclari || []).forEach((s) => {
+          if (s && s.ogrNo && !kagitKimlikBelirsizMi(s)) {
+            okunanHarita.set(String(s.ogrNo).trim(), s);
+          }
+        });
+        const okunanSayisi = ogrenciler.filter((o) => okunanHarita.has(String(o.ogrNo || '').trim())).length;
+        if (ozetRozet) {
+          ozetRozet.textContent = `${okunanSayisi} / ${ogrenciler.length} Okundu`;
+          ozetRozet.className = `rozet ${ogrenciler.length > 0 && okunanSayisi === ogrenciler.length ? 'rozet-yesil' : 'rozet-mavi'}`;
+        }
+
+        if (ogrenciler.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" style="font-size:0.78rem; color:var(--metin-ikincil); text-align:center; padding:0.75rem;">Bu derste kayıtlı öğrenci yok. Stüdyodan Öğrenci QR okutun veya yukarıdan ☁️ Buluttan Çek ile oturum açın.</td></tr>';
+          return;
+        }
+
+        const araEl = document.getElementById('girdi-mobil-sinif-ara');
+        const aranan = String((araEl && araEl.value) || '').trim().toLocaleLowerCase('tr-TR');
+        const filtreli = ogrenciler.filter((o) => {
+          if (!aranan) return true;
+          return String(o.ogrNo || '').toLowerCase().includes(aranan) ||
+            String(o.adSoyad || '').toLocaleLowerCase('tr-TR').includes(aranan);
+        });
+
+        tbody.innerHTML = filtreli
+          .map((o) => {
+            const kayit = okunanHarita.get(String(o.ogrNo || '').trim());
+            const durumHtml = kayit
+              ? `<span class="rozet rozet-yesil">Okundu · ${kayit.toplamPuan}p</span>`
+              : `<span class="rozet rozet-sari">Okunmadı</span>`;
+            return `
+              <tr>
+                <td class="mono" style="font-size:0.76rem; white-space:nowrap;">${C.kacisHTML(String(o.ogrNo || ''))}</td>
+                <td style="font-weight:600; font-size:0.79rem; word-break:break-word;">${C.kacisHTML(String(o.adSoyad || ''))}</td>
+                <td style="white-space:nowrap;">${durumHtml}</td>
+              </tr>
+            `;
+          })
+          .join('');
       }
 
       /* Etkinlik Bağlantıları */
@@ -2418,6 +3070,93 @@
         yukleBaslangicVerisi();
         cizDokunmatikAnahtarEditoru();
         guncelleMobilSonucListesi();
+        if (
+          !window.__mobilTestBulutCekmeDurdur &&
+          alAktifMobilHocaToken() &&
+          navigator.onLine !== false &&
+          location.protocol.startsWith('http')
+        ) {
+          senkronizeEtBulutMobilDersler({ sessiz: true });
+        }
+
+        const btnBildirimKapat = document.getElementById('btn-mobil-genel-bildirim-kapat');
+        if (btnBildirimKapat) {
+          btnBildirimKapat.addEventListener('click', () => mobilUyariGoster(''));
+        }
+        const btnMasterIptal = document.getElementById('btn-master-mod-iptal');
+        if (btnMasterIptal) {
+          btnMasterIptal.addEventListener('click', () => {
+            setMasterAnahtarModu(false);
+            mobilUyariGoster('ℹ️ Anahtar okuma modu kapatıldı.');
+          });
+        }
+
+        const aktifDersSel = document.getElementById('mobil-aktif-ders-sec');
+        if (aktifDersSel) {
+          aktifDersSel.addEventListener('change', () => {
+            secMobilAktifDers(aktifDersSel.value);
+          });
+        }
+        const btnBulutDersCek = document.getElementById('btn-mobil-bulut-ders-cek');
+        if (btnBulutDersCek) {
+          btnBulutDersCek.addEventListener('click', () => senkronizeEtBulutMobilDersler({ sessiz: false }));
+        }
+        const kutuHocaGiris = document.getElementById('kutu-mobil-hoca-giris');
+        const btnHocaGirisAc = document.getElementById('btn-mobil-hoca-giris-ac');
+        const btnHocaGirisKapat = document.getElementById('btn-mobil-hoca-giris-kapat');
+        if (btnHocaGirisAc && kutuHocaGiris) {
+          btnHocaGirisAc.addEventListener('click', () => {
+            kutuHocaGiris.hidden = !kutuHocaGiris.hidden;
+          });
+        }
+        if (btnHocaGirisKapat && kutuHocaGiris) {
+          btnHocaGirisKapat.addEventListener('click', () => {
+            kutuHocaGiris.hidden = true;
+          });
+        }
+        const btnHocaGirisYap = document.getElementById('btn-mobil-hoca-giris-yap');
+        if (btnHocaGirisYap) {
+          btnHocaGirisYap.addEventListener('click', async () => {
+            const kadi = String((document.getElementById('mobil-hoca-kadi') && document.getElementById('mobil-hoca-kadi').value) || '').trim();
+            const sifre = String((document.getElementById('mobil-hoca-sifre') && document.getElementById('mobil-hoca-sifre').value) || '');
+            const hataEl = document.getElementById('mobil-hoca-hata');
+            if (!kadi || !sifre) {
+              if (hataEl) { hataEl.textContent = 'Kullanıcı adı ve şifre girin.'; hataEl.hidden = false; }
+              return;
+            }
+            if (hataEl) { hataEl.textContent = ''; hataEl.hidden = true; }
+            try {
+              const res = await fetch('/api/hoca-giris', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kullaniciAdi: kadi, sifre })
+              });
+              const v = await res.json();
+              if (!res.ok || !v || !v.basarili || !v.token) {
+                mobilDurum.omrYetkiToken = '';
+                try { sessionStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
+                if (hataEl) {
+                  hataEl.textContent = (v && v.hata) || `Giriş başarısız (${res.status}).`;
+                  hataEl.hidden = false;
+                }
+                return;
+              }
+              kaydetMobilHocaToken(v.token);
+              const sifreInp = document.getElementById('mobil-hoca-sifre');
+              if (sifreInp) sifreInp.value = '';
+              await senkronizeEtBulutMobilDersler({ sessiz: false });
+            } catch (err) {
+              if (hataEl) {
+                hataEl.textContent = `Sunucuya erişilemedi: ${(err && err.message) || 'Ağ hatası'}`;
+                hataEl.hidden = false;
+              }
+            }
+          });
+        }
+        const girdiSinifAra = document.getElementById('girdi-mobil-sinif-ara');
+        if (girdiSinifAra) {
+          girdiSinifAra.addEventListener('input', guncelleMobilSinifYoklamaListesi);
+        }
 
         // Alt Sekme Geçişi ve Tam Ekran / Liste Modu Senkronizasyonu
         const cekmecesiAraclar = document.getElementById('cekmecesi-mobil-araclar');
@@ -2648,6 +3387,15 @@
         });
 
         document.getElementById('btn-mobil-seri-tara').addEventListener('click', () => {
+          if (!seriTaramaAktif && !kameraStream && gercekKullaniciTarayicisiMi()) {
+            const taraSekmeBtn = document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-tara"]');
+            if (taraSekmeBtn && document.body.getAttribute('data-aktif-msekme') !== 'm-panel-tara') {
+              taraSekmeBtn.click();
+            }
+            mobilUyariGoster('📷 Otomatik tarama için kamera açılıyor...');
+            document.getElementById('btn-mobil-kamera-ac').click();
+            return;
+          }
           seriTaramaAktif = !seriTaramaAktif;
           guncelleSeriButonMetin();
           if (seriTaramaAktif) {
@@ -2711,9 +3459,18 @@
           const url = C.olusturGuvenliBlobUrl(dosya);
           const img = new Image();
           img.onload = () => {
-            mobilGoruntuyuOku(img, img.naturalWidth || img.width, img.naturalHeight || img.height, false);
+            try {
+              mobilGoruntuyuOku(img, img.naturalWidth || img.width, img.naturalHeight || img.height, false);
+            } finally {
+              if (typeof C.serbestBirakGuvenliBlobUrl === 'function') C.serbestBirakGuvenliBlobUrl(url);
+            }
+          };
+          img.onerror = () => {
+            if (typeof C.serbestBirakGuvenliBlobUrl === 'function') C.serbestBirakGuvenliBlobUrl(url);
+            mobilUyariGoster('⚠️ Seçilen fotoğraf yüklenemedi.');
           };
           img.src = url;
+          e.target.value = '';
         });
 
         // Mod 2 Kontrolleri (100 Puan Dengeleme + Kaydet ve Yeniden Puanla)
@@ -2804,6 +3561,12 @@
         const okutOgretmenMasterKagidi = () => {
           const canvas = document.getElementById('mobil-canvas-vizor');
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          const cekmece = document.getElementById('cekmecesi-mobil-araclar');
+          if (cekmece && !cekmece.hidden) {
+            cekmece.hidden = true;
+            const btnAracAc = document.getElementById('btn-mobil-araclar-ac');
+            if (btnAracAc) btnAracAc.classList.remove('aktif');
+          }
           if (kameraStream) {
             const video = document.getElementById('mobil-video');
             const vw = video.videoWidth || 1280;
@@ -2812,37 +3575,82 @@
             canvas.width = Math.max(1, Math.round(vw * olcek));
             canvas.height = Math.max(1, Math.round(vh * olcek));
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const sonuc = uygulaMasterKagitImageData(imgData, { sessizBasarisizlik: true });
+            if (!sonuc.basarili) {
+              setMasterAnahtarModu(true);
+              const taraSekmeBtn = document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-tara"]');
+              if (taraSekmeBtn && document.body.getAttribute('data-aktif-msekme') !== 'm-panel-tara') {
+                taraSekmeBtn.click();
+              }
+              mobilUyariGoster('🔑 Öğretmen cevap kağıdını kameranın 4 köşesine hizalayıp "Oku" düğmesine dokunun.');
+            }
+            return;
           }
+
+          // Önce vizörde zaten çizili/yüklü bir form varsa doğrudan onu oku (testler ve son seçilen fotoğraf dahil)
           const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const okuma = C.okuOptikFormImageData(imgData, mobilDurum.sinavYapisi, mobilDurum.ogrenciler);
-          if (!okuma.formBulundu) { mobilUyariGoster('⚠️ Öğretmen kağıdı okunamadı: ' + okuma.mesaj); bipCal(false); return; }
-          if (okuma.algilananYapi && okuma.algilananYapi.otomatikAlgilandiMi) {
-            mobilDurum.sinavYapisi.dySayisi = okuma.algilananYapi.dySayisi;
-            mobilDurum.sinavYapisi.testSayisi = okuma.algilananYapi.testSayisi;
-            mobilDurum.sinavYapisi.klasikSayisi = okuma.algilananYapi.klasikSayisi;
-            delete mobilDurum.sinavYapisi.dyToplamPuan;
-            delete mobilDurum.sinavYapisi.testToplamPuan;
-            delete mobilDurum.sinavYapisi.klasikToplamPuan;
+          const mevcutDeneme = uygulaMasterKagitImageData(imgData, { sessizBasarisizlik: true });
+          if (mevcutDeneme.basarili) return;
+
+          // Vizör boşsa fotoğraf seçiciyi aç + Anahtar Okuma Modunu etkinleştir
+          setMasterAnahtarModu(true);
+          const masterFotoInp = document.getElementById('input-mobil-master-foto');
+          if (masterFotoInp) {
+            mobilUyariGoster('📸 İşaretli öğretmen cevap kağıdının fotoğrafını seçin veya çekin.');
+            masterFotoInp.click();
+          } else {
+            mobilUyariGoster('⚠️ Öğretmen kağıdı okunamadı: ' + mevcutDeneme.mesaj);
+            bipCal(false);
           }
-          const grup = okuma.grup || 'A';
-          mobilDurum.sinavYapisi.cevapAnahtarlari[grup] = {
-            dy: okuma.dyDetay.map((d) => d.verilen || 'D'),
-            test: okuma.testDetay.map((t) => t.verilen || 'A'),
-            klasik: []
-          };
-          document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
-          document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
-          document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
-          document.getElementById('m-ayar-grup-sec').value = grup;
-          uygulaMobil100PuanNormalizasyon(null, true);
-          kaydetYerelDepoya();
-          guncelleUstOzet();
-          cizDokunmatikAnahtarEditoru();
-          guncelleMobilSonucListesi();
-          bipCal(true);
-          mobilUyariGoster(`✅ ${grup} Kitapçığı Cevap Anahtarı kağıttan okundu, 100 tam puana dengelendi ve kaydedildi (${okuma.dyDetay.length} D/Y + ${okuma.testDetay.length} Test)!`);
         };
+
+        const inputMasterFoto = document.getElementById('input-mobil-master-foto');
+        if (inputMasterFoto) {
+          inputMasterFoto.addEventListener('change', (e) => {
+            const dosya = e.target.files && e.target.files[0];
+            if (!dosya) return;
+            const url = C.olusturGuvenliBlobUrl(dosya);
+            const img = new Image();
+            img.onload = () => {
+              try {
+                const canvas = document.getElementById('mobil-canvas-vizor');
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                const vw = img.naturalWidth || img.width || 1200;
+                const vh = img.naturalHeight || img.height || 1600;
+                const olcek = Math.min(1, 1600 / Math.max(vw, vh));
+                canvas.width = Math.max(1, Math.round(vw * olcek));
+                canvas.height = Math.max(1, Math.round(vh * olcek));
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                uygulaMasterKagitImageData(imgData, { sessizBasarisizlik: false });
+              } finally {
+                if (typeof C.serbestBirakGuvenliBlobUrl === 'function') C.serbestBirakGuvenliBlobUrl(url);
+              }
+            };
+            img.onerror = () => {
+              if (typeof C.serbestBirakGuvenliBlobUrl === 'function') C.serbestBirakGuvenliBlobUrl(url);
+              mobilUyariGoster('⚠️ Seçilen öğretmen kağıdı görseli yüklenemedi.');
+            };
+            img.src = url;
+            e.target.value = '';
+          });
+        }
+
         document.getElementById('btn-master-kagit-okut').addEventListener('click', okutOgretmenMasterKagidi);
+        const btnMasterKameradan = document.getElementById('btn-master-kameradan-okut');
+        if (btnMasterKameradan) {
+          btnMasterKameradan.addEventListener('click', () => {
+            setMasterAnahtarModu(true);
+            const taraSekmeBtn = document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-tara"]');
+            if (taraSekmeBtn) taraSekmeBtn.click();
+            mobilUyariGoster('🔑 Öğretmen cevap kağıdını kameraya gösterin; algılandığında anahtar otomatik kaydedilecek.');
+            if (!kameraStream) {
+              const camBtn = document.getElementById('btn-mobil-kamera-ac');
+              if (camBtn) camBtn.click();
+            }
+          });
+        }
         const btnTaraMasterOkut = document.getElementById('btn-tara-master-kagit-okut');
         if (btnTaraMasterOkut) btnTaraMasterOkut.addEventListener('click', okutOgretmenMasterKagidi);
 
@@ -2973,8 +3781,10 @@
             const liste = C.cozOgrenciListesiCSV(String(reader.result));
             if (liste.length > 0) {
               mobilDurum.ogrenciler = liste;
+              guncelleMobilDersPaketKaydi();
               kaydetYerelDepoya();
-              document.getElementById('mobil-ogr-sayac').textContent = String(liste.length);
+              guncelleUstOzet();
+              guncelleMobilSinifYoklamaListesi();
               cizMobilOgrenciQrBilgisayara();
               bipCal(true);
             }

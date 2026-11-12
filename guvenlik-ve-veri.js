@@ -2979,6 +2979,22 @@
     fid(M, YUK - M, false);
     fid(GEN - M, YUK - M, false);
 
+    try {
+      const bitler = kodlaOptikGeometriMatrisi(sinavYapisi || {});
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(GEN / 2 - 18, 6, 36, 36);
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(GEN / 2 - 18, 6, 36, 36);
+      ctx.fillStyle = '#000000';
+      const h = 4;
+      for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 8; j++) {
+          if (bitler[i * 8 + j] === 1) ctx.fillRect(GEN / 2 - 16 + j * h, 8 + i * h, h, h);
+        }
+      }
+    } catch (_) { /* geometri matrisi opsiyonel */ }
+
     ctx.fillStyle = '#111';
     ctx.textBaseline = 'alphabetic';
     for (const e of harita.etiketler) {
@@ -5490,9 +5506,20 @@
     const tamB64 = utf8ToBase64Guvenli(tamMetin);
     const kodlanmisB64 = encodeURIComponent(tamB64);
 
-    const urlBilgisayar = `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${kodlanmisB64}`;
-    const urlTelefon = `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${kodlanmisB64}`;
-    const tekUrl = `${tabanAdres ? tabanAdres + '/' + hedefSayfa : hedefSayfa}#ogr=${kodlanmisB64}`;
+    const dersId = String(secenekler.dersId || '').trim().slice(0, 64);
+    const dersKod = String(secenekler.dersKod || '').trim().slice(0, 32);
+    const dersAd = String(secenekler.dersAd || '').trim().slice(0, 96);
+    const omrToken = String(secenekler.omrToken || '').trim().slice(0, 512);
+    const ekParcalar = [];
+    if (dersId) ekParcalar.push(`dersId=${encodeURIComponent(dersId)}`);
+    if (dersKod) ekParcalar.push(`dersKod=${encodeURIComponent(dersKod)}`);
+    if (dersAd) ekParcalar.push(`dersAd=${encodeURIComponent(dersAd)}`);
+    if (omrToken) ekParcalar.push(`omrToken=${encodeURIComponent(omrToken)}`);
+    const ekHash = ekParcalar.length > 0 ? `&${ekParcalar.join('&')}` : '';
+
+    const urlBilgisayar = `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${kodlanmisB64}${ekHash}`;
+    const urlTelefon = `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${kodlanmisB64}${ekHash}`;
+    const tekUrl = `${tabanAdres ? tabanAdres + '/' + hedefSayfa : hedefSayfa}#ogr=${kodlanmisB64}${ekHash}`;
     const tamPaketKodu = `OGR-QR|1/1|${tamB64}`;
 
     const parcalar = [];
@@ -5504,9 +5531,9 @@
       const dilimKodlanmis = encodeURIComponent(dilimB64);
       const parcaNo = i + 1;
       const paketKodu = `OGR-QR|${parcaNo}/${toplamParca}|${dilimB64}`;
-      const dilimUrlBilgisayar = `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${dilimKodlanmis}`;
-      const dilimUrlTelefon = `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${dilimKodlanmis}`;
-      const dilimUrl = `${tabanAdres ? tabanAdres + '/' + hedefSayfa : hedefSayfa}#ogr=${dilimKodlanmis}`;
+      const dilimUrlBilgisayar = `${tabanAdres ? tabanAdres + '/index.html' : 'index.html'}#ogr=${dilimKodlanmis}${ekHash}`;
+      const dilimUrlTelefon = `${tabanAdres ? tabanAdres + '/optik-mobil.html' : 'optik-mobil.html'}#ogr=${dilimKodlanmis}${ekHash}`;
+      const dilimUrl = `${tabanAdres ? tabanAdres + '/' + hedefSayfa : hedefSayfa}#ogr=${dilimKodlanmis}${ekHash}`;
       parcalar.push({
         parcaNo,
         toplamParca,
@@ -5529,7 +5556,10 @@
       kodlanmisB64,
       paketKodu: tamPaketKodu,
       kod: tamPaketKodu,
-      hashParam: `#ogr=${kodlanmisB64}`,
+      hashParam: `#ogr=${kodlanmisB64}${ekHash}`,
+      dersId,
+      dersKod,
+      dersAd,
       url: tekUrl,
       tekUrl,
       urlBilgisayar,
@@ -5549,6 +5579,26 @@
     let toplamParca = 1;
     let b64Aday = '';
     let duzMetinAday = '';
+    let dersId = '';
+    let dersKod = '';
+    let dersAd = '';
+    let omrToken = '';
+
+    const hashMetaCoz = (kuyrukStr) => {
+      if (!kuyrukStr || !kuyrukStr.includes('&')) return;
+      const parcalar = kuyrukStr.split('&').slice(1);
+      for (const p of parcalar) {
+        const eq = p.indexOf('=');
+        if (eq <= 0) continue;
+        const k = p.slice(0, eq).trim();
+        let v = p.slice(eq + 1).trim();
+        try { v = decodeURIComponent(v); } catch (_) {}
+        if (k === 'dersId') dersId = v.slice(0, 64);
+        else if (k === 'dersKod') dersKod = v.slice(0, 32);
+        else if (k === 'dersAd') dersAd = v.slice(0, 96);
+        else if (k === 'omrToken' || k === 'eslesmeToken') omrToken = v.slice(0, 512);
+      }
+    };
 
     // 1. OGR-QR|p/t|<base64> veya OGR-QR|<base64> formatı
     if (ham.startsWith('OGR-QR|')) {
@@ -5564,14 +5614,18 @@
     } else if (ham.includes('#ogr=')) {
       // 2. Tam URL veya #ogr=<base64> hash formatı
       const idx = ham.indexOf('#ogr=');
-      const parca = ham.slice(idx + 5).split('&')[0].trim();
+      const kuyruk = ham.slice(idx + 5);
+      hashMetaCoz(kuyruk);
+      const parca = kuyruk.split('&')[0].trim();
       try {
         b64Aday = decodeURIComponent(parca);
       } catch (_) {
         b64Aday = parca;
       }
     } else if (ham.startsWith('ogr=')) {
-      const parca = ham.slice(4).split('&')[0].trim();
+      const kuyruk = ham.slice(4);
+      hashMetaCoz(kuyruk);
+      const parca = kuyruk.split('&')[0].trim();
       try {
         b64Aday = decodeURIComponent(parca);
       } catch (_) {
@@ -5642,6 +5696,10 @@
       ogrenciSayisi: ogrenciler.length,
       parcaNo,
       toplamParca,
+      dersId,
+      dersKod,
+      dersAd,
+      omrToken,
       hata: ''
     };
   }
@@ -6357,6 +6415,13 @@
     };
 
     const temizTaban = String(tabanAdres || '').trim().replace(/\/+$/, '');
+    const setupDersId = String((yapi.ders && yapi.ders.id) || yapi.dersId || '').trim().slice(0, 64);
+    const setupOmrToken = String(yapi.omrToken || '').trim().slice(0, 512);
+    const setupEkParcalar = [];
+    if (setupDersId) setupEkParcalar.push(`dersId=${encodeURIComponent(setupDersId)}`);
+    if (setupOmrToken) setupEkParcalar.push(`omrToken=${encodeURIComponent(setupOmrToken)}`);
+    const setupEkHash = setupEkParcalar.length > 0 ? `&${setupEkParcalar.join('&')}` : '';
+
     const gecerliOgrenciler = (Array.isArray(ogrenciler) ? ogrenciler : [])
       .filter((o) => o && String(o.ogrNo || '').trim() && String(o.adSoyad || '').trim())
       .map((o) => ({
@@ -6365,11 +6430,11 @@
       }));
 
     const kodlaHamTokenUrl = (kodlu) => {
-      const tamUrl = `${temizTaban ? temizTaban + '/optik-mobil.html' : 'optik-mobil.html'}#setup=${kodlu}`;
+      const tamUrl = `${temizTaban ? temizTaban + '/optik-mobil.html' : 'optik-mobil.html'}#setup=${kodlu}${setupEkHash}`;
       return {
         b64: kodlu,
         encoded: kodlu,
-        hashHref: `optik-mobil.html#setup=${kodlu}`,
+        hashHref: `optik-mobil.html#setup=${kodlu}${setupEkHash}`,
         url: tamUrl,
         tamUrl
       };
@@ -6424,10 +6489,28 @@
   function cozKompaktSetupQrPaketi(girdi = '') {
     let ham = String(girdi || '').trim();
     if (!ham) return null;
+    let hashDersId = '';
+    let hashOmrToken = '';
+    const ayiklaSetupKuyruk = (kuyrukStr) => {
+      if (!kuyrukStr || !kuyrukStr.includes('&')) return;
+      for (const p of kuyrukStr.split('&').slice(1)) {
+        const eq = p.indexOf('=');
+        if (eq <= 0) continue;
+        const k = p.slice(0, eq).trim();
+        let val = p.slice(eq + 1).trim();
+        try { val = decodeURIComponent(val); } catch (_) {}
+        if (k === 'dersId') hashDersId = val.slice(0, 64);
+        else if (k === 'omrToken' || k === 'eslesmeToken') hashOmrToken = val.slice(0, 512);
+      }
+    };
     if (ham.includes('#setup=')) {
-      ham = ham.slice(ham.indexOf('#setup=') + 7).split('&')[0];
+      const kuyruk = ham.slice(ham.indexOf('#setup=') + 7);
+      ayiklaSetupKuyruk(kuyruk);
+      ham = kuyruk.split('&')[0];
     } else if (ham.startsWith('setup=')) {
-      ham = ham.slice(6).split('&')[0];
+      const kuyruk = ham.slice(6);
+      ayiklaSetupKuyruk(kuyruk);
+      ham = kuyruk.split('&')[0];
     }
     try {
       const cozulmusHam = decodeURIComponent(ham);
@@ -6504,10 +6587,140 @@
           .map((x) => ({ ogrNo: String(x[0]), adSoyad: String(x[1]), bolum: 'Genel' }));
       }
       if (!Array.isArray(v.ogrenciler)) v.ogrenciler = [];
+      if (hashDersId && !v.dersId) v.dersId = hashDersId;
+      if (hashOmrToken && !v.omrToken) v.omrToken = hashOmrToken;
       return v;
     } catch (_) {
       return null;
     }
+  }
+
+  /* Bulut kasa verisinden soru metinlerini dışarıda bırakarak mobil OMR için hafif ders bazlı özet üretir */
+  function uretMobilDersPaketleriOzeti(kasaVerisi = {}) {
+    const v = kasaVerisi && typeof kasaVerisi === 'object' ? kasaVerisi : {};
+    const hamDersler = Array.isArray(v.dersler) ? v.dersler : [];
+    const hamOgrenciler = Array.isArray(v.ogrenciler)
+      ? v.ogrenciler
+      : (Array.isArray(v.ogrenciKayitlari) ? v.ogrenciKayitlari : []);
+    const hamKayitliSinavlar = Array.isArray(v.kayitliSinavlar) ? v.kayitliSinavlar : [];
+    const hamTaslaklar = (v.dersTaslakSinavlari && typeof v.dersTaslakSinavlari === 'object') ? v.dersTaslakSinavlari : {};
+
+    const temizleAnahtarObj = (anahtar) => {
+      const out = {
+        A: { dy: [], test: [], klasik: [] },
+        B: { dy: [], test: [], klasik: [] },
+        C: { dy: [], test: [], klasik: [] },
+        D: { dy: [], test: [], klasik: [] }
+      };
+      if (!anahtar || typeof anahtar !== 'object') return out;
+      for (const g of ['A', 'B', 'C', 'D']) {
+        const a = anahtar[g];
+        if (!a || typeof a !== 'object') continue;
+        const dyDizi = Array.isArray(a.dy) ? a.dy : String(a.dy || '').split('').filter(Boolean);
+        const testDizi = Array.isArray(a.test) ? a.test : String(a.test || '').split('').filter(Boolean);
+        out[g] = {
+          dy: dyDizi.map((c) => String(c || '').toUpperCase()).filter((c) => c === 'D' || c === 'Y'),
+          test: testDizi.map((c) => String(c || '').toUpperCase()).filter((c) => /^[A-E]$/.test(c)),
+          klasik: Array.isArray(a.klasik) ? a.klasik.slice(0, 20) : []
+        };
+      }
+      return out;
+    };
+
+    const normalizeSinav = (sinavHam, ders, indeks = 0) => {
+      const s = sinavHam && typeof sinavHam === 'object' ? sinavHam : {};
+      const yapiKaynak = (s.sinavYapisi && typeof s.sinavYapisi === 'object') ? s.sinavYapisi : s;
+      const dySayisi = Math.max(0, Math.min(50, parseInt(yapiKaynak.dySayisi, 10) || 0));
+      const testSayisi = Math.max(0, Math.min(100, parseInt(yapiKaynak.testSayisi, 10) || 0));
+      const klasikSayisi = Math.max(0, Math.min(20, parseInt(yapiKaynak.klasikSayisi, 10) || 0));
+      const norm = normalizeSinav100PuanYapisi({
+        dySayisi: dySayisi === 0 && testSayisi === 0 && klasikSayisi === 0 ? 10 : dySayisi,
+        testSayisi: dySayisi === 0 && testSayisi === 0 && klasikSayisi === 0 ? 10 : testSayisi,
+        klasikSayisi: dySayisi === 0 && testSayisi === 0 && klasikSayisi === 0 ? 2 : klasikSayisi,
+        dyToplamPuan: yapiKaynak.dyToplamPuan,
+        testToplamPuan: yapiKaynak.testToplamPuan,
+        klasikToplamPuan: yapiKaynak.klasikToplamPuan,
+        dySoruPuan: yapiKaynak.dySoruPuan,
+        testSoruPuan: yapiKaynak.testSoruPuan,
+        klasikSoruPuan: yapiKaynak.klasikSoruPuan
+      });
+      return {
+        id: String(s.id || `${ders.id}-SINAV-${indeks + 1}`),
+        sinavKodu: String(s.sinavKodu || yapiKaynak.sinavKodu || `${ders.kod || 'DERS'}-SINAV`),
+        sinavAdi: String(s.sinavAdi || s.ad || `${ders.kod || 'DERS'} — ${ders.ad || 'Sınav'}`).slice(0, 96),
+        sinavSurumId: String(s.sinavSurumId || yapiKaynak.sinavSurumId || ''),
+        dersId: ders.id,
+        dersAd: `${ders.kod || 'DERS'} — ${ders.ad || 'Ders'}`.slice(0, 80),
+        dySayisi: norm.dySayisi,
+        testSayisi: norm.testSayisi,
+        klasikSayisi: norm.klasikSayisi,
+        sikSayisi: Number(yapiKaynak.sikSayisi) === 4 ? 4 : 5,
+        kimlikModu: String(yapiKaynak.kimlikModu || 'son2'),
+        haneSayisi: Number(yapiKaynak.haneSayisi) || 2,
+        dyToplamPuan: norm.dyToplamPuan,
+        testToplamPuan: norm.testToplamPuan,
+        klasikToplamPuan: norm.klasikToplamPuan,
+        dySoruPuan: norm.dySoruPuan,
+        testSoruPuan: norm.testSoruPuan,
+        klasikSoruPuan: norm.klasikSoruPuan,
+        sinavGizliAnahtar: String(yapiKaynak.sinavGizliAnahtar || s.sinavGizliAnahtar || '').trim(),
+        cevapAnahtarlari: temizleAnahtarObj(yapiKaynak.cevapAnahtarlari || s.cevapAnahtarlari)
+      };
+    };
+
+    const dersler = hamDersler.length > 0
+      ? hamDersler.filter((d) => d && typeof d === 'object' && d.id).map((d) => ({
+          id: String(d.id).trim(),
+          kod: String(d.kod || 'DERS').trim().slice(0, 32),
+          ad: String(d.ad || 'Ders').trim().slice(0, 96),
+          ozelOgrenciler: Array.isArray(d.ogrenciler) ? d.ogrenciler : [],
+          ozelSinavYapisi: (d.sinavYapisi && typeof d.sinavYapisi === 'object') ? d.sinavYapisi : null,
+          ozelKayitliSinavlar: Array.isArray(d.kayitliSinavlar) ? d.kayitliSinavlar : []
+        }))
+      : [{ id: 'genel', kod: 'DERS', ad: 'Genel Sınav', ozelOgrenciler: [], ozelSinavYapisi: null, ozelKayitliSinavlar: [] }];
+
+    return dersler.map((ders) => {
+      const gorulenOgrNo = new Set();
+      const ogrenciler = [];
+      const ekleOgrenci = (o) => {
+        if (!o || !String(o.ogrNo || '').trim() || !String(o.adSoyad || '').trim()) return;
+        const no = String(o.ogrNo).trim();
+        if (gorulenOgrNo.has(no)) return;
+        gorulenOgrNo.add(no);
+        ogrenciler.push({
+          ogrNo: no,
+          adSoyad: String(o.adSoyad).trim().slice(0, 96),
+          bolum: String(o.bolum || 'Genel').trim().slice(0, 64)
+        });
+      };
+      ders.ozelOgrenciler.forEach(ekleOgrenci);
+      hamOgrenciler
+        .filter((o) => o && (!Array.isArray(o.dersIdler) || o.dersIdler.length === 0 || o.dersIdler.includes(ders.id)))
+        .forEach(ekleOgrenci);
+
+      const kayitliKaynaklar = hamKayitliSinavlar.filter(
+        (ks) => ks && typeof ks === 'object' && (ks.dersId === ders.id || (!ks.dersId && ders.id === 'genel'))
+      );
+      const birlesikKayitli = kayitliKaynaklar.length > 0 ? kayitliKaynaklar : ders.ozelKayitliSinavlar;
+      const kayitliSinavlar = birlesikKayitli
+        .slice(-10)
+        .map((ks, idx) => normalizeSinav(ks, ders, idx));
+
+      const taslak = hamTaslaklar[ders.id] || ders.ozelSinavYapisi;
+      const aktifKaynak = kayitliSinavlar.length > 0
+        ? kayitliSinavlar[kayitliSinavlar.length - 1]
+        : normalizeSinav(taslak || { sinavKodu: `${ders.kod || 'DERS'}-TASLAK` }, ders, 0);
+
+      return {
+        id: ders.id,
+        kod: ders.kod,
+        ad: ders.ad,
+        etiket: ders.kod ? `${ders.kod} — ${ders.ad}` : ders.ad,
+        ogrenciler,
+        kayitliSinavlar,
+        aktifSinavYapisi: aktifKaynak
+      };
+    });
   }
 
   /* Mobil Optik Okuyucudan (optik-mobil.html) Bilgisayar Stüdyosuna (index.html)
@@ -9937,6 +10150,7 @@
     cozOgrenciQrPaketi,
     uretKompaktSetupQrPaketi,
     cozKompaktSetupQrPaketi,
+    uretMobilDersPaketleriOzeti,
     dogrulaVeTemizleOmrSonucKaydi,
     uretOmrSonucPaketi,
     cozOmrSonucPaketi,

@@ -720,6 +720,51 @@ export default {
       }
     }
 
+    if (metot === 'GET' && yol === '/api/mobil-ders-paketleri') {
+      try {
+        const token = cozHocaTokenIstekten(request, null, urlNesne);
+        const yetki = await dogrulaOmrVeyaHocaToken(env, token, '');
+        if (!yetki) {
+          return gonderJson(401, { hata: 'Ders ve öğrenci listelerini çekmek için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+        }
+        const kullaniciAdi = String((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca';
+        let mevcut = null;
+        if (env && env.SINAV_DB) {
+          const sat = await env.SINAV_DB.prepare(
+            'SELECT kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms FROM bulut_kasalar WHERE kullanici_adi = ?1'
+          ).bind(kullaniciAdi).first();
+          if (sat) {
+            let veri = {};
+            try { veri = await acD1VeriJson(sat.veri_json); } catch (_) { veri = {}; }
+            mevcut = {
+              revizyonNo: Number(sat.revizyon_no) || 0,
+              guncellemeMs: Number(sat.guncelleme_ms) || 0,
+              veri: (veri && typeof veri === 'object') ? Cekirdek.temizleYedekHassasAlanlar(veri) : {}
+            };
+          }
+        } else {
+          const bellek = sunucuDurumu.bulutKasalarBellek.get(kullaniciAdi) || null;
+          if (bellek) {
+            mevcut = {
+              revizyonNo: bellek.revizyonNo || 0,
+              guncellemeMs: bellek.guncellemeMs || 0,
+              veri: bellek.veri ? Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(bellek.veri))) : {}
+            };
+          }
+        }
+        const dersler = Cekirdek.uretMobilDersPaketleriOzeti((mevcut && mevcut.veri) || {});
+        return gonderJson(200, {
+          basarili: true,
+          kullaniciAdi,
+          revizyonNo: mevcut ? mevcut.revizyonNo : 0,
+          guncellemeMs: mevcut ? mevcut.guncellemeMs : 0,
+          dersler
+        });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
     if (metot === 'POST' && yol === '/api/hoca-basvuru') {
       try {
         const govde = await okuJsonGovde(request);

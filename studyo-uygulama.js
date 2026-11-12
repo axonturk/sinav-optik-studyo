@@ -9855,6 +9855,93 @@
       });
     }
 
+    const gosterOgretmenAnahtarOkumaDurumu = (mesaj, basariliMi = true) => {
+      omrUyariGoster(mesaj);
+      const kutu = document.getElementById('etiket-omr-anahtar-oku-sonuc');
+      if (!kutu) return;
+      kutu.textContent = mesaj || '';
+      kutu.hidden = !mesaj;
+      kutu.style.background = basariliMi ? 'rgba(16, 185, 129, 0.14)' : 'rgba(245, 158, 11, 0.18)';
+      kutu.style.color = basariliMi ? 'var(--basari)' : '#b45309';
+      kutu.style.border = `1px solid ${basariliMi ? 'var(--basari)' : '#f59e0b'}`;
+    };
+
+    const cozVeUygulaHariciOgretmenAnahtari = (kaynak, kaynakGen, kaynakYuk) => {
+      const hariciOncedenAktif = Boolean(durum.hariciOmrAnahtar && durum.hariciOmrAnahtar.aktif);
+      okuHariciOmrAnahtarFormdan(false);
+      const aktifYapi = okuAktifSinavYapisi();
+      const geciciYapi = hariciOncedenAktif
+        ? Object.assign({}, aktifYapi, {
+          dySayisi: durum.hariciOmrAnahtar.dySayisi,
+          testSayisi: durum.hariciOmrAnahtar.testSayisi,
+          sikSayisi: durum.hariciOmrAnahtar.sikSayisi,
+          klasikSayisi: durum.hariciOmrAnahtar.klasikSayisi
+        })
+        : Object.assign({}, aktifYapi);
+      const cnv = document.getElementById('canvas-omr-girdi');
+      const olcek = Math.min(1, 1600 / Math.max(kaynakGen, kaynakYuk));
+      cnv.width = Math.max(1, Math.round(kaynakGen * olcek));
+      cnv.height = Math.max(1, Math.round(kaynakYuk * olcek));
+      const ctx = cnv.getContext('2d');
+      ctx.drawImage(kaynak, 0, 0, cnv.width, cnv.height);
+      const imgData = ctx.getImageData(0, 0, cnv.width, cnv.height);
+
+      if (typeof window.jsQR === 'function' && typeof C.cozSifreliOptikKagitQrPaketi === 'function') {
+        try {
+          const qrBul = window.jsQR(imgData.data, imgData.width, imgData.height);
+          if (qrBul && qrBul.data && String(qrBul.data).startsWith('OQV2:')) {
+            const cozulmusQr = C.cozSifreliOptikKagitQrPaketi(qrBul.data, geciciYapi.sinavGizliAnahtar);
+            if (cozulmusQr && cozulmusQr.gecerli) geciciYapi.kagitQrCozum = cozulmusQr;
+          }
+        } catch (_) {}
+      }
+
+      const formTuru = (document.getElementById('omr-form-turu') || {}).value || 'uygulama';
+      let okunan = formTuru !== 'standart' ? C.okuOptikFormImageData(imgData, geciciYapi, []) : null;
+      if ((!okunan || !okunan.formBulundu) && typeof C.okuStandartOptikFormImageData === 'function') {
+        const stdAyar = {
+          soruSayisi: Math.max(1, Number((document.getElementById('omr-std-soru') || {}).value) || Number(durum.hariciOmrAnahtar.testSayisi) || 40),
+          sikSayisi: Number((document.getElementById('omr-std-sik') || {}).value) === 4 ? 4 : (durum.hariciOmrAnahtar.sikSayisi === 4 ? 4 : 5),
+          siralama: (document.getElementById('omr-std-siralama') || {}).value || 'sutun'
+        };
+        const stdOkuma = C.okuStandartOptikFormImageData(imgData, stdAyar);
+        if (stdOkuma && stdOkuma.formBulundu) {
+          const seciliGrup = ((document.getElementById('sec-omr-ogretmen-grup') || {}).value) || 'A';
+          const okunanTest = (stdOkuma.testDetay || []).map((t) => (/^[A-E]$/.test(t.verilen || '') ? t.verilen : 'A')).join('');
+          const stdInput = document.getElementById('omr-std-anahtar');
+          if (stdInput) stdInput.value = okunanTest;
+          durum.hariciOmrAnahtar.aktif = true;
+          durum.hariciOmrAnahtar.dySayisi = 0;
+          durum.hariciOmrAnahtar.testSayisi = okunanTest.length;
+          durum.hariciOmrAnahtar.anahtarlar[seciliGrup] = { dy: '', test: okunanTest };
+          guncelleHariciOmrAnahtarUI();
+          okuHariciOmrAnahtarFormdan(true);
+          sesliBipCal(true);
+          gosterOgretmenAnahtarOkumaDurumu(`✅ Standart öğretmen formundan ${seciliGrup} Grubu anahtarı çıkarıldı (${okunanTest.length} Test sorusu).`, true);
+          return true;
+        }
+      }
+
+      if (!okunan || !okunan.formBulundu) {
+        gosterOgretmenAnahtarOkumaDurumu('⚠️ İşaretli öğretmen optik formu algılanamadı: ' + ((okunan && okunan.mesaj) || '4 köşe karesi veya form balonları net görünmelidir.'), false);
+        sesliBipCal(false);
+        return false;
+      }
+      const seciliGrup = ((document.getElementById('sec-omr-ogretmen-grup') || {}).value) || okunan.grup || 'A';
+      const hedefGrup = ['A', 'B', 'C', 'D'].includes(okunan.grup) ? okunan.grup : seciliGrup;
+      const okunanDy = (okunan.dyDetay || []).map((d) => (d.verilen === 'D' || d.verilen === 'Y' ? d.verilen : 'D')).join('');
+      const okunanTest = (okunan.testDetay || []).map((t) => (/^[A-E]$/.test(t.verilen || '') ? t.verilen : 'A')).join('');
+      durum.hariciOmrAnahtar.aktif = true;
+      durum.hariciOmrAnahtar.dySayisi = (okunan.dyDetay || []).length;
+      durum.hariciOmrAnahtar.testSayisi = (okunan.testDetay || []).length;
+      durum.hariciOmrAnahtar.anahtarlar[hedefGrup] = { dy: okunanDy, test: okunanTest };
+      guncelleHariciOmrAnahtarUI();
+      okuHariciOmrAnahtarFormdan(true);
+      sesliBipCal(true);
+      gosterOgretmenAnahtarOkumaDurumu(`✅ İşaretli öğretmen kağıdından ${hedefGrup} Grubu anahtarı otomatik çıkarıldı (${okunanDy.length} D/Y + ${okunanTest.length} Test).`, true);
+      return true;
+    };
+
     const inputOmrOgretmenFoto = document.getElementById('input-omr-ogretmen-kagit-foto');
     if (inputOmrOgretmenFoto) {
       inputOmrOgretmenFoto.addEventListener('change', (e) => {
@@ -9864,42 +9951,32 @@
         const img = new Image();
         img.onload = () => {
           try {
-            okuHariciOmrAnahtarFormdan(false);
-            const geciciYapi = Object.assign({}, okuAktifSinavYapisi(), {
-              dySayisi: durum.hariciOmrAnahtar.dySayisi,
-              testSayisi: durum.hariciOmrAnahtar.testSayisi,
-              sikSayisi: durum.hariciOmrAnahtar.sikSayisi,
-              klasikSayisi: durum.hariciOmrAnahtar.klasikSayisi
-            });
-            const cnv = document.getElementById('canvas-omr-girdi');
-            const olcek = Math.min(1, 1600 / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
-            cnv.width = Math.max(1, Math.round((img.naturalWidth || img.width) * olcek));
-            cnv.height = Math.max(1, Math.round((img.naturalHeight || img.height) * olcek));
-            const ctx = cnv.getContext('2d');
-            ctx.drawImage(img, 0, 0, cnv.width, cnv.height);
-            const imgData = ctx.getImageData(0, 0, cnv.width, cnv.height);
-            const okunan = C.okuOptikFormImageData(imgData, geciciYapi, []);
-            if (!okunan || !okunan.formBulundu) {
-              omrUyariGoster('⚠️ İşaretli öğretmen optik formu algılanamadı: ' + ((okunan && okunan.mesaj) || '4 köşe karesi görünür olmalıdır.'));
-              return;
-            }
-            const seciliGrup = ((document.getElementById('sec-omr-ogretmen-grup') || {}).value) || okunan.grup || 'A';
-            const hedefGrup = ['A', 'B', 'C', 'D'].includes(okunan.grup) ? okunan.grup : seciliGrup;
-            const okunanDy = (okunan.dyDetay || []).map((d) => (d.verilen === 'D' || d.verilen === 'Y' ? d.verilen : 'D')).join('');
-            const okunanTest = (okunan.testDetay || []).map((t) => (/^[A-E]$/.test(t.verilen || '') ? t.verilen : 'A')).join('');
-            durum.hariciOmrAnahtar.aktif = true;
-            durum.hariciOmrAnahtar.dySayisi = (okunan.dyDetay || []).length;
-            durum.hariciOmrAnahtar.testSayisi = (okunan.testDetay || []).length;
-            durum.hariciOmrAnahtar.anahtarlar[hedefGrup] = { dy: okunanDy, test: okunanTest };
-            guncelleHariciOmrAnahtarUI();
-            okuHariciOmrAnahtarFormdan(true);
-            sesliBipCal(true);
-            omrUyariGoster(`✅ İşaretli öğretmen kağıdından ${hedefGrup} Grubu anahtarı otomatik çıkarıldı (${okunanDy.length} D/Y + ${okunanTest.length} Test).`);
+            cozVeUygulaHariciOgretmenAnahtari(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
           } finally {
+            try { URL.revokeObjectURL(url); } catch (_) {}
             inputOmrOgretmenFoto.value = '';
           }
         };
+        img.onerror = () => {
+          try { URL.revokeObjectURL(url); } catch (_) {}
+          inputOmrOgretmenFoto.value = '';
+          gosterOgretmenAnahtarOkumaDurumu('⚠️ Seçilen öğretmen anahtarı görseli yüklenemedi. Lütfen PNG/JPG dosyası seçin.', false);
+        };
         img.src = url;
+      });
+    }
+
+    const btnOmrKameradanAnahtarOku = document.getElementById('btn-omr-kameradan-anahtar-oku');
+    if (btnOmrKameradanAnahtarOku) {
+      btnOmrKameradanAnahtarOku.addEventListener('click', () => {
+        const video = document.getElementById('video-studyo-omr');
+        if (durum.kameraStream && video && video.videoWidth > 0) {
+          cozVeUygulaHariciOgretmenAnahtari(video, video.videoWidth, video.videoHeight);
+          return;
+        }
+        const kamBtn = document.getElementById('btn-studyo-kamera-ac');
+        if (kamBtn) kamBtn.click();
+        gosterOgretmenAnahtarOkumaDurumu('ℹ️ Önce kamerayı başlatıp işaretli öğretmen kağıdını gösterin, ardından "Kameradan Anahtar Oku" düğmesine basın.', false);
       });
     }
 
@@ -10330,36 +10407,53 @@
         return;
       }
 
-      const paket = C.uretOgrenciQrPaketi(durum.ogrenciler, {
-        tabanAdres: taban,
-        hedefSayfa: 'optik-mobil.html',
-        maksDilimBoyutu: 25
-      });
-      if (durum.ogrQrParcaIdx >= paket.toplamParca) durum.ogrQrParcaIdx = 0;
-      const aktifParca = paket.parcalar[durum.ogrQrParcaIdx] || paket.parcalar[0];
-      const qrMetni = aktifParca ? (aktifParca.url.length <= 1600 ? aktifParca.url : aktifParca.kod) : paket.tekUrl;
-      const svg = uretGercekQrSvg(qrMetni, 250);
+      const aktifDers = (typeof aktifDersiGetir === 'function' ? aktifDersiGetir() : null) || { id: durum.aktifDersId || 'genel', kod: 'DERS', ad: 'Ders' };
+      const dersEtiket = aktifDers.kod ? `${aktifDers.kod} — ${aktifDers.ad || 'Ders'}` : (aktifDers.ad || 'Ders');
 
-      if (linkAc && paket.tekUrl) {
-        linkAc.href = `optik-mobil.html#ogr=${paket.tekBase64}`;
-      }
-      if (parcaKutu && parcaEtiket) {
-        if (paket.toplamParca > 1) {
-          parcaKutu.style.display = 'flex';
-          parcaEtiket.textContent = `Parça ${aktifParca.parcaNo} / ${paket.toplamParca} (${aktifParca.adet} Öğrenci)`;
-        } else {
-          parcaKutu.style.display = 'none';
+      const uygulaOgrQrCizim = (omrToken = '') => {
+        const paket = C.uretOgrenciQrPaketi(durum.ogrenciler, {
+          tabanAdres: taban,
+          hedefSayfa: 'optik-mobil.html',
+          maksDilimBoyutu: 25,
+          dersId: aktifDers.id,
+          dersKod: aktifDers.kod,
+          dersAd: dersEtiket,
+          omrToken
+        });
+        if (durum.ogrQrParcaIdx >= paket.toplamParca) durum.ogrQrParcaIdx = 0;
+        const aktifParca = paket.parcalar[durum.ogrQrParcaIdx] || paket.parcalar[0];
+        const qrMetni = aktifParca ? (aktifParca.url.length <= 1600 ? aktifParca.url : aktifParca.kod) : paket.tekUrl;
+        const svg = uretGercekQrSvg(qrMetni, 250);
+
+        if (linkAc && (paket.hashParam || paket.tekBase64)) {
+          linkAc.href = paket.hashParam ? `optik-mobil.html${paket.hashParam}` : `optik-mobil.html#ogr=${paket.tekBase64}`;
         }
-      }
+        if (parcaKutu && parcaEtiket) {
+          if (paket.toplamParca > 1) {
+            parcaKutu.style.display = 'flex';
+            parcaEtiket.textContent = `Parça ${aktifParca.parcaNo} / ${paket.toplamParca} (${aktifParca.adet} Öğrenci)`;
+          } else {
+            parcaKutu.style.display = 'none';
+          }
+        }
 
-      if (svg) {
-        alan.innerHTML = svg;
-        bilgi.textContent = paket.toplamParca > 1
-          ? `Toplam ${paket.toplamOgrenci} öğrenci ${paket.toplamParca} QR parçasına bölündü (Şu an: Parça ${aktifParca.parcaNo}/${paket.toplamParca}). Telefon kamerasıyla sırayla okutun.`
-          : `✅ ${paket.toplamOgrenci} öğrenci QR koduna işlendi. Telefon kamerasıyla okutun veya bağlantıyı kopyalayın.`;
-      } else {
-        alan.innerHTML = '<div style="color:#b91c1c; font-size:0.8rem; padding:1rem;">QR üretilemedi. Aşağıdaki düğmeyle bağlantıyı kopyalayın.</div>';
-        bilgi.textContent = `${paket.toplamOgrenci} öğrenci hazır.`;
+        if (svg) {
+          alan.innerHTML = svg;
+          bilgi.textContent = paket.toplamParca > 1
+            ? `${dersEtiket} · Toplam ${paket.toplamOgrenci} öğrenci ${paket.toplamParca} QR parçasına bölündü (Şu an: Parça ${aktifParca.parcaNo}/${paket.toplamParca}). Telefon kamerasıyla sırayla okutun.`
+            : `✅ ${dersEtiket} dersinden ${paket.toplamOgrenci} öğrenci QR koduna işlendi. Telefon kamerasıyla okutun veya bağlantıyı kopyalayın.`;
+        } else {
+          alan.innerHTML = '<div style="color:#b91c1c; font-size:0.8rem; padding:1rem;">QR üretilemedi. Aşağıdaki düğmeyle bağlantıyı kopyalayın.</div>';
+          bilgi.textContent = `${dersEtiket} · ${paket.toplamOgrenci} öğrenci hazır.`;
+        }
+      };
+
+      const cachedOmrTok = getCachedOmrEslesmeToken();
+      uygulaOgrQrCizim(cachedOmrTok);
+      if (!cachedOmrTok && durum.hocaOturumAcik && (location.protocol === 'http:' || location.protocol === 'https:')) {
+        getirKisaOmurluOmrEslesmeToken(aktifDers.kod || 'GENEL').then((tok) => {
+          if (tok) uygulaOgrQrCizim(tok);
+        }).catch(() => {});
       }
     };
 
