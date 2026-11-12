@@ -312,24 +312,38 @@ function kontrastOrani(r1, r2) {
     });
     await bekle(200);
 
-    // 5) Masaüstü Uygulama Kabuğu (224px -> 56px Ray + 48px Üst Çubuk + Boş Durum Kartı)
+    // 5) Masaüstü Uygulama Kabuğu (224px -> 56px Ray + Gerçek Tıklamayla Geri Genişletme + [hidden] Toast Gizliliği)
+    const toastBaslangicGizli = await sayfa.evaluate(() => getComputedStyle(document.getElementById('toast-geri-al')).display === 'none');
+    await sayfa.click('#btn-yan-menu-daralt');
+    await bekle(120);
+    const darDurum = await sayfa.evaluate(() => {
+      const rYan = document.getElementById('ust-sekme-nav').getBoundingClientRect();
+      const rBtn = document.getElementById('btn-yan-menu-daralt').getBoundingClientRect();
+      return {
+        darW: Math.round(rYan.width),
+        butonRayIcinde: rBtn.width >= 28 && rBtn.left >= rYan.left && rBtn.right <= rYan.right
+      };
+    });
+    await sayfa.click('#btn-yan-menu-daralt');
+    await bekle(120);
     const kabukGeometri = await sayfa.evaluate(() => {
       const yan = document.getElementById('ust-sekme-nav');
       const ust = document.getElementById('sabit-kayit-onay-cubuk');
       const bosKart = document.getElementById('bos-durum-ilk-kurulum');
-      const genisW = Math.round(yan.getBoundingClientRect().width);
-      const ustH = Math.round(ust.getBoundingClientRect().height);
-      const bosGorunur = bosKart && !bosKart.hidden;
-      document.getElementById('btn-yan-menu-daralt').click();
-      const darW = Math.round(yan.getBoundingClientRect().width);
-      document.getElementById('btn-yan-menu-daralt').click();
-      return { genisW, darW, ustH, bosGorunur };
+      return {
+        genisW: Math.round(yan.getBoundingClientRect().width),
+        ustH: Math.round(ust.getBoundingClientRect().height),
+        bosGorunur: bosKart && getComputedStyle(bosKart).display !== 'none'
+      };
     });
-    kontrol(`Masaüstü Kabuk: Yan menü ${kabukGeometri.genisW}px -> ${kabukGeometri.darW}px daralır, üst çubuk ${kabukGeometri.ustH}px ve 0 derste İlk Kurulum kartı görünür`,
+    kontrol(`Masaüstü Kabuk: Yan menü gerçek fare tıklamasıyla ${kabukGeometri.genisW}px <-> ${darDurum.darW}px daralıp genişler, daralt düğmesi ray içinde kalır ve Geri Al toast başlangıçta görünmez`,
+      toastBaslangicGizli &&
+      darDurum.butonRayIcinde &&
       kabukGeometri.genisW >= 215 && kabukGeometri.genisW <= 235 &&
-      kabukGeometri.darW >= 50 && kabukGeometri.darW <= 64 &&
+      darDurum.darW >= 50 && darDurum.darW <= 64 &&
       kabukGeometri.ustH >= 42 && kabukGeometri.ustH <= 58 &&
-      kabukGeometri.bosGorunur);
+      kabukGeometri.bosGorunur,
+      JSON.stringify({ toastBaslangicGizli, darDurum, kabukGeometri }));
 
     // < 900px (390x844) Yatay Taşmasızlık Kontrolü
     await sayfa.setViewport({ width: 390, height: 844 });

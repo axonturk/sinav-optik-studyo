@@ -12042,11 +12042,29 @@
       }
     } catch (_) {}
 
+    const degistirYanMenuDarMod = (zorlaAc) => {
+      const darMi = zorlaAc === true
+        ? (document.body.classList.remove('yan-menu-dar'), false)
+        : document.body.classList.toggle('yan-menu-dar');
+      const btnD = document.getElementById('btn-yan-menu-daralt');
+      if (btnD) {
+        btnD.setAttribute('aria-label', darMi ? 'Kenar çubuğunu genişlet' : 'Kenar çubuğunu daralt');
+        btnD.setAttribute('title', darMi ? 'Kenar çubuğunu genişlet' : 'Kenar çubuğunu daralt');
+      }
+      try { localStorage.setItem('SINAV_YAN_MENU_DAR_V1', darMi ? '1' : '0'); } catch (_) {}
+    };
+
     const btnYanMenuDaralt = document.getElementById('btn-yan-menu-daralt');
     if (btnYanMenuDaralt) {
-      btnYanMenuDaralt.addEventListener('click', () => {
-        const darMi = document.body.classList.toggle('yan-menu-dar');
-        try { localStorage.setItem('SINAV_YAN_MENU_DAR_V1', darMi ? '1' : '0'); } catch (_) {}
+      btnYanMenuDaralt.addEventListener('click', () => degistirYanMenuDarMod(false));
+    }
+
+    const markaBlokEl = document.querySelector('#ust-sekme-nav .marka-blok');
+    if (markaBlokEl) {
+      markaBlokEl.addEventListener('click', () => {
+        if (document.body.classList.contains('yan-menu-dar')) {
+          degistirYanMenuDarMod(true);
+        }
       });
     }
 
@@ -12146,6 +12164,14 @@
         const t = document.getElementById('toast-geri-al');
         if (t) t.hidden = true;
         uygulaSonGeriAlYedegi();
+      });
+    }
+    const btnToastKapat = document.getElementById('btn-toast-kapat');
+    if (btnToastKapat) {
+      btnToastKapat.addEventListener('click', () => {
+        clearTimeout(__geriAlToastZamanlayici);
+        const t = document.getElementById('toast-geri-al');
+        if (t) t.hidden = true;
       });
     }
 

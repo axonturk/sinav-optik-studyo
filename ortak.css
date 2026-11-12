@@ -117,6 +117,10 @@
   padding: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-padding-top: 56px;
 }
@@ -1577,6 +1581,29 @@ body:not(.hoca-oturum-acik):not(.kiosk-aktif) #btn-hoca-giris-ac {
   gap: 4px;
 }
 
+body.yan-menu-dar .yan-menu {
+  overflow-x: hidden;
+  padding: var(--b-3) 6px;
+}
+
+body.yan-menu-dar .yan-menu-ust {
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 2px 0 var(--b-2);
+}
+
+body.yan-menu-dar .yan-menu #btn-yan-menu-daralt {
+  width: 36px;
+  min-height: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+body.yan-menu-dar .yan-menu .marka-blok {
+  cursor: pointer;
+}
+
 body.yan-menu-dar .yan-menu-metin,
 body.yan-menu-dar .yan-menu-grup-baslik,
 body.yan-menu-dar .yan-menu .sekme-rozet,
@@ -1584,7 +1611,9 @@ body.yan-menu-dar .marka-baslik {
   display: none;
 }
 
-body.yan-menu-dar .yan-menu .sekme-btn {
+body.yan-menu-dar .yan-menu .sekme-btn,
+body.yan-menu-dar .yan-menu #btn-hoca-giris-ac {
+  width: 100%;
   justify-content: center;
   padding: 7px 0;
 }
