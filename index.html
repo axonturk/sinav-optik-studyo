@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261112b" />
-  <link rel="manifest" href="manifest.webmanifest" />
-  <meta name="theme-color" content="#1d4ed8" />
+  <link rel="stylesheet" href="ortak.css?v=20261113a" />
+  <link rel="manifest" href="manifest-studyo.webmanifest" />
+  <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Optik Okuyucu" />
@@ -25,6 +25,12 @@
       if (b) b.hidden = false;
     });
     window.addEventListener('DOMContentLoaded', function () {
+      var perde = document.getElementById('mobil-menu-perde');
+      if (perde) {
+        perde.addEventListener('click', function () {
+          document.body.classList.remove('mobil-menu-acik');
+        });
+      }
       var b = document.getElementById('btn-pwa-yukle');
       if (!b) return;
       if (__pwaIstek) b.hidden = false;
@@ -68,12 +74,14 @@
     <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></symbol>
     <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
   </svg>
 
   <div class="uygulama-kabuk">
-    <!-- SOL KENAR ÇUBUĞU (224px Geniş / 56px İkon Rayı / <900px Alt Çekmece) -->
+    <div id="mobil-menu-perde" class="mobil-menu-perde yazdir-gizle" aria-hidden="true"></div>
+    <!-- SOL KENAR ÇUBUĞU (224px Geniş / 56px İkon Rayı / <900px Sol Çekmece) -->
     <aside class="yan-menu yazdir-gizle" id="ust-sekme-nav" aria-label="Ana Modüller">
       <div class="yan-menu-ust">
         <div class="marka-blok">
@@ -155,8 +163,8 @@
           <svg class="ui-ikon"><use href="#i-download"></use></svg>
           <span class="yan-menu-metin">Uygulamayı Kur</span>
         </button>
-        <button type="button" class="sekme-btn" id="btn-tema-degistir" title="Açık / Koyu Tema Değiştir">
-          <svg class="ui-ikon"><use href="#i-sun"></use></svg>
+        <button type="button" class="sekme-btn" id="btn-tema-degistir" title="Açık / Koyu Tema Değiştir" aria-label="Açık / Koyu Tema Değiştir" aria-pressed="false">
+          <svg class="ui-ikon"><use href="#i-moon"></use></svg>
           <span class="yan-menu-metin">Koyu Tema</span>
         </button>
         <button type="button" class="btn btn-kucuk" id="btn-hoca-giris-ac" title="Öğretmen / Yönetici Hesap ve Yetkilendirme Paneli">
@@ -171,7 +179,7 @@
       <div id="sabit-kayit-onay-cubuk" class="yazdir-gizle" role="status" aria-live="polite">
         <div class="sabit-kayit-ic">
           <div class="baglam-sol">
-            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-mobil-yan-menu-ac" title="Menüyü aç" aria-label="Menüyü aç" style="display:none;">
+            <button type="button" class="btn btn-hayalet btn-kucuk mobil-yan-menu-btn" id="btn-mobil-yan-menu-ac" title="Menüyü aç" aria-label="Menüyü aç">
               <svg class="ui-ikon"><use href="#i-panel-left"></use></svg>
             </button>
             <select id="aktif-ders-sec" class="baglam-secici" aria-label="Aktif Ders"></select>
@@ -188,7 +196,7 @@
           </div>
 
           <div class="baglam-sag">
-            <span id="rozet-kayit-durumu" class="kayit-durum-etiket" title="Kayıt ve Bulut Senkron Durumu (Geçmiş için tıklayın)">Kaydedildi</span>
+            <span id="rozet-kayit-durumu" class="kayit-durum-etiket" role="button" tabindex="0" title="Kayıt ve Bulut Senkron Durumu (Geçmiş için tıklayın)">Kaydedildi</span>
             <button type="button" class="btn btn-kucuk" id="btn-son-silineni-geri-al" hidden title="Son silinen öğeyi geri getir">
               <svg class="ui-ikon"><use href="#i-undo"></use></svg>
               <span>Geri Al</span>
@@ -224,7 +232,7 @@
       <div id="toast-geri-al" class="geri-al-toast yazdir-gizle" hidden style="display:none;" role="status" aria-live="polite">
         <span id="toast-geri-al-metin">Öğe silindi.</span>
         <button type="button" class="btn btn-birincil btn-kucuk" id="btn-toast-geri-al">Geri Al</button>
-        <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-toast-kapat" title="Kapat" aria-label="Bildirimi kapat" onclick="this.parentElement.hidden=true;this.parentElement.style.display='none';" style="color:inherit; min-height:26px; padding:2px 6px;">✕</button>
+        <button type="button" class="btn btn-hayalet btn-kucuk toast-kapat-btn" id="btn-toast-kapat" title="Kapat" aria-label="Bildirimi kapat">×</button>
       </div>
 
       <!-- ANA İÇERİK KAPSAYICISI (Doğru Giriş Yapılana Kadar Kilitli) -->
@@ -304,10 +312,10 @@
              SEKME 1: A4 SINAV & OPTİK FORM STÜDYOSU (VARSAYILAN AÇIK SEKME)
              ==================================================================== -->
         <section class="sekme-panel aktif" id="sekme-stüdyo">
-      <div class="iki-sutun-duzen">
+      <div class="iki-sutun-duzen studyo-iki-sutun">
 
         <!-- SOL PANEL: %20 SIK KULLANILAN KURGU + GELİŞMİŞ AKORDEONLAR -->
-        <aside class="yazdir-gizle">
+        <aside class="yazdir-gizle studyo-sol-panel">
           <div class="kart">
             <div class="kart-baslik">
               <span>Sınav Yapısı</span>
@@ -642,6 +650,8 @@
             </details>
           </div>
         </aside>
+
+        <div id="sol-paneli-boyutlandir" class="panel-boyutlandir-ray yazdir-gizle" role="separator" aria-orientation="vertical" aria-label="Sol panel genişliğini ayarla" aria-valuemin="260" aria-valuemax="560" aria-valuenow="320" title="Sürükleyerek sol paneli genişlet / daralt" tabindex="0"></div>
 
         <!-- SAĞ PANEL: TUVAL ÜST ARAÇ ÇUBUĞU + KAYITLI SINAVLAR + ÇIKTI & A4 TUVAL -->
         <div>
@@ -2725,8 +2735,9 @@
               <button type="button" class="btn btn-birincil btn-kucuk" id="btn-hoca-giris-yap" style="flex:1; min-height:36px;">
                 Giriş Yap
               </button>
-              <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-hoca-kilitle" style="min-height:36px; flex-shrink:0;">
-                Kilitle
+              <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-hoca-kilitle" title="Oturumu Kilitle" style="min-height:36px; flex-shrink:0;">
+                <svg class="ui-ikon"><use href="#i-lock"></use></svg>
+                <span>Oturumu Kilitle</span>
               </button>
             </div>
             <div class="giris-sade-alt-linkler" style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:10px; padding-top:8px; border-top:1px solid var(--kenar); font-size:var(--yazi-xs);">

@@ -4,6 +4,7 @@
 node_modules/
 test-artifacts/
 ornek-dosyalar/
+backups/
 *-test.js
 test-suite.js
 omr-geometri-denetim.js
@@ -15,5 +16,7 @@ wrangler.toml
 wrangler.jsonc
 d1-sema.sql
 *.sql
+*.md
 .yerel-bulut-kasa.json
+.yerel-bulut-kasa.json.tmp
 *.log

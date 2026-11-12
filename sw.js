@@ -1,7 +1,7 @@
 /* Uygulama kabuğunu çevrimdışı çalıştıran servis işçisi (PWA).
    - Statik dosyalar: ağ öncelikli, ağ yoksa önbellek (güncel sürüm her zaman önceliklidir).
    - /api/ uçları ASLA önbelleğe alınmaz (Zero-Trust: sınav/puan verisi sunucudan canlı gelir). */
-const SURUM = 'sinav-optik-v12';
+const SURUM = 'sinav-optik-v13';
 const KABUK = [
   './',
   './optik-mobil.html',
@@ -13,8 +13,11 @@ const KABUK = [
   './qrcode-generator.js',
   './xlsx.full.min.js',
   './manifest.webmanifest',
+  './manifest-studyo.webmanifest',
+  './icon.svg',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (olay) => {

@@ -5,6 +5,25 @@
 
 import Cekirdek from './guvenlik-ve-veri.js';
 
+const GUVENLIK_BASLIKLARI = {
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; media-src 'self' blob: mediastream:; worker-src 'self' blob:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
+};
+
+function ekleGuvenlikBasliklari(yanit) {
+  const yeniBaslik = new Headers(yanit.headers);
+  for (const [k, v] of Object.entries(GUVENLIK_BASLIKLARI)) {
+    yeniBaslik.set(k, v);
+  }
+  return new Response(yanit.body, {
+    status: yanit.status,
+    statusText: yanit.statusText,
+    headers: yeniBaslik
+  });
+}
+
 const sunucuDurumu = {
   aktifSinav: {
     sinavId: 'SINAV-2026-GUZ',
@@ -25,6 +44,9 @@ const sunucuDurumu = {
     })
   ],
   davetKodu: Cekirdek.VARSAYILAN_DAVET_KODU,
+  omrImzaSirri: '',
+  omrTokenlar: new Map(),
+  hizSinirlari: new Map(),
   aktifHocaTokenlar: new Set(),
   aktifHocaOturumlari: new Map(),
   aktifTokenlar: new Map(),
@@ -35,6 +57,39 @@ const sunucuDurumu = {
   bulutKasalarBellek: new Map(),
   bulutGecmisBellek: new Map()
 };
+
+async function hazirlaHashliHocaKaydiAsync(kayit) {
+  const kopya = Object.assign({}, kayit);
+  if (!kopya.sifreHash && typeof kopya.sifre === 'string' && kopya.sifre.length > 0) {
+    kopya.sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(kopya.sifre);
+  }
+  delete kopya.sifre;
+  delete kopya.sifreTekrar;
+  return kopya;
+}
+
+async function baslatGuvenliDurum(env) {
+  if (!sunucuDurumu.omrImzaSirri) {
+    sunucuDurumu.omrImzaSirri = uretRastgeleToken(32);
+    if (env && env.SINAV_DB) {
+      await kaydetSistemAnahtariD1(env, 'omr_imza_sirri', sunucuDurumu.omrImzaSirri);
+    }
+  }
+  if (!sunucuDurumu.hocaHesap.sifreHash && sunucuDurumu.hocaHesap.sifre) {
+    sunucuDurumu.hocaHesap = await hazirlaHashliHocaKaydiAsync(sunucuDurumu.hocaHesap);
+  } else {
+    delete sunucuDurumu.hocaHesap.sifre;
+  }
+  if (Array.isArray(sunucuDurumu.hocaListesi)) {
+    for (let i = 0; i < sunucuDurumu.hocaListesi.length; i++) {
+      if (!sunucuDurumu.hocaListesi[i].sifreHash && sunucuDurumu.hocaListesi[i].sifre) {
+        sunucuDurumu.hocaListesi[i] = await hazirlaHashliHocaKaydiAsync(sunucuDurumu.hocaListesi[i]);
+      } else {
+        delete sunucuDurumu.hocaListesi[i].sifre;
+      }
+    }
+  }
+}
 
 function hesaplaKasaOzeti(veri) {
   if (!veri || typeof veri !== 'object') return { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0, metin: '0 ders' };
@@ -72,6 +127,12 @@ async function yukleSistemDurumuD1(env) {
         if (Array.isArray(v.hocaListesi) && v.hocaListesi.length > 0) sunucuDurumu.hocaListesi = v.hocaListesi;
         if (v.hocaHesap) sunucuDurumu.hocaHesap = v.hocaHesap;
         if (v.davetKodu) sunucuDurumu.davetKodu = v.davetKodu;
+      } else if (s.anahtar === 'omr_imza_sirri' && typeof v === 'string' && v.length >= 32) {
+        sunucuDurumu.omrImzaSirri = v;
+      } else if (s.anahtar === 'omr_iptal_tidler' && Array.isArray(v)) {
+        for (const tid of v) {
+          if (tid) sunucuDurumu.omrTokenlar.set(tid, { iptal: true });
+        }
       } else if (s.anahtar === 'hoca_oturumlari' && Array.isArray(v)) {
         sunucuDurumu.aktifHocaTokenlar = new Set();
         sunucuDurumu.aktifHocaOturumlari = new Map();
@@ -178,15 +239,226 @@ async function okuJsonGovde(request, maksBayt = 524288) {
   return Cekirdek.derinTemizleNesne(nesne, 0);
 }
 
-function gonderJson(kod, veri) {
+function gonderJson(kod, veri, ekBasliklar = null) {
   return new Response(JSON.stringify(veri), {
     status: kod,
-    headers: {
+    headers: Object.assign({}, GUVENLIK_BASLIKLARI, {
       'Content-Type': 'application/json; charset=utf-8',
-      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'no-store'
-    }
+    }, ekBasliklar || {})
   });
+}
+
+function u8ToB64(u8) {
+  let ikili = '';
+  const parca = 0x8000;
+  for (let i = 0; i < u8.length; i += parca) {
+    ikili += String.fromCharCode.apply(null, u8.subarray(i, i + parca));
+  }
+  return btoa(ikili);
+}
+
+function b64ToU8(b64) {
+  const ikili = atob(String(b64 || '').trim());
+  const u8 = new Uint8Array(ikili.length);
+  for (let i = 0; i < ikili.length; i++) u8[i] = ikili.charCodeAt(i);
+  return u8;
+}
+
+function u8ToB64Url(u8) {
+  return u8ToB64(u8).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64UrlToU8(str) {
+  let s = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4 !== 0) s += '=';
+  return b64ToU8(s);
+}
+
+async function hmacSha256Imzala(sifre, mesaj) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(sifre),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(mesaj));
+  return new Uint8Array(sig);
+}
+
+async function uretOmrEslesmeToken(env, oturum, oturumKodu = 'GENEL', sureDk = 15) {
+  const tid = uretRastgeleToken(12);
+  const iat = Date.now();
+  const gecerlilikSn = Math.max(300, Math.min(7200, (parseInt(sureDk, 10) || 15) * 60));
+  const bitisMs = iat + gecerlilikSn * 1000;
+  const kod = String(oturumKodu || 'GENEL').trim().toUpperCase() || 'GENEL';
+  const payload = { tid, k: oturum.kullaniciAdi, o: kod, iat, exp: bitisMs };
+  const payloadB64 = u8ToB64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const imzaU8 = await hmacSha256Imzala(sunucuDurumu.omrImzaSirri, payloadB64);
+  const token = `OMRT1.${payloadB64}.${u8ToB64Url(imzaU8)}`;
+  sunucuDurumu.omrTokenlar.set(tid, { kullaniciAdi: oturum.kullaniciAdi, oturumKodu: kod, bitisMs, iptal: false });
+  if (env && env.SINAV_DB) {
+    try {
+      await env.SINAV_DB.prepare(
+        'INSERT OR REPLACE INTO omr_eslesme_tokenlari (token_id, kullanici_adi, oturum_kodu, olusturma_ms, bitis_ms, iptal) VALUES (?1, ?2, ?3, ?4, ?5, 0)'
+      ).bind(tid, oturum.kullaniciAdi, kod, iat, bitisMs).run();
+    } catch (_) {}
+  }
+  return { token, tid, oturumKodu: kod, bitisMs, gecerlilikSn };
+}
+
+async function dogrulaOmrVeyaHocaToken(env, token, hedefOturumKodu = '') {
+  if (!token) return null;
+  if (sunucuDurumu.aktifHocaTokenlar.has(token)) {
+    return { tur: 'hoca', oturum: sunucuDurumu.aktifHocaOturumlari.get(token) };
+  }
+  if (!token.startsWith('OMRT1.')) return null;
+  const parcalar = token.split('.');
+  if (parcalar.length !== 3) return null;
+  try {
+    const beklenen = await hmacSha256Imzala(sunucuDurumu.omrImzaSirri, parcalar[1]);
+    const gelen = b64UrlToU8(parcalar[2]);
+    if (beklenen.length !== gelen.length) return null;
+    let fark = 0;
+    for (let i = 0; i < beklenen.length; i++) fark |= (beklenen[i] ^ gelen[i]);
+    if (fark !== 0) return null;
+    const payload = JSON.parse(new TextDecoder().decode(b64UrlToU8(parcalar[1])));
+    if (!payload || !payload.tid || !payload.exp || Date.now() >= Number(payload.exp)) return null;
+    const bellekKayit = sunucuDurumu.omrTokenlar.get(payload.tid);
+    if (bellekKayit && bellekKayit.iptal) return null;
+    if (env && env.SINAV_DB) {
+      try {
+        const sat = await env.SINAV_DB.prepare(
+          'SELECT iptal FROM omr_eslesme_tokenlari WHERE token_id = ?1'
+        ).bind(payload.tid).first();
+        if (sat && Number(sat.iptal) === 1) return null;
+      } catch (_) {}
+    }
+    const hedefKod = String(hedefOturumKodu || '').trim().toUpperCase();
+    if (payload.o && payload.o !== 'GENEL' && hedefKod && payload.o !== hedefKod) return null;
+    return { tur: 'omr_eslesme', kullaniciAdi: payload.k, oturumKodu: payload.o, tid: payload.tid };
+  } catch (_) {
+    return null;
+  }
+}
+
+async function kontrolHizSiniri(env, anahtar, maksDeneme = 8, pencereMs = 15 * 60 * 1000) {
+  const simdi = Date.now();
+  if (env && env.SINAV_DB) {
+    try {
+      const sat = await env.SINAV_DB.prepare(
+        'SELECT sayac, pencere_baslangic_ms FROM hiz_sinirlari WHERE anahtar = ?1'
+      ).bind(anahtar).first();
+      if (!sat || (simdi - Number(sat.pencere_baslangic_ms)) >= pencereMs) {
+        await env.SINAV_DB.prepare(
+          `INSERT INTO hiz_sinirlari (anahtar, sayac, pencere_baslangic_ms, guncelleme_ms)
+           VALUES (?1, 1, ?2, ?2)
+           ON CONFLICT(anahtar) DO UPDATE SET sayac = 1, pencere_baslangic_ms = ?2, guncelleme_ms = ?2`
+        ).bind(anahtar, simdi).run();
+        return { izinli: true, kalan: maksDeneme - 1, tekrarSn: 0 };
+      }
+      const mevcutSayac = Number(sat.sayac) || 0;
+      if (mevcutSayac >= maksDeneme) {
+        const kalanMs = Math.max(1000, pencereMs - (simdi - Number(sat.pencere_baslangic_ms)));
+        return { izinli: false, kalan: 0, tekrarSn: Math.ceil(kalanMs / 1000) };
+      }
+      await env.SINAV_DB.prepare(
+        'UPDATE hiz_sinirlari SET sayac = sayac + 1, guncelleme_ms = ?1 WHERE anahtar = ?2'
+      ).bind(simdi, anahtar).run();
+      return { izinli: true, kalan: maksDeneme - (mevcutSayac + 1), tekrarSn: 0 };
+    } catch (_) {}
+  }
+  const mevcut = sunucuDurumu.hizSinirlari.get(anahtar);
+  if (!mevcut || (simdi - mevcut.pencereBaslangicMs) >= pencereMs) {
+    sunucuDurumu.hizSinirlari.set(anahtar, { sayac: 1, pencereBaslangicMs: simdi });
+    return { izinli: true, kalan: maksDeneme - 1, tekrarSn: 0 };
+  }
+  if (mevcut.sayac >= maksDeneme) {
+    const kalanMs = Math.max(1000, pencereMs - (simdi - mevcut.pencereBaslangicMs));
+    return { izinli: false, kalan: 0, tekrarSn: Math.ceil(kalanMs / 1000) };
+  }
+  mevcut.sayac += 1;
+  return { izinli: true, kalan: maksDeneme - mevcut.sayac, tekrarSn: 0 };
+}
+
+async function akisOkuLimiti(stream, maksBayt = 16777216) {
+  const reader = stream.getReader();
+  const parcalar = [];
+  let toplam = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      toplam += value.byteLength;
+      if (toplam > maksBayt) {
+        parcalar.length = 0;
+        try { await reader.cancel('Boyut sınırı aşıldı'); } catch (_) {}
+        throw new Error('Açılan veri boyutu sınırı aşıldı');
+      }
+      parcalar.push(value);
+    }
+    const birlesik = new Uint8Array(toplam);
+    let ofset = 0;
+    for (const p of parcalar) {
+      birlesik.set(p, ofset);
+      ofset += p.byteLength;
+    }
+    parcalar.length = 0;
+    return birlesik;
+  } catch (err) {
+    parcalar.length = 0;
+    try { await reader.cancel('Akış iptal edildi'); } catch (_) {}
+    throw err;
+  }
+}
+
+async function cozGzipB64Json(b64Metin) {
+  const u8 = b64ToU8(b64Metin);
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  writer.write(u8).catch(() => {});
+  writer.close().catch(() => {});
+  try {
+    const acilmis = await akisOkuLimiti(ds.readable, 16777216);
+    const nesne = JSON.parse(new TextDecoder().decode(acilmis));
+    return Cekirdek.derinTemizleNesne(nesne, 0);
+  } catch (err) {
+    try { await writer.abort(err); } catch (_) {}
+    throw err;
+  }
+}
+
+async function paketleGzipB64Json(nesne) {
+  const u8 = new TextEncoder().encode(JSON.stringify(nesne));
+  const cs = new CompressionStream('gzip');
+  const writer = cs.writable.getWriter();
+  writer.write(u8).catch(() => {});
+  writer.close().catch(() => {});
+  try {
+    const sikis = await akisOkuLimiti(cs.readable, 16777216);
+    return u8ToB64(sikis);
+  } catch (err) {
+    try { await writer.abort(err); } catch (_) {}
+    throw err;
+  }
+}
+
+async function paketleD1VeriJson(nesne) {
+  const duzJson = JSON.stringify(nesne);
+  if (duzJson.length > 400000) {
+    const b64 = await paketleGzipB64Json(nesne);
+    return JSON.stringify({ __kodlama: 'gzip-b64', veri: b64 });
+  }
+  return duzJson;
+}
+
+async function acD1VeriJson(veriJsonStr) {
+  const parsed = JSON.parse(veriJsonStr);
+  if (parsed && typeof parsed === 'object' && parsed.__kodlama === 'gzip-b64' && typeof parsed.veri === 'string') {
+    return await cozGzipB64Json(parsed.veri);
+  }
+  return parsed;
 }
 
 export default {
@@ -201,6 +473,7 @@ export default {
 
     if (yol.startsWith('/api/')) {
       await yukleSistemDurumuD1(env);
+      await baslatGuvenliDurum(env);
     }
 
     if (metot === 'GET' && yol === '/api/ag-adresi') {
@@ -211,11 +484,11 @@ export default {
       if (metot === 'POST') {
         try {
           const govde = await okuJsonGovde(request, 524288);
-          const hocaToken = cozHocaTokenIstekten(request, govde, urlNesne);
-          if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
-            return gonderJson(401, { hata: 'Öğrenci listesi QR senkronizasyonu için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
-          }
           const oturumKodu = String((govde && govde.oturumKodu) || 'GENEL').trim().toUpperCase() || 'GENEL';
+          const hocaToken = cozHocaTokenIstekten(request, govde, urlNesne);
+          if (!(await dogrulaOmrVeyaHocaToken(env, hocaToken, oturumKodu))) {
+            return gonderJson(401, { hata: 'Öğrenci listesi QR senkronizasyonu için doğrulanmış öğretmen oturumu veya geçerli OMR eşleştirme tokenı gereklidir (401 Unauthorized).' });
+          }
           let ogrenciler = [];
           if (Array.isArray(govde && govde.ogrenciler)) {
             ogrenciler = govde.ogrenciler
@@ -243,11 +516,11 @@ export default {
         }
       }
       if (metot === 'GET') {
-        const hocaToken = cozHocaTokenIstekten(request, null, urlNesne);
-        if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
-          return gonderJson(401, { hata: 'Öğrenci listesi QR kuyruğunu okumak için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
-        }
         const oturumKodu = String(urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || 'GENEL').trim().toUpperCase() || 'GENEL';
+        const hocaToken = cozHocaTokenIstekten(request, null, urlNesne);
+        if (!(await dogrulaOmrVeyaHocaToken(env, hocaToken, oturumKodu))) {
+          return gonderJson(401, { hata: 'Öğrenci listesi QR kuyruğunu okumak için doğrulanmış öğretmen oturumu veya geçerli OMR eşleştirme tokenı gereklidir (401 Unauthorized).' });
+        }
         const tuket = urlNesne.searchParams.get('tuket') === '1';
         const kayit = sunucuDurumu.ogrenciQrKuyrugu.get(oturumKodu) || null;
         if (kayit && tuket) {
@@ -269,11 +542,11 @@ export default {
       if (metot === 'POST') {
         try {
           const govde = await okuJsonGovde(request, 524288);
-          const hocaToken = cozHocaTokenIstekten(request, govde, urlNesne);
-          if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
-            return gonderJson(401, { hata: 'OMR okuma sonucu senkronizasyonu için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
-          }
           const oturumKodu = String((govde && govde.oturumKodu) || 'GENEL').trim().toUpperCase() || 'GENEL';
+          const hocaToken = cozHocaTokenIstekten(request, govde, urlNesne);
+          if (!(await dogrulaOmrVeyaHocaToken(env, hocaToken, oturumKodu))) {
+            return gonderJson(401, { hata: 'OMR okuma sonucu senkronizasyonu için doğrulanmış öğretmen oturumu veya geçerli OMR eşleştirme tokenı gereklidir (401 Unauthorized).' });
+          }
           const omrSinirlar = {};
           if (sunucuDurumu.kayitliOgrenciler && sunucuDurumu.kayitliOgrenciler.size > 0) {
             omrSinirlar.ogrenciler = Array.from(sunucuDurumu.kayitliOgrenciler.values());
@@ -316,11 +589,11 @@ export default {
         }
       }
       if (metot === 'GET') {
-        const hocaToken = cozHocaTokenIstekten(request, null, urlNesne);
-        if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken)) {
-          return gonderJson(401, { hata: 'OMR sonuç kuyruğunu okumak için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
-        }
         const oturumKodu = String(urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || urlNesne.searchParams.get('kod') || 'GENEL').trim().toUpperCase() || 'GENEL';
+        const hocaToken = cozHocaTokenIstekten(request, null, urlNesne);
+        if (!(await dogrulaOmrVeyaHocaToken(env, hocaToken, oturumKodu))) {
+          return gonderJson(401, { hata: 'OMR sonuç kuyruğunu okumak için doğrulanmış öğretmen oturumu veya geçerli OMR eşleştirme tokenı gereklidir (401 Unauthorized).' });
+        }
         const tuket = urlNesne.searchParams.get('tuket') === '1';
         const kayit = sunucuDurumu.omrSonucKuyrugu.get(oturumKodu) || null;
         if (kayit && tuket) {
@@ -348,11 +621,12 @@ export default {
         const havuz = Array.isArray(sunucuDurumu.hocaListesi) && sunucuDurumu.hocaListesi.length > 0
           ? sunucuDurumu.hocaListesi
           : [sunucuDurumu.hocaHesap];
-        const sonuc = Cekirdek.dogrulaHocaGiris(govde.kullaniciAdi, govde.sifre, havuz);
+        const sonuc = await Cekirdek.dogrulaHocaGirisAsync(govde.kullaniciAdi, govde.sifre, havuz);
         if (!sonuc.basarili) {
           return gonderJson(sonuc.kod, { hata: sonuc.hata, durum: sonuc.durum || 'reddedildi' });
         }
         const hocaToken = uretRastgeleToken(24);
+        const simdi = Date.now();
         sunucuDurumu.aktifHocaTokenlar.add(hocaToken);
         sunucuDurumu.aktifHocaOturumlari.set(hocaToken, {
           kullaniciAdi: sonuc.kullaniciAdi,
@@ -360,6 +634,15 @@ export default {
           rol: sonuc.rol || 'hoca'
         });
         await kaydetSistemAnahtariD1(env, 'hoca_oturumlari', Array.from(sunucuDurumu.aktifHocaOturumlari.entries()));
+        if (env && env.SINAV_DB) {
+          try {
+            const tokenHash = Cekirdek.uretDelilLogHash(hocaToken, 'HOCA-OTURUM');
+            const bitisMs = simdi + (24 * 60 * 60 * 1000);
+            await env.SINAV_DB.prepare(
+              'INSERT OR REPLACE INTO hoca_oturumlari (token_hash, kullanici_adi, ad_soyad, rol, olusturma_ms, son_erisim_ms, bitis_ms, iptal) VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, 0)'
+            ).bind(tokenHash, sonuc.kullaniciAdi, sonuc.adSoyad, sonuc.rol || 'hoca', simdi, bitisMs).run();
+          } catch (_) {}
+        }
         return gonderJson(200, {
           token: hocaToken,
           kullaniciAdi: sonuc.kullaniciAdi,
@@ -367,6 +650,70 @@ export default {
           eposta: sonuc.eposta,
           rol: sonuc.rol || 'hoca',
           durum: sonuc.durum || 'aktif'
+        });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
+    if (metot === 'POST' && yol === '/api/hoca-cikis') {
+      try {
+        const govde = await okuJsonGovde(request);
+        const token = cozHocaTokenIstekten(request, govde, urlNesne);
+        if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token)) {
+          return gonderJson(401, { hata: 'İptal edilecek geçerli öğretmen oturumu bulunamadı (401 Unauthorized).' });
+        }
+        const oturum = sunucuDurumu.aktifHocaOturumlari.get(token);
+        sunucuDurumu.aktifHocaTokenlar.delete(token);
+        sunucuDurumu.aktifHocaOturumlari.delete(token);
+        const iptalTidler = [];
+        if (oturum && oturum.kullaniciAdi) {
+          for (const [tid, omrKayit] of sunucuDurumu.omrTokenlar.entries()) {
+            if (omrKayit.iptal || String(omrKayit.kullaniciAdi || '').toLowerCase() === String(oturum.kullaniciAdi).toLowerCase()) {
+              omrKayit.iptal = true;
+              iptalTidler.push(tid);
+            }
+          }
+        }
+        await kaydetSistemAnahtariD1(env, 'hoca_oturumlari', Array.from(sunucuDurumu.aktifHocaOturumlari.entries()));
+        if (iptalTidler.length > 0) {
+          await kaydetSistemAnahtariD1(env, 'omr_iptal_tidler', iptalTidler.slice(-200));
+        }
+        if (env && env.SINAV_DB) {
+          try {
+            const tokenHash = Cekirdek.uretDelilLogHash(token, 'HOCA-OTURUM');
+            await env.SINAV_DB.prepare('UPDATE hoca_oturumlari SET iptal = 1, son_erisim_ms = ?1 WHERE token_hash = ?2').bind(Date.now(), tokenHash).run();
+            if (oturum && oturum.kullaniciAdi) {
+              await env.SINAV_DB.prepare('UPDATE omr_eslesme_tokenlari SET iptal = 1 WHERE kullanici_adi = ?1').bind(oturum.kullaniciAdi).run();
+            }
+          } catch (_) {}
+        }
+        return gonderJson(200, { basarili: true, cikisYapildi: true });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
+    if ((metot === 'POST' || metot === 'GET') && yol === '/api/omr-eslesme-token') {
+      try {
+        const govde = metot === 'POST' ? await okuJsonGovde(request) : null;
+        const hocaToken = cozHocaTokenIstekten(request, govde, urlNesne);
+        const oturum = hocaToken ? sunucuDurumu.aktifHocaOturumlari.get(hocaToken) : null;
+        if (!hocaToken || !sunucuDurumu.aktifHocaTokenlar.has(hocaToken) || !oturum) {
+          return gonderJson(401, { hata: 'OMR eşleştirme tokenı üretmek için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+        }
+        const oturumKodu = (govde && govde.oturumKodu) || urlNesne.searchParams.get('oturumKodu') || urlNesne.searchParams.get('oturum') || 'GENEL';
+        const sureDk = (govde && govde.sureDk) || urlNesne.searchParams.get('sureDk') || 15;
+        const uretilen = await uretOmrEslesmeToken(env, oturum, oturumKodu, sureDk);
+        return gonderJson(200, {
+          basarili: true,
+          token: uretilen.token,
+          omrToken: uretilen.token,
+          tokenTuru: 'omr_eslesme',
+          oturumKodu: uretilen.oturumKodu,
+          kullaniciAdi: oturum.kullaniciAdi,
+          bitisMs: uretilen.bitisMs,
+          gecerlilikSn: uretilen.gecerlilikSn
         });
       } catch (err) {
         return gonderJson(400, { hata: err.message });
@@ -385,12 +732,13 @@ export default {
           const kod = String(dogrulama.hata || '').includes('davet kodu') ? 403 : 400;
           return gonderJson(kod, { hata: dogrulama.hata });
         }
+        const sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.sifre));
         const yeniKayit = {
           kullaniciAdi: dogrulama.kullaniciAdi,
           adSoyad: dogrulama.adSoyad,
           eposta: dogrulama.eposta,
           telefon: dogrulama.telefon,
-          sifre: String(govde.sifre),
+          sifreHash,
           rol: 'hoca',
           durum: 'beklemede',
           kayitTarihi: new Date().toISOString().slice(0, 10)
@@ -417,16 +765,32 @@ export default {
 
     if (metot === 'POST' && yol === '/api/hoca-sifre-kurtar') {
       try {
+        const ip = String(request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '127.0.0.1').split(',')[0].trim();
+        const limit = await kontrolHizSiniri(env, `hoca-sifre-kurtar:${ip}`, 8, 15 * 60 * 1000);
+        if (!limit.izinli) {
+          return gonderJson(
+            429,
+            { hata: 'Çok fazla şifre sıfırlama denemesi yapıldı. Lütfen daha sonra tekrar deneyiniz (429 Too Many Requests).' },
+            { 'Retry-After': String(limit.tekrarSn) }
+          );
+        }
         const govde = await okuJsonGovde(request);
         const havuz = Array.isArray(sunucuDurumu.hocaListesi) && sunucuDurumu.hocaListesi.length > 0
           ? sunucuDurumu.hocaListesi
           : [sunucuDurumu.hocaHesap];
-        const sonuc = Cekirdek.sifirlaHocaSifreEpostaTelefon(govde, havuz);
+        const sonuc = Cekirdek.sifirlaHocaSifreEpostaTelefon(govde, havuz, { hashAtla: true });
         if (!sonuc.basarili) {
           return gonderJson(sonuc.kod || 403, { hata: sonuc.hata });
         }
+        const yeniHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.yeniSifre));
+        const guncelKayit = havuz.find((h) => String(h.kullaniciAdi || '').toLowerCase() === String(sonuc.kullaniciAdi).toLowerCase());
+        if (guncelKayit) {
+          guncelKayit.sifreHash = yeniHash;
+          delete guncelKayit.sifre;
+        }
         if (sonuc.rol === 'yonetici') {
-          sunucuDurumu.hocaHesap.sifre = String(govde.yeniSifre);
+          sunucuDurumu.hocaHesap.sifreHash = yeniHash;
+          delete sunucuDurumu.hocaHesap.sifre;
         }
         await kaydetSistemAnahtariD1(env, 'hoca_yonetim', {
           hocaListesi: sunucuDurumu.hocaListesi,
@@ -483,7 +847,8 @@ export default {
           kayit.adSoyad = dogrulama.adSoyad;
           kayit.eposta = dogrulama.eposta;
           kayit.telefon = dogrulama.telefon;
-          kayit.sifre = String(govde.sifre);
+          kayit.sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.sifre));
+          delete kayit.sifre;
           oturum.kullaniciAdi = dogrulama.kullaniciAdi;
           oturum.adSoyad = dogrulama.adSoyad;
           if (kayit.rol === 'yonetici') sunucuDurumu.hocaHesap = Object.assign({}, kayit);
@@ -689,6 +1054,8 @@ export default {
             ocKodu: s.ocKodu || 'ÖÇ-1'
           }));
 
+        const gelenKurtarma = String(govde.kurtarmaAnahtari || '').trim();
+        const gelenToken = cozHocaTokenIstekten(request, govde, urlNesne);
         for (const [mevcutToken, mevcutOt] of sunucuDurumu.aktifTokenlar.entries()) {
           if (
             mevcutOt.ogrNo === ogr.ogrNo &&
@@ -701,6 +1068,19 @@ export default {
             if (Date.now() >= mevcutOt.bitisMs) {
               return gonderJson(403, { hata: 'Sınav oturum süreniz dolmuştur; süre sıfırlanamaz veya yeniden başlatılamaz.' });
             }
+            const gelenKurtarmaHash = gelenKurtarma ? Cekirdek.uretDelilLogHash(gelenKurtarma, 'OGR-KURTARMA') : '';
+            const kurtarmaEslesir = Boolean(
+              gelenKurtarmaHash &&
+              mevcutOt.kurtarmaAnahtariHash &&
+              Cekirdek.sabitSureliEsitMi(gelenKurtarmaHash, mevcutOt.kurtarmaAnahtariHash)
+            );
+            const tokenEslesir = Boolean(gelenToken && Cekirdek.sabitSureliEsitMi(gelenToken, mevcutToken));
+            if ((gelenKurtarma && !kurtarmaEslesir) || (gelenToken && !tokenEslesir) || (!kurtarmaEslesir && !tokenEslesir)) {
+              return gonderJson(409, {
+                hata: 'Bu öğrenci numarası için başka bir cihazda/oturumda aktif bir sınav oturumu devam etmektedir. Oturum devralma reddedildi (409 Conflict).',
+                oturumCakismasi: true
+              });
+            }
             const mevcutSorular = hazirlaIstemciSorulari(mevcutOt.sorular || sunucuDurumu.aktifSinav.sorular);
             return gonderJson(200, {
               token: mevcutToken,
@@ -709,6 +1089,7 @@ export default {
               bitisMs: mevcutOt.bitisMs,
               soruSayisi: mevcutSorular.length,
               sorular: mevcutSorular,
+              kilitliSoruIdleri: Object.keys(mevcutOt.cevaplar || {}),
               mevcutOturumDevam: true
             });
           }
@@ -737,20 +1118,37 @@ export default {
         const istemciSorulari = hazirlaIstemciSorulari(oturumSorulari);
 
         const token = uretRastgeleToken(24);
+        const kurtarmaAnahtari = (typeof govde.kurtarmaAnahtari === 'string' && govde.kurtarmaAnahtari.trim().length >= 8)
+          ? govde.kurtarmaAnahtari.trim()
+          : uretRastgeleToken(16);
+        const kurtarmaAnahtariHash = Cekirdek.uretDelilLogHash(kurtarmaAnahtari, 'OGR-KURTARMA');
         const bitisMs = Date.now() + sunucuDurumu.aktifSinav.sureDk * 60 * 1000;
         sunucuDurumu.aktifTokenlar.set(token, {
           ogrNo: ogr.ogrNo,
           adSoyad: ogr.adSoyad,
           sinavId: aktifSinavId,
           sinavSurumId: aktifSinavSurumId,
+          kurtarmaAnahtariHash,
           sorular: oturumSorulari,
           bitisMs,
           cevaplar: {},
           bitti: false
         });
         await kaydetSistemAnahtariD1(env, 'aktif_tokenlar', Array.from(sunucuDurumu.aktifTokenlar.entries()));
+        if (env && env.SINAV_DB) {
+          try {
+            const tokenHash = Cekirdek.uretDelilLogHash(token, 'OGR-OTURUM');
+            const durumJson = JSON.stringify({ adSoyad: ogr.adSoyad, cevaplar: {}, bitti: false });
+            await env.SINAV_DB.prepare(
+              `INSERT OR REPLACE INTO ogrenci_oturumlari
+               (token_hash, sinav_id, sinav_surum_id, ogr_no, kurtarma_anahtari_hash, durum_json, bitis_ms, bitti, guncelleme_ms)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8)`
+            ).bind(tokenHash, aktifSinavId, aktifSinavSurumId, ogr.ogrNo, kurtarmaAnahtariHash, durumJson, bitisMs, Date.now()).run();
+          } catch (_) {}
+        }
         return gonderJson(200, {
           token,
+          kurtarmaAnahtari,
           ogrNo: ogr.ogrNo,
           adSoyad: ogr.adSoyad,
           bitisMs,
@@ -846,14 +1244,75 @@ export default {
           ? oturum.sorular
           : (Array.isArray(sunucuDurumu.aktifSinav.sorular) ? sunucuDurumu.aktifSinav.sorular : []);
         let dogruSayisi = 0;
+        let dyDogru = 0;
+        let dyYanlis = 0;
+        let dyBos = 0;
+        let testDogru = 0;
+        let testYanlis = 0;
+        let testBos = 0;
+        const dyDetay = [];
+        const testDetay = [];
+        const klasikDetay = [];
         const siraliCevaplar = [];
         sinavSorulari.forEach((s, idx) => {
           const sId = String(s.id || `S-${idx + 1}`);
           const verilen = oturum.cevaplar[sId];
-          siraliCevaplar.push(verilen !== undefined && verilen !== null ? String(verilen) : '');
-          if (s.tur === 'dy' && verilen && verilen === s.dogruDY) dogruSayisi++;
-          else if (s.tur === 'test' && verilen && verilen === s.dogruHarf) dogruSayisi++;
-          else if (s.tur === 'klasik' && String(verilen || '').trim().length >= 5) dogruSayisi++;
+          const verilenStr = verilen !== undefined && verilen !== null ? String(verilen).trim() : '';
+          siraliCevaplar.push(verilenStr);
+          if (s.tur === 'dy') {
+            const beklenen = String(s.dogruDY || 'D').toUpperCase();
+            let sonuc = 'BOS';
+            if (!verilenStr) {
+              dyBos++;
+            } else if (verilenStr.toUpperCase() === beklenen) {
+              sonuc = 'DOGRU';
+              dyDogru++;
+              dogruSayisi++;
+            } else {
+              sonuc = 'YANLIS';
+              dyYanlis++;
+            }
+            dyDetay.push({
+              soruNo: dyDetay.length + 1,
+              soruId: sId,
+              verilen: verilenStr,
+              dogruCevap: beklenen,
+              sonuc,
+              ocKodu: s.ocKodu || 'ÖÇ-1'
+            });
+          } else if (s.tur === 'test') {
+            const beklenen = String(s.dogruHarf || 'A').toUpperCase();
+            let sonuc = 'BOS';
+            if (!verilenStr) {
+              testBos++;
+            } else if (verilenStr.toUpperCase() === beklenen) {
+              sonuc = 'DOGRU';
+              testDogru++;
+              dogruSayisi++;
+            } else {
+              sonuc = 'YANLIS';
+              testYanlis++;
+            }
+            testDetay.push({
+              soruNo: testDetay.length + 1,
+              soruId: sId,
+              verilen: verilenStr,
+              dogruCevap: beklenen,
+              sonuc,
+              ocKodu: s.ocKodu || 'ÖÇ-1'
+            });
+          } else if (s.tur === 'klasik') {
+            // Sıfır Güven: Klasik sorulara sunucuda ASLA otomatik puan verilmez (0 puan, öğretmen değerlendirmesi bekler)
+            klasikDetay.push({
+              soruNo: klasikDetay.length + 1,
+              soruId: sId,
+              verilen: verilenStr,
+              verilenPuan: 0,
+              puan: 0,
+              durum: 'MANUEL_BEKLIYOR',
+              ocKodu: s.ocKodu || 'ÖÇ-1'
+            });
+          }
         });
         const toplamSoru = Math.max(1, sinavSorulari.length);
         const puan = Math.round((dogruSayisi / toplamSoru) * 100);
@@ -862,8 +1321,24 @@ export default {
         oturum.puan = puan;
         oturum.dogruSayisi = dogruSayisi;
         oturum.teslimKodu = teslimKodu;
-        const manuelDegerlendirmeBekliyor = sinavSorulari.some((s) => s.tur === 'klasik');
+        const manuelDegerlendirmeBekliyor = klasikDetay.length > 0;
         await kaydetSistemAnahtariD1(env, 'aktif_tokenlar', Array.from(sunucuDurumu.aktifTokenlar.entries()));
+        if (env && env.SINAV_DB) {
+          try {
+            const tokenHash = Cekirdek.uretDelilLogHash(token, 'OGR-OTURUM');
+            const durumJson = JSON.stringify({
+              adSoyad: oturum.adSoyad,
+              puan,
+              dogruSayisi,
+              teslimKodu,
+              cevaplar: oturum.cevaplar || {},
+              bitti: true
+            });
+            await env.SINAV_DB.prepare(
+              'UPDATE ogrenci_oturumlari SET bitti = 1, durum_json = ?1, guncelleme_ms = ?2 WHERE token_hash = ?3'
+            ).bind(durumJson, Date.now(), tokenHash).run();
+          } catch (_) {}
+        }
 
         return gonderJson(200, {
           bitti: true,
@@ -873,6 +1348,16 @@ export default {
           dogruSayisi,
           toplamSoru: sinavSorulari.length,
           puan,
+          dyDogru,
+          dyYanlis,
+          dyBos,
+          testDogru,
+          testYanlis,
+          testBos,
+          klasikOtomatikPuan: 0,
+          dyDetay,
+          testDetay,
+          klasikDetay,
           teslimKodu,
           manuelDegerlendirmeBekliyor
         });
@@ -926,11 +1411,23 @@ export default {
         : sunucuDurumu.kioskDelilLoglari;
       if (format === 'txt') {
         const txt = Cekirdek.uretResmiDelilLogRaporuTXT(loglar, { sinavId: sinavId || 'TUMU' });
-        return new Response(txt, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+        return new Response(txt, {
+          status: 200,
+          headers: Object.assign({}, GUVENLIK_BASLIKLARI, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-store'
+          })
+        });
       }
       if (format === 'csv') {
         const csv = Cekirdek.uretDelilLogCSV(loglar, sinavId || 'TUMU');
-        return new Response(csv, { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8' } });
+        return new Response(csv, {
+          status: 200,
+          headers: Object.assign({}, GUVENLIK_BASLIKLARI, {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Cache-Control': 'no-store'
+          })
+        });
       }
       return gonderJson(200, { loglar });
     }
@@ -1046,7 +1543,7 @@ export default {
       let govde = null;
       if (metot === 'PUT' || metot === 'POST') {
         try {
-          govde = await okuJsonGovde(request, 4194304);
+          govde = await okuJsonGovde(request, 16777216);
         } catch (err) {
           return gonderJson(400, { hata: err.message });
         }
@@ -1065,7 +1562,10 @@ export default {
           ).bind(kullaniciAdi).first();
           if (sat) {
             let veri = null;
-            try { veri = JSON.parse(sat.veri_json); } catch (_) { veri = null; }
+            try { veri = await acD1VeriJson(sat.veri_json); } catch (_) { veri = null; }
+            if (veri && typeof veri === 'object') {
+              veri = Cekirdek.temizleYedekHassasAlanlar(veri);
+            }
             return {
               kullaniciAdi,
               revizyonNo: Number(sat.revizyon_no) || 0,
@@ -1101,24 +1601,61 @@ export default {
 
       if (yol === '/api/bulut-kasa' && metot === 'GET') {
         const mevcut = await okuMevcutKasa();
+        const temizVeri = mevcut && mevcut.veri ? Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(mevcut.veri))) : null;
+        const kodlamaIstek = String(
+          urlNesne.searchParams.get('kodlama') ||
+          request.headers.get('x-kasa-kodlama') ||
+          request.headers.get('x-bulut-kodlama') ||
+          ''
+        ).trim().toLowerCase();
+        if (kodlamaIstek === 'gzip-b64' && temizVeri) {
+          const veriSikistirilmis = await paketleGzipB64Json(temizVeri);
+          return gonderJson(200, {
+            basarili: true,
+            bulundu: true,
+            depoTuru: (env && env.SINAV_DB) ? 'd1' : 'worker_bellek',
+            kullaniciAdi,
+            revizyonNo: mevcut.revizyonNo,
+            ozetBilgi: mevcut.ozetBilgi,
+            guncellemeMs: mevcut.guncellemeMs,
+            kodlama: 'gzip-b64',
+            veriSikistirilmis
+          });
+        }
         return gonderJson(200, {
           basarili: true,
-          bulundu: Boolean(mevcut && mevcut.veri),
+          bulundu: Boolean(temizVeri),
           depoTuru: (env && env.SINAV_DB) ? 'd1' : 'worker_bellek',
           kullaniciAdi,
           revizyonNo: mevcut ? mevcut.revizyonNo : 0,
           ozetBilgi: mevcut ? mevcut.ozetBilgi : '',
           guncellemeMs: mevcut ? mevcut.guncellemeMs : 0,
-          veri: mevcut ? mevcut.veri : null,
-          veriPaketi: mevcut ? mevcut.veri : null
+          veri: temizVeri,
+          veriPaketi: temizVeri
         });
       }
 
       if (yol === '/api/bulut-kasa' && (metot === 'PUT' || metot === 'POST')) {
-        const gelenVeri = govde && (govde.veri || govde.veriPaketi);
+        let gelenVeri = null;
+        if (govde && String(govde.kodlama || '').trim().toLowerCase() === 'gzip-b64') {
+          const b64Yuk = govde.veriSikistirilmis || govde.veriB64 || govde.payload ||
+            (typeof govde.veri === 'string' ? govde.veri : '') ||
+            (typeof govde.veriPaketi === 'string' ? govde.veriPaketi : '');
+          if (!b64Yuk) {
+            return gonderJson(400, { hata: 'Sıkıştırılmış gzip-b64 yükü boş.' });
+          }
+          try {
+            gelenVeri = await cozGzipB64Json(b64Yuk);
+          } catch (err) {
+            return gonderJson(400, { hata: `gzip-b64 kasa verisi açılamadı: ${err.message}` });
+          }
+        } else {
+          gelenVeri = govde && (govde.veri || govde.veriPaketi);
+        }
         if (!gelenVeri || typeof gelenVeri !== 'object' || Array.isArray(gelenVeri)) {
           return gonderJson(400, { hata: 'Kaydedilecek geçerli bulut kasa verisi (veri nesnesi) bulunamadı.' });
         }
+        gelenVeri = Cekirdek.temizleYedekHassasAlanlar(gelenVeri);
         const mevcut = await okuMevcutKasa();
         const mevcutRev = mevcut ? (Number(mevcut.revizyonNo) || 0) : 0;
         const bazRev = (govde && govde.bazRevizyonNo !== undefined && govde.bazRevizyonNo !== null)
@@ -1201,7 +1738,7 @@ export default {
         const yeniRev = mevcutRev + 1;
         const simdi = Date.now();
         const ozetBilgi = String(govde.islemNotu || yeniOzet.metin).slice(0, 180);
-        const veriJson = JSON.stringify(gelenVeri);
+        const veriJson = (env && env.SINAV_DB) ? await paketleD1VeriJson(gelenVeri) : JSON.stringify(gelenVeri);
 
         if (env && env.SINAV_DB) {
           if (mevcut && mevcutRev > 0) {
@@ -1309,7 +1846,8 @@ export default {
         if (mevcut && mevcut.veriJson) {
           await ekleYedekGecmisi(mevcut.revizyonNo, mevcut.veriJson, 'Geri yükleme öncesi otomatik yedek');
         }
-        const geriVeri = JSON.parse(hedefVeriJson);
+        const geriVeri = Cekirdek.temizleYedekHassasAlanlar(await acD1VeriJson(hedefVeriJson));
+        const geriVeriJson = (env && env.SINAV_DB) ? await paketleD1VeriJson(geriVeri) : JSON.stringify(geriVeri);
         const yeniRev = (mevcut ? mevcut.revizyonNo : 0) + 1;
         const simdi = Date.now();
         const ozetBilgi = `Geri yüklendi (#${yedekId}) · ${hesaplaKasaOzeti(geriVeri).metin}`;
@@ -1322,13 +1860,13 @@ export default {
                veri_json = excluded.veri_json,
                ozet_bilgi = excluded.ozet_bilgi,
                guncelleme_ms = excluded.guncelleme_ms`
-          ).bind(kullaniciAdi, yeniRev, hedefVeriJson, ozetBilgi, simdi).run();
+          ).bind(kullaniciAdi, yeniRev, geriVeriJson, ozetBilgi, simdi).run();
         } else {
           sunucuDurumu.bulutKasalarBellek.set(kullaniciAdi, {
             kullaniciAdi,
             revizyonNo: yeniRev,
             veri: geriVeri,
-            veriJson: hedefVeriJson,
+            veriJson: geriVeriJson,
             ozetBilgi,
             guncellemeMs: simdi
           });
@@ -1354,21 +1892,25 @@ export default {
       kucukYol === '/wrangler.jsonc' ||
       kucukYol === '/wrangler.toml' ||
       kucukYol === '/d1-sema.sql' ||
+      kucukYol === '/_headers' ||
       kucukYol.endsWith('.sql') ||
+      kucukYol.endsWith('.md') ||
       kucukYol === '/test-suite.js' ||
       kucukYol === '/omr-geometri-denetim.js' ||
       kucukYol.startsWith('/test-artifacts/') ||
       kucukYol.startsWith('/ornek-dosyalar/') ||
+      kucukYol.startsWith('/backups/') ||
       kucukYol.startsWith('/node_modules/') ||
       kucukYol.startsWith('/.') ||
       /\/[a-z0-9_-]*test\.js$/i.test(kucukYol);
     if (engelliDesen) {
-      return new Response('Dosya bulunamadi', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      return ekleGuvenlikBasliklari(new Response('Dosya bulunamadi', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }));
     }
 
     if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      return env.ASSETS.fetch(request);
+      const yanit = await env.ASSETS.fetch(request);
+      return ekleGuvenlikBasliklari(yanit);
     }
-    return new Response('Dosya bulunamadi', { status: 404 });
+    return ekleGuvenlikBasliklari(new Response('Dosya bulunamadi', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }));
   }
 };

@@ -182,6 +182,34 @@
       }
     }
 
+    return temizleYedekHassasAlanlar(veri);
+  }
+
+  function temizleYedekHassasAlanlar(veri) {
+    if (!veri || typeof veri !== 'object') return veri;
+    const temizleHocaKaydi = (kayit) => {
+      if (!kayit || typeof kayit !== 'object' || Array.isArray(kayit)) return;
+      if (Object.prototype.hasOwnProperty.call(kayit, 'sifre')) {
+        const hamSifre = kayit.sifre;
+        if (!kayit.sifreHash && typeof hamSifre === 'string' && hamSifre.length > 0) {
+          kayit.sifreHash = uretSifreHashSync(hamSifre);
+        }
+        delete kayit.sifre;
+      }
+      if (Object.prototype.hasOwnProperty.call(kayit, 'sifreTekrar')) {
+        delete kayit.sifreTekrar;
+      }
+    };
+    if (veri.hocaHesap && typeof veri.hocaHesap === 'object') {
+      temizleHocaKaydi(veri.hocaHesap);
+    }
+    if (Array.isArray(veri.hocaListesi)) {
+      veri.hocaListesi.forEach(temizleHocaKaydi);
+    }
+    if (veri.ayarlar && typeof veri.ayarlar === 'object') {
+      if (veri.ayarlar.hocaHesap) temizleHocaKaydi(veri.ayarlar.hocaHesap);
+      if (Array.isArray(veri.ayarlar.hocaListesi)) veri.ayarlar.hocaListesi.forEach(temizleHocaKaydi);
+    }
     return veri;
   }
 
@@ -4198,7 +4226,7 @@
   /* Aktif Soru Bankasını Bologna Öğrenim Çıktısı (Ogrenim_Ciktisi_OC) Sütunuyla CSV Olarak Dışa Aktarma */
   function uretSoruBankasiCSV(sorular = []) {
     const baslik = 'Tur;Soru_Metni;Sik_A;Sik_B;Sik_C;Sik_D;Sik_E;Dogru_Cevap;Zorluk_Derecesi;Ogrenim_Ciktisi_OC;Konu_Kazanim;Klasik_Rubrik;Hafta';
-    const temizHucre = (v) => String(v === undefined || v === null ? '' : v).replace(/;/g, ',').replace(/[\r\n]+/g, ' ').trim();
+    const temizHucre = (v) => temizleCsvFormulEnjeksiyon(v);
     const satirlar = (Array.isArray(sorular) ? sorular : []).map((s) => {
       const turStr = s.tur === 'dy' ? 'DY' : (s.tur === 'klasik' ? 'KLASIK' : 'TEST');
       const siklar = Array.isArray(s.siklar) ? s.siklar : [];
@@ -6991,7 +7019,7 @@
       const ad = temizleCsvFormulEnjeksiyon(ogr.adSoyad);
       const bol = temizleCsvFormulEnjeksiyon(ogr.bolum || 'Genel');
       const okunan = okumaSonuclari.find((s) => String(s.ogrNo) === String(ogr.ogrNo));
-      if (!okunan) {
+      if (!okunan || okunan.devamsiz === true || String(okunan.durum || '').toUpperCase() === 'GR') {
         satirlar.push(`${idx + 1};${no};${ad};${bol};-;-;-;-;GR;GR;Sınava Girmedi (GR)`);
       } else {
         const harf = hesaplaHarfNotu(okunan.toplamPuan);
@@ -7137,6 +7165,49 @@
     };
   }
 
+  function sabitSureliEsitMi(a, b) {
+    const s1 = String(a === undefined || a === null ? '' : a);
+    const s2 = String(b === undefined || b === null ? '' : b);
+    const maks = Math.max(s1.length, s2.length);
+    let fark = s1.length ^ s2.length;
+    for (let i = 0; i < maks; i++) {
+      const c1 = i < s1.length ? s1.charCodeAt(i) : 0;
+      const c2 = i < s2.length ? s2.charCodeAt(i) : 0;
+      fark |= (c1 ^ c2);
+    }
+    return fark === 0;
+  }
+
+  function hocaDurumKontrolVeSonuc(kayit, hedefK) {
+    const hesapDurum = String(kayit.durum || 'aktif').toLowerCase();
+    if (hesapDurum === 'beklemede') {
+      return {
+        basarili: false,
+        kod: 403,
+        durum: 'beklemede',
+        hata: 'Hesabınız yönetici onayı bekliyor (403 Forbidden). Yönetici onayladıktan sonra giriş yapabilirsiniz.'
+      };
+    }
+    if (hesapDurum === 'askida' || hesapDurum === 'reddedildi') {
+      return {
+        basarili: false,
+        kod: 403,
+        durum: hesapDurum,
+        hata: 'Hesabınız yönetici tarafından askıya alınmış veya erişimi kapatılmıştır (403 Forbidden).'
+      };
+    }
+    return {
+      basarili: true,
+      kod: 200,
+      kullaniciAdi: kayit.kullaniciAdi,
+      adSoyad: kayit.adSoyad,
+      eposta: kayit.eposta,
+      telefon: kayit.telefon || '',
+      rol: kayit.rol || (hedefK === 'hoca' ? 'yonetici' : 'hoca'),
+      durum: 'aktif'
+    };
+  }
+
   function dogrulaHocaGiris(girilenKullanici, girilenSifre, kayitliHocaVeyaListe = VARSAYILAN_HOCA_HESAP) {
     const k = String(girilenKullanici || '').trim().toLowerCase();
     const s = String(girilenSifre || '');
@@ -7153,34 +7224,48 @@
       if (!kayit || typeof kayit !== 'object') continue;
       const hedefK = String(kayit.kullaniciAdi || '').trim().toLowerCase();
       const hedefEposta = String(kayit.eposta || '').trim().toLowerCase();
-      if ((k === hedefK || (hedefEposta && k === hedefEposta)) && s === String(kayit.sifre)) {
-        const hesapDurum = String(kayit.durum || 'aktif').toLowerCase();
-        if (hesapDurum === 'beklemede') {
-          return {
-            basarili: false,
-            kod: 403,
-            durum: 'beklemede',
-            hata: 'Hesabınız yönetici onayı bekliyor (403 Forbidden). Yönetici onayladıktan sonra giriş yapabilirsiniz.'
-          };
-        }
-        if (hesapDurum === 'askida' || hesapDurum === 'reddedildi') {
-          return {
-            basarili: false,
-            kod: 403,
-            durum: hesapDurum,
-            hata: 'Hesabınız yönetici tarafından askıya alınmış veya erişimi kapatılmıştır (403 Forbidden).'
-          };
-        }
-        return {
-          basarili: true,
-          kod: 200,
-          kullaniciAdi: kayit.kullaniciAdi,
-          adSoyad: kayit.adSoyad,
-          eposta: kayit.eposta,
-          telefon: kayit.telefon || '',
-          rol: kayit.rol || (hedefK === 'hoca' ? 'yonetici' : 'hoca'),
-          durum: 'aktif'
-        };
+      if (k !== hedefK && !(hedefEposta && k === hedefEposta)) continue;
+
+      let sifreDogruMu = false;
+      if (typeof kayit.sifreHash === 'string' && kayit.sifreHash.startsWith('pbkdf2_sha256$')) {
+        sifreDogruMu = dogrulaSifreHashSync(s, kayit.sifreHash);
+      } else if (kayit.sifre !== undefined && kayit.sifre !== null) {
+        sifreDogruMu = sabitSureliEsitMi(s, String(kayit.sifre));
+      }
+      if (sifreDogruMu) {
+        return hocaDurumKontrolVeSonuc(kayit, hedefK);
+      }
+    }
+
+    return { basarili: false, kod: 401, hata: 'Hatalı öğretmen kullanıcı adı veya şifre! (401 Unauthorized)' };
+  }
+
+  async function dogrulaHocaGirisAsync(girilenKullanici, girilenSifre, kayitliHocaVeyaListe = VARSAYILAN_HOCA_HESAP) {
+    const k = String(girilenKullanici || '').trim().toLowerCase();
+    const s = String(girilenSifre || '');
+
+    if (!k || !s) {
+      return { basarili: false, kod: 400, hata: 'Kullanıcı adı ve şifre zorunludur.' };
+    }
+
+    const liste = Array.isArray(kayitliHocaVeyaListe)
+      ? kayitliHocaVeyaListe
+      : (kayitliHocaVeyaListe && typeof kayitliHocaVeyaListe === 'object' ? [kayitliHocaVeyaListe] : [VARSAYILAN_HOCA_HESAP]);
+
+    for (const kayit of liste) {
+      if (!kayit || typeof kayit !== 'object') continue;
+      const hedefK = String(kayit.kullaniciAdi || '').trim().toLowerCase();
+      const hedefEposta = String(kayit.eposta || '').trim().toLowerCase();
+      if (k !== hedefK && !(hedefEposta && k === hedefEposta)) continue;
+
+      let sifreDogruMu = false;
+      if (typeof kayit.sifreHash === 'string' && kayit.sifreHash.startsWith('pbkdf2_sha256$')) {
+        sifreDogruMu = await dogrulaTuzluSifreWebCrypto(s, kayit.sifreHash);
+      } else if (kayit.sifre !== undefined && kayit.sifre !== null) {
+        sifreDogruMu = sabitSureliEsitMi(s, String(kayit.sifre));
+      }
+      if (sifreDogruMu) {
+        return hocaDurumKontrolVeSonuc(kayit, hedefK);
       }
     }
 
@@ -7188,7 +7273,7 @@
   }
 
   /* E-Posta + Cep Telefonu Doğrulaması ile Yönetici/Hoca Şifre Kurtarma (Veri Kaybı Olmadan) */
-  function sifirlaHocaSifreEpostaTelefon(bilgi = {}, kayitliHocaVeyaListe = VARSAYILAN_HOCA_HESAP) {
+  function sifirlaHocaSifreEpostaTelefon(bilgi = {}, kayitliHocaVeyaListe = VARSAYILAN_HOCA_HESAP, secenekler = {}) {
     const girilenEposta = String(bilgi.eposta || '').trim().toLowerCase();
     const girilenTelRakamlari = String(bilgi.telefon || '').replace(/\D+/g, '');
     const girilenTelSon10 = girilenTelRakamlari.slice(-10);
@@ -7221,7 +7306,10 @@
       const kEposta = String(kayit.eposta || '').trim().toLowerCase();
       const kTelSon10 = String(kayit.telefon || '').replace(/\D+/g, '').slice(-10);
       if (kEposta && kTelSon10.length === 10 && kEposta === girilenEposta && kTelSon10 === girilenTelSon10) {
-        kayit.sifre = yeniSifre;
+        if (!secenekler || !secenekler.hashAtla) {
+          kayit.sifreHash = uretSifreHashSync(yeniSifre);
+        }
+        delete kayit.sifre;
         return {
           basarili: true,
           kod: 200,
@@ -7257,50 +7345,59 @@
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
   ];
 
-  function uretDelilLogHash(metin) {
+  function utf8BaytlaraCevir(metin) {
     const giris = String(metin === undefined || metin === null ? '' : metin);
-    let utf8;
     if (typeof TextEncoder !== 'undefined') {
-      utf8 = Array.from(new TextEncoder().encode(giris));
-    } else {
-      utf8 = [];
-      for (let i = 0; i < giris.length; i++) {
-        let c = giris.charCodeAt(i);
-        if (c < 0x80) {
-          utf8.push(c);
-        } else if (c < 0x800) {
-          utf8.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
-        } else if (c >= 0xd800 && c <= 0xdbff) {
-          const next = i + 1 < giris.length ? giris.charCodeAt(i + 1) : 0;
-          if (next >= 0xdc00 && next <= 0xdfff) {
-            i++;
-            c = 0x10000 + (((c & 0x3ff) << 10) | (next & 0x3ff));
-            utf8.push(
-              0xf0 | (c >> 18),
-              0x80 | ((c >> 12) & 0x3f),
-              0x80 | ((c >> 6) & 0x3f),
-              0x80 | (c & 0x3f)
-            );
-          } else {
-            // Tekil (eşleşmemiş) yüksek vekil karakter -> U+FFFD (EF BF BD)
-            utf8.push(0xef, 0xbf, 0xbd);
-          }
-        } else if (c >= 0xdc00 && c <= 0xdfff) {
-          // Tekil (eşleşmemiş) düşük vekil karakter -> U+FFFD (EF BF BD)
-          utf8.push(0xef, 0xbf, 0xbd);
+      return new TextEncoder().encode(giris);
+    }
+    const utf8 = [];
+    for (let i = 0; i < giris.length; i++) {
+      let c = giris.charCodeAt(i);
+      if (c < 0x80) {
+        utf8.push(c);
+      } else if (c < 0x800) {
+        utf8.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
+      } else if (c >= 0xd800 && c <= 0xdbff) {
+        const next = i + 1 < giris.length ? giris.charCodeAt(i + 1) : 0;
+        if (next >= 0xdc00 && next <= 0xdfff) {
+          i++;
+          c = 0x10000 + (((c & 0x3ff) << 10) | (next & 0x3ff));
+          utf8.push(
+            0xf0 | (c >> 18),
+            0x80 | ((c >> 12) & 0x3f),
+            0x80 | ((c >> 6) & 0x3f),
+            0x80 | (c & 0x3f)
+          );
         } else {
-          utf8.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
+          utf8.push(0xef, 0xbf, 0xbd);
         }
+      } else if (c >= 0xdc00 && c <= 0xdfff) {
+        utf8.push(0xef, 0xbf, 0xbd);
+      } else {
+        utf8.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
       }
     }
+    return new Uint8Array(utf8);
+  }
 
-    const bitUzunluk = utf8.length * 8;
-    utf8.push(0x80);
-    while ((utf8.length % 64) !== 56) utf8.push(0);
+  function sha256Bayt(girisBayt) {
+    const baytlar = girisBayt instanceof Uint8Array ? girisBayt : utf8BaytlaraCevir(girisBayt);
+    const toplamUz = baytlar.length;
+    const bitUzunluk = toplamUz * 8;
+    const doldurulmusUz = Math.ceil((toplamUz + 9) / 64) * 64;
+    const tampon = new Uint8Array(doldurulmusUz);
+    tampon.set(baytlar, 0);
+    tampon[toplamUz] = 0x80;
     const yuksekBit = Math.floor(bitUzunluk / 0x100000000);
     const dusukBit = bitUzunluk >>> 0;
-    for (let i = 3; i >= 0; i--) utf8.push((yuksekBit >>> (i * 8)) & 0xff);
-    for (let i = 3; i >= 0; i--) utf8.push((dusukBit >>> (i * 8)) & 0xff);
+    tampon[doldurulmusUz - 8] = (yuksekBit >>> 24) & 0xff;
+    tampon[doldurulmusUz - 7] = (yuksekBit >>> 16) & 0xff;
+    tampon[doldurulmusUz - 6] = (yuksekBit >>> 8) & 0xff;
+    tampon[doldurulmusUz - 5] = yuksekBit & 0xff;
+    tampon[doldurulmusUz - 4] = (dusukBit >>> 24) & 0xff;
+    tampon[doldurulmusUz - 3] = (dusukBit >>> 16) & 0xff;
+    tampon[doldurulmusUz - 2] = (dusukBit >>> 8) & 0xff;
+    tampon[doldurulmusUz - 1] = dusukBit & 0xff;
 
     let h0 = 0x6a09e667;
     let h1 = 0xbb67ae85;
@@ -7311,13 +7408,13 @@
     let h6 = 0x1f83d9ab;
     let h7 = 0x5be0cd19;
 
-    const w = new Array(64);
+    const w = new Uint32Array(64);
     const ror = (x, n) => (x >>> n) | (x << (32 - n));
 
-    for (let i = 0; i < utf8.length; i += 64) {
+    for (let i = 0; i < doldurulmusUz; i += 64) {
       for (let j = 0; j < 16; j++) {
         const idx = i + j * 4;
-        w[j] = ((utf8[idx] << 24) | (utf8[idx + 1] << 16) | (utf8[idx + 2] << 8) | utf8[idx + 3]) >>> 0;
+        w[j] = ((tampon[idx] << 24) | (tampon[idx + 1] << 16) | (tampon[idx + 2] << 8) | tampon[idx + 3]) >>> 0;
       }
       for (let j = 16; j < 64; j++) {
         const s0 = (ror(w[j - 15], 7) ^ ror(w[j - 15], 18) ^ (w[j - 15] >>> 3)) >>> 0;
@@ -7362,10 +7459,106 @@
       h7 = (h7 + h) >>> 0;
     }
 
-    return [h0, h1, h2, h3, h4, h5, h6, h7]
-      .map((v) => v.toString(16).padStart(8, '0'))
-      .join('')
-      .toUpperCase();
+    const cikti = new Uint8Array(32);
+    const kelimeler = [h0, h1, h2, h3, h4, h5, h6, h7];
+    for (let i = 0; i < 8; i++) {
+      cikti[i * 4] = (kelimeler[i] >>> 24) & 0xff;
+      cikti[i * 4 + 1] = (kelimeler[i] >>> 16) & 0xff;
+      cikti[i * 4 + 2] = (kelimeler[i] >>> 8) & 0xff;
+      cikti[i * 4 + 3] = kelimeler[i] & 0xff;
+    }
+    return cikti;
+  }
+
+  function uretDelilLogHash(metin, alanEtiketi) {
+    const bazMetin = String(metin === undefined || metin === null ? '' : metin);
+    const tamMetin = (alanEtiketi !== undefined && alanEtiketi !== null && String(alanEtiketi) !== '')
+      ? `${String(alanEtiketi)}|${bazMetin}`
+      : bazMetin;
+    const ozet = sha256Bayt(utf8BaytlaraCevir(tamMetin));
+    return Array.from(ozet, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+
+  function hmacSha256Bayt(anahtarBayt, mesajBayt) {
+    const kHam = anahtarBayt instanceof Uint8Array ? anahtarBayt : utf8BaytlaraCevir(anahtarBayt);
+    const mBayt = mesajBayt instanceof Uint8Array ? mesajBayt : utf8BaytlaraCevir(mesajBayt);
+    const k = kHam.length > 64 ? sha256Bayt(kHam) : kHam;
+    const ipad = new Uint8Array(64 + mBayt.length);
+    const opad = new Uint8Array(64 + 32);
+    for (let i = 0; i < 64; i++) {
+      const kb = i < k.length ? k[i] : 0;
+      ipad[i] = kb ^ 0x36;
+      opad[i] = kb ^ 0x5c;
+    }
+    ipad.set(mBayt, 64);
+    opad.set(sha256Bayt(ipad), 64);
+    return sha256Bayt(opad);
+  }
+
+  function pbkdf2Sha256BaytSync(sifre, tuzBytes, iterasyon = 100000, ciktiBayt = 32) {
+    const sifreBayt = utf8BaytlaraCevir(String(sifre || ''));
+    const blokSayisi = Math.ceil(ciktiBayt / 32);
+    const sonuc = new Uint8Array(blokSayisi * 32);
+    for (let b = 1; b <= blokSayisi; b++) {
+      const saltPlusInt = new Uint8Array(tuzBytes.length + 4);
+      saltPlusInt.set(tuzBytes, 0);
+      saltPlusInt[tuzBytes.length] = (b >>> 24) & 0xff;
+      saltPlusInt[tuzBytes.length + 1] = (b >>> 16) & 0xff;
+      saltPlusInt[tuzBytes.length + 2] = (b >>> 8) & 0xff;
+      saltPlusInt[tuzBytes.length + 3] = b & 0xff;
+      let u = hmacSha256Bayt(sifreBayt, saltPlusInt);
+      const t = new Uint8Array(u);
+      for (let i = 1; i < iterasyon; i++) {
+        u = hmacSha256Bayt(sifreBayt, u);
+        for (let j = 0; j < 32; j++) t[j] ^= u[j];
+      }
+      sonuc.set(t, (b - 1) * 32);
+    }
+    return sonuc.slice(0, ciktiBayt);
+  }
+
+  function alNodeCryptoModulu() {
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') {
+      try {
+        return require('crypto');
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  function uretSifreHashSync(sifre, ozelTuzHex = '', iterasyon = 100000) {
+    const iter = Math.max(10000, Math.min(500000, Number(iterasyon) || 100000));
+    let tuzBytes;
+    if (ozelTuzHex && /^[0-9a-f]+$/i.test(ozelTuzHex) && ozelTuzHex.length >= 16) {
+      tuzBytes = new Uint8Array(ozelTuzHex.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
+    } else {
+      tuzBytes = kriptografikRastgeleBaytUret(16);
+    }
+    const tuzHex = Array.from(tuzBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const nodeCrypto = alNodeCryptoModulu();
+    let ozetHex;
+    if (nodeCrypto && typeof nodeCrypto.pbkdf2Sync === 'function') {
+      ozetHex = nodeCrypto.pbkdf2Sync(String(sifre || ''), Buffer.from(tuzBytes), iter, 32, 'sha256').toString('hex');
+    } else {
+      const bitler = pbkdf2Sha256BaytSync(String(sifre || ''), tuzBytes, iter, 32);
+      ozetHex = Array.from(bitler, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    return `pbkdf2_sha256$${iter}$${tuzHex}$${ozetHex}`;
+  }
+
+  function dogrulaSifreHashSync(sifre, kayitliDeger = '') {
+    const kayit = String(kayitliDeger || '');
+    if (!kayit.startsWith('pbkdf2_sha256$')) {
+      return sabitSureliEsitMi(String(sifre || ''), kayit);
+    }
+    const parcalar = kayit.split('$');
+    if (parcalar.length !== 4) return false;
+    const iter = parseInt(parcalar[1], 10);
+    if (!Number.isFinite(iter) || iter < 1000 || !/^[0-9a-f]+$/i.test(parcalar[2]) || !/^[0-9a-f]+$/i.test(parcalar[3])) {
+      return false;
+    }
+    const uretilen = uretSifreHashSync(sifre, parcalar[2], iter);
+    return sabitSureliEsitMi(uretilen, kayit);
   }
 
   function olusturKioskDelilLogKaydi(veri = {}, oncekiHash = 'GENESIS-00000000') {
@@ -9617,37 +9810,43 @@
     return cizgiler.join('\n');
   }
 
-  /* Ticari Çok-Kiracılı (Multi-Tenant) Hazırlık: WebCrypto PBKDF2-SHA256 Tuzlu Parola Özeti */
-  async function uretTuzluSifreOzetiWebCrypto(sifre, ozelTuzHex = '') {
+  /* Ticari Çok-Kiracılı (Multi-Tenant) Hazırlık: WebCrypto / Node PBKDF2-SHA256 Tuzlu Parola Özeti */
+  async function uretTuzluSifreOzetiWebCrypto(sifre, ozelTuzHex = '', iterasyon = 100000) {
+    const iter = Math.max(10000, Math.min(500000, Number(iterasyon) || 100000));
     const subtle = (typeof crypto !== 'undefined' && crypto.subtle) ? crypto.subtle : null;
-    if (!subtle) throw new Error('WebCrypto PBKDF2 desteklenmiyor.');
+    if (!subtle) {
+      return uretSifreHashSync(sifre, ozelTuzHex, iter);
+    }
     let tuzBytes;
     if (ozelTuzHex && /^[0-9a-f]+$/i.test(ozelTuzHex) && ozelTuzHex.length >= 16) {
       tuzBytes = new Uint8Array(ozelTuzHex.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
     } else {
-      tuzBytes = new Uint8Array(16);
-      crypto.getRandomValues(tuzBytes);
+      tuzBytes = kriptografikRastgeleBaytUret(16);
     }
     const tuzHex = Array.from(tuzBytes).map((b) => b.toString(16).padStart(2, '0')).join('');
     const anahtarMalzeme = await subtle.importKey('raw', new TextEncoder().encode(String(sifre || '')), 'PBKDF2', false, ['deriveBits']);
     const bitler = await subtle.deriveBits(
-      { name: 'PBKDF2', salt: tuzBytes, iterations: 100000, hash: 'SHA-256' },
+      { name: 'PBKDF2', salt: tuzBytes, iterations: iter, hash: 'SHA-256' },
       anahtarMalzeme,
       256
     );
     const ozetHex = Array.from(new Uint8Array(bitler)).map((b) => b.toString(16).padStart(2, '0')).join('');
-    return `pbkdf2_sha256$100000$${tuzHex}$${ozetHex}`;
+    return `pbkdf2_sha256$${iter}$${tuzHex}$${ozetHex}`;
   }
 
   async function dogrulaTuzluSifreWebCrypto(sifre, kayitliDeger = '') {
     const kayit = String(kayitliDeger || '');
     if (!kayit.startsWith('pbkdf2_sha256$')) {
-      return String(sifre || '') === kayit;
+      return sabitSureliEsitMi(String(sifre || ''), kayit);
     }
     const parcalar = kayit.split('$');
     if (parcalar.length !== 4) return false;
-    const uretilen = await uretTuzluSifreOzetiWebCrypto(sifre, parcalar[2]);
-    return uretilen === kayit;
+    const iter = parseInt(parcalar[1], 10);
+    if (!Number.isFinite(iter) || iter < 1000 || !/^[0-9a-f]+$/i.test(parcalar[2]) || !/^[0-9a-f]+$/i.test(parcalar[3])) {
+      return false;
+    }
+    const uretilen = await uretTuzluSifreOzetiWebCrypto(sifre, parcalar[2], iter);
+    return sabitSureliEsitMi(uretilen, kayit);
   }
 
   /* Dışa Aktarılan Evrensel API */
@@ -9658,6 +9857,7 @@
     temizleHTML,
     derinTemizleNesne,
     semaDogrulaVeTemizle,
+    temizleYedekHassasAlanlar,
     olusturGuvenliBlobUrl,
     temizleTumBlobUrller,
     kurGuvenliInterval,
@@ -9752,7 +9952,11 @@
     uretYeniDavetKodu,
     dogrulaHocaHesapKayit,
     dogrulaHocaGiris,
+    dogrulaHocaGirisAsync,
     sifirlaHocaSifreEpostaTelefon,
+    sabitSureliEsitMi,
+    uretSifreHashSync,
+    dogrulaSifreHashSync,
     uretDelilLogHash,
     olusturKioskDelilLogKaydi,
     uretResmiDelilLogRaporuTXT,

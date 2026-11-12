@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Cep Optik Okuyucu (Mobil OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261112b" />
+  <link rel="stylesheet" href="ortak.css?v=20261113a" />
   <style>
     html, body {
       margin: 0;
@@ -60,9 +60,9 @@
       flex-shrink: 0;
     }
     .mobil-ust-btn {
-      min-height: 34px;
-      min-width: 34px;
-      padding: 0 8px;
+      min-height: 36px;
+      min-width: 40px;
+      padding: 0 9px;
       border-radius: 6px;
       border: 1px solid rgba(255, 255, 255, 0.16);
       background: rgba(255, 255, 255, 0.06);
@@ -143,11 +143,11 @@
       flex-wrap: wrap;
     }
     .vizor-yedek-btn {
-      min-height: 42px;
-      padding: 0 12px;
+      min-height: 48px;
+      padding: 0 14px;
       border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      background: rgba(15, 16, 18, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      background: rgba(15, 16, 18, 0.86);
       backdrop-filter: blur(6px);
       color: #f9fafb;
       font-size: 13px;
@@ -158,6 +158,7 @@
       gap: 6px;
       cursor: pointer;
       margin: 0;
+      touch-action: manipulation;
     }
     .vizor-uyari-bant {
       position: absolute;
@@ -260,6 +261,11 @@
     .mobil-deklansor-btn:active {
       transform: scale(0.96);
     }
+    .mobil-deklansor-btn.deklansor-kilitli,
+    .vizor-yedek-btn.deklansor-kilitli {
+      opacity: 0.72;
+      pointer-events: none;
+    }
     .dokunmatik-anahtar-satir {
       display: flex;
       align-items: center;
@@ -269,9 +275,9 @@
       border-bottom: 1px solid var(--kenar);
     }
     .dokunmatik-balon {
-      min-width: 44px;
+      min-width: 48px;
       min-height: 48px;
-      width: 44px;
+      width: 48px;
       height: 48px;
       border-radius: 10px;
       border: 1px solid var(--kenar-koyu);
@@ -318,9 +324,13 @@
       border: 1px solid #4ade80;
     }
     .vizor-canli-hud.hud-uyari {
-      background: rgba(180, 83, 9, 0.95);
+      background: rgba(180, 83, 9, 0.96);
       color: #ffffff;
       border: 1px solid #fbbf24;
+    }
+    .vizor-canli-hud button {
+      min-height: 36px;
+      min-width: 56px;
     }
     .mobil-sticky-sutun {
       position: sticky;
@@ -792,6 +802,10 @@
       let sonSilinenMobilYedek = null;
       let bekleyenKagitOqv2 = '';
       let mobilUzlasmaZamanlayici = null;
+      let deklansorKilitliMi = false;
+      let sonDeklansorTetikMs = 0;
+      let sonManuelKameraImza = '';
+      let sonManuelKameraMs = 0;
       const mobilSekmeId = 'MSEK-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
       const silinenMobilKayitIdleri = new Set();
       let sonYerelSifirlamaMs = 0;
@@ -884,12 +898,26 @@
       }
 
       function ayiklaHashParametresi(hamHash, anahtar) {
-        const s = String(hamHash || '').replace(/^#/, '');
-        const parcalar = s.split('&');
-        for (const p of parcalar) {
-          const es = p.indexOf('=');
-          if (es > 0 && p.slice(0, es) === anahtar) {
-            return decodeURIComponent(p.slice(es + 1)).trim();
+        const ham = String(hamHash || '');
+        const bolumler = [];
+        const qIdx = ham.indexOf('?');
+        const hIdx = ham.indexOf('#');
+        if (hIdx >= 0) bolumler.push(ham.slice(hIdx + 1));
+        if (qIdx >= 0) {
+          bolumler.push(hIdx > qIdx ? ham.slice(qIdx + 1, hIdx) : ham.slice(qIdx + 1));
+        }
+        if (bolumler.length === 0) bolumler.push(ham.replace(/^[#?]/, ''));
+        for (const s of bolumler) {
+          const parcalar = s.split('&');
+          for (const p of parcalar) {
+            const es = p.indexOf('=');
+            if (es > 0 && p.slice(0, es) === anahtar) {
+              try {
+                return decodeURIComponent(p.slice(es + 1)).trim();
+              } catch (_) {
+                return p.slice(es + 1).trim();
+              }
+            }
           }
         }
         return '';
@@ -1004,13 +1032,20 @@
       /* #setup= Parametresinden veya izole mobil localStorage'dan Sınav Yapısını Yükle */
       function yukleBaslangicVerisi() {
         try { localStorage.removeItem('SINAV_OPTIK_STUDYO_VERI_V1'); } catch (_) {}
-        const hashToken = ayiklaHashParametresi(location.hash, 'omrToken');
+        const hashToken =
+          ayiklaHashParametresi(location.hash, 'omrToken') ||
+          ayiklaHashParametresi(location.hash, 'eslesmeToken') ||
+          ayiklaHashParametresi(location.search, 'omrToken') ||
+          ayiklaHashParametresi(location.search, 'eslesmeToken');
         if (hashToken) kaydetMobilHocaToken(hashToken);
 
         let onCozulmusSetup = null;
         if (location.hash && location.hash.includes('setup=')) {
           try {
             onCozulmusSetup = C.cozKompaktSetupQrPaketi(location.hash);
+            if (onCozulmusSetup && (onCozulmusSetup.omrToken || onCozulmusSetup.eslesmeToken)) {
+              kaydetMobilHocaToken(onCozulmusSetup.omrToken || onCozulmusSetup.eslesmeToken);
+            }
           } catch (err) {
             console.warn('Setup QR parametresi çözülemedi:', err.message);
           }
@@ -1253,14 +1288,19 @@
           mobilUyariGoster(`🔐 ${kaynakEtiket}: Kişiye özel kağıt QR kodu alındı; şimdi kağıdı okutabilirsiniz.`);
           return true;
         }
-        if (metin.includes('omrToken=')) {
-          const qrTok = ayiklaHashParametresi(metin.slice(metin.indexOf('#') >= 0 ? metin.indexOf('#') : 0), 'omrToken');
+        if (metin.includes('omrToken=') || metin.includes('eslesmeToken=')) {
+          const qrTok =
+            ayiklaHashParametresi(metin, 'omrToken') ||
+            ayiklaHashParametresi(metin, 'eslesmeToken');
           if (qrTok) kaydetMobilHocaToken(qrTok);
         }
         if (metin.includes('setup=')) {
           const parca = metin.slice(metin.indexOf('setup='));
           const cozulmusSetup = C.cozKompaktSetupQrPaketi('#' + parca);
           if (cozulmusSetup) {
+            if (cozulmusSetup.omrToken || cozulmusSetup.eslesmeToken) {
+              kaydetMobilHocaToken(cozulmusSetup.omrToken || cozulmusSetup.eslesmeToken);
+            }
             const eskiAnahtar = etkinMobilSinavAnahtari();
             const yeniAnahtar = temizSinavAnahtariHesapla(cozulmusSetup.sinavKodu);
             if (yeniAnahtar !== eskiAnahtar) {
@@ -1743,17 +1783,27 @@
         const rozet = document.getElementById('rozet-mobil-bekleyen');
         if (!rozet) return;
         const toplam = Array.isArray(mobilDurum.okumaSonuclari) ? mobilDurum.okumaSonuclari.length : 0;
+        const cevrimdisi = typeof navigator !== 'undefined' && navigator.onLine === false;
         if (senkronOnaylandi && toplam > 0) {
           sonSenkronOnayliSayi = toplam;
         } else if (toplam !== sonSenkronOnayliSayi) {
           sonSenkronOnayliSayi = -1;
         }
         if (toplam === 0) {
-          rozet.hidden = true;
+          if (cevrimdisi) {
+            rozet.hidden = false;
+            rozet.className = 'rozet rozet-sari';
+            rozet.textContent = 'Çevrimdışı';
+          } else {
+            rozet.hidden = true;
+          }
           return;
         }
         rozet.hidden = false;
-        if (sonSenkronOnayliSayi === toplam) {
+        if (cevrimdisi) {
+          rozet.className = 'rozet rozet-sari';
+          rozet.textContent = `Kuyruk (Çevrimdışı): ${toplam}`;
+        } else if (sonSenkronOnayliSayi === toplam) {
           rozet.className = 'rozet rozet-yesil';
           rozet.textContent = `Gönderildi (${toplam})`;
         } else {
@@ -2201,6 +2251,17 @@
             return sonuc;
           }
           seriSon.kaydedildi = true;
+        } else if (kameraStream) {
+          const imza = standart
+            ? JSON.stringify(sonuc.testDetay.map((t) => t.verilen))
+            : [sonuc.grup, sonuc.okunanNoKod, JSON.stringify(sonuc.testDetay.map((t) => t.verilen)), JSON.stringify(sonuc.dyDetay.map((t) => t.verilen))].join('|');
+          const simdi = Date.now();
+          if (imza && imza === sonManuelKameraImza && (simdi - sonManuelKameraMs) < 1600) {
+            mobilUyariGoster('Zaten okundu — aynı kağıt çift okuma kilidiyle korundu.');
+            return sonuc;
+          }
+          sonManuelKameraImza = imza;
+          sonManuelKameraMs = simdi;
         }
         if (standart) isleStandartOkumaSonucu(sonuc); else isleMobilOkumaSonucu(sonuc, { gercekTarama: true });
 
@@ -2438,9 +2499,37 @@
           });
         }
 
-        document.getElementById('btn-mobil-kare-oku').addEventListener('click', taraAktifKareVeyaSimuleEt);
+        const deklansorGuvenliCalistir = () => {
+          const simdi = Date.now();
+          if (deklansorKilitliMi || (simdi - sonDeklansorTetikMs) < 420) return;
+          deklansorKilitliMi = true;
+          sonDeklansorTetikMs = simdi;
+          const btnAna = document.getElementById('btn-mobil-kare-oku');
+          const btnVizor = document.getElementById('btn-vizor-ustu-oku');
+          [btnAna, btnVizor].forEach((b) => {
+            if (b) {
+              b.classList.add('deklansor-kilitli');
+              b.setAttribute('aria-busy', 'true');
+            }
+          });
+          try {
+            taraAktifKareVeyaSimuleEt();
+          } finally {
+            setTimeout(() => {
+              deklansorKilitliMi = false;
+              [btnAna, btnVizor].forEach((b) => {
+                if (b) {
+                  b.classList.remove('deklansor-kilitli');
+                  b.removeAttribute('aria-busy');
+                }
+              });
+            }, 220);
+          }
+        };
+
+        document.getElementById('btn-mobil-kare-oku').addEventListener('click', deklansorGuvenliCalistir);
         const btnVizorUstuOku = document.getElementById('btn-vizor-ustu-oku');
-        if (btnVizorUstuOku) btnVizorUstuOku.addEventListener('click', taraAktifKareVeyaSimuleEt);
+        if (btnVizorUstuOku) btnVizorUstuOku.addEventListener('click', deklansorGuvenliCalistir);
 
         const btnPwaQrTaraAc = document.getElementById('btn-pwa-qr-tara-ac');
         if (btnPwaQrTaraAc) {
@@ -3054,6 +3143,10 @@
             }
           };
         }
+
+        window.addEventListener('online', () => guncelleMobilSenkronRozetUI(false));
+        window.addEventListener('offline', () => guncelleMobilSenkronRozetUI(false));
+        guncelleMobilSenkronRozetUI(false);
 
         window.addEventListener('hashchange', () => {
           yukleBaslangicVerisi();
