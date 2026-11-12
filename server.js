@@ -1141,6 +1141,7 @@ function istekIsleyici(req, res) {
         return gonderJson(res, 200, {
           basarili: true,
           bulundu: Boolean(mevcut && mevcut.veri),
+          depoTuru: 'yerel_sunucu',
           kullaniciAdi,
           revizyonNo: mevcut ? mevcut.revizyonNo : 0,
           ozetBilgi: mevcut ? mevcut.ozetBilgi : '',
@@ -1157,16 +1158,19 @@ function istekIsleyici(req, res) {
         }
         const mevcut = sunucuDurumu.bulutKasalar.get(kullaniciAdi) || null;
         const mevcutRev = mevcut ? (Number(mevcut.revizyonNo) || 0) : 0;
-        const bazRev = govde.bazRevizyonNo !== undefined ? Number(govde.bazRevizyonNo) : null;
-        const zorlaEz = govde.zorlaEz === true;
+        const bazRev = (govde && govde.bazRevizyonNo !== undefined && govde.bazRevizyonNo !== null)
+          ? Number(govde.bazRevizyonNo)
+          : null;
+        const silmeOnayi = Boolean(govde && govde.silmeOnayi === true);
+        const zorlaEz = Boolean(govde && govde.zorlaEz === true);
 
         const yeniOzet = hesaplaKasaOzeti(gelenVeri);
         const eskiOzet = mevcut && mevcut.veri ? hesaplaKasaOzeti(mevcut.veri) : { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
 
-        if (mevcut && !zorlaEz) {
-          if (bazRev !== null && Number.isFinite(bazRev) && bazRev < mevcutRev) {
+        if (mevcut && mevcutRev > 0) {
+          if (bazRev === null || !Number.isFinite(bazRev) || bazRev !== mevcutRev) {
             return gonderJson(res, 409, {
-              hata: 'Bulutta başka bir sekme veya cihazdan kaydedilmiş daha güncel veri var.',
+              hata: 'Sunucu kasası revizyon uyuşmazlığı: Güncel revizyon numarası eşleşmiyor.',
               cakisma: true,
               bulutRevizyonNo: mevcutRev,
               revizyonNo: mevcutRev,
@@ -1175,12 +1179,30 @@ function istekIsleyici(req, res) {
               veriPaketi: mevcut.veri
             });
           }
-          if (
-            (eskiOzet.soru > 0 && yeniOzet.soru === 0) ||
-            (eskiOzet.ogrenci > 0 && yeniOzet.ogrenci === 0)
-          ) {
+
+          const eskiDoluMu = eskiOzet.ders > 0 || eskiOzet.soru > 0 || eskiOzet.ogrenci > 0;
+          const yeniTamBosMu = yeniOzet.ders === 0 && yeniOzet.soru === 0 && yeniOzet.ogrenci === 0;
+          if (eskiDoluMu && yeniTamBosMu) {
             return gonderJson(res, 409, {
-              hata: 'Veri kaybı koruması: Buluttaki soru veya öğrenci listesi boş veri ile ezilemez.',
+              hata: 'Veri kaybı koruması: Dolu kasa boş veri ile sıfırlanamaz.',
+              cakisma: true,
+              veriKaybiKorumasi: true,
+              bulutRevizyonNo: mevcutRev,
+              revizyonNo: mevcutRev,
+              ozetBilgi: mevcut.ozetBilgi,
+              bulutVeri: mevcut.veri,
+              veriPaketi: mevcut.veri
+            });
+          }
+
+          const azalmaVarMi =
+            yeniOzet.ders < eskiOzet.ders ||
+            yeniOzet.soru < eskiOzet.soru ||
+            yeniOzet.ogrenci < eskiOzet.ogrenci ||
+            yeniOzet.sinav < eskiOzet.sinav;
+          if (azalmaVarMi && !silmeOnayi) {
+            return gonderJson(res, 409, {
+              hata: 'Veri kaybı koruması: Açık silme onayı olmadan mevcut ders, soru, öğrenci veya sınav sayısı azaltılamaz.',
               cakisma: true,
               veriKaybiKorumasi: true,
               bulutRevizyonNo: mevcutRev,
@@ -1196,6 +1218,7 @@ function istekIsleyici(req, res) {
           mevcut &&
           mevcut.veriJson &&
           (govde.anlikYedekAl === true ||
+            silmeOnayi ||
             zorlaEz ||
             yeniOzet.soru !== eskiOzet.soru ||
             yeniOzet.ogrenci !== eskiOzet.ogrenci ||
@@ -1206,7 +1229,7 @@ function istekIsleyici(req, res) {
           ekleGecmis(mevcutRev, mevcut.veriJson, mevcut.ozetBilgi || 'Otomatik yedek');
         }
 
-        const yeniRev = Math.max(mevcutRev + 1, (Number(govde.revizyonNo) || 0));
+        const yeniRev = mevcutRev + 1;
         const simdi = Date.now();
         const ozetBilgi = String(govde.islemNotu || yeniOzet.metin).slice(0, 180);
         const veriJson = JSON.stringify(gelenVeri);
@@ -1222,6 +1245,7 @@ function istekIsleyici(req, res) {
         return gonderJson(res, 200, {
           basarili: true,
           kaydedildi: true,
+          depoTuru: 'yerel_sunucu',
           kullaniciAdi,
           revizyonNo: yeniRev,
           ozetBilgi,

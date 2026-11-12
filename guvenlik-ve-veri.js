@@ -1020,7 +1020,7 @@
       if (!qr) return '';
       const modSay = qr.getModuleCount();
       if (!modSay || modSay <= 0) return '';
-      const sessiz = 2;
+      const sessiz = 4;
       const hucre = boyutPx / (modSay + sessiz * 2);
       let d = '';
       for (let r = 0; r < modSay; r++) {
@@ -1326,13 +1326,28 @@
     });
   }
 
-  /* Kişiye Özel / Kitapçık Optik Kağıt İçin 128-bit Şifreli + 48-bit SHA-256 MAC İmzalı Kompakt QR (OQV2) */
-  function uretSinavGizliAnahtari(tohumMetin = '') {
-    if (tohumMetin && String(tohumMetin).trim()) {
-      return uretDelilLogHash(String(tohumMetin), 'OQV2-MASTER-KEY').slice(0, 32).toUpperCase();
+  /* Kişiye Özel / Kitapçık Optik Kağıt İçin 128-bit Şifreli + 64-bit CSPRNG Nonce + 64-bit SHA-256 MAC İmzalı Kompakt QR (OQV2) */
+  function kriptografikRastgeleBaytUret(adet = 16) {
+    const u8 = new Uint8Array(Math.max(1, Number(adet) || 16));
+    if (typeof globalThis !== 'undefined' && globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+      globalThis.crypto.getRandomValues(u8);
+      return u8;
     }
-    const rastgele = `${Date.now()}-${Math.random()}-${Math.random()}`;
-    return uretDelilLogHash(rastgele, 'OQV2-RANDOM-KEY').slice(0, 32).toUpperCase();
+    if (typeof require === 'function') {
+      try {
+        const nodeCrypto = require('crypto');
+        if (nodeCrypto && typeof nodeCrypto.randomFillSync === 'function') {
+          nodeCrypto.randomFillSync(u8);
+          return u8;
+        }
+      } catch (_) {}
+    }
+    throw new Error('Güvenli kriptografik rastgele sayı üreteci (CSPRNG) bulunamadı.');
+  }
+
+  function uretSinavGizliAnahtari() {
+    const rastgeleBaytlar = kriptografikRastgeleBaytUret(16);
+    return Array.from(rastgeleBaytlar, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
   }
 
   function hexToBytes(hexStr) {
@@ -1379,7 +1394,11 @@
   }
 
   function uretSifreliOptikKagitQrPaketi(bilgi = {}, sinavGizliAnahtar = '') {
-    const anahtar = String(sinavGizliAnahtar || bilgi.sinavGizliAnahtar || '').trim() || uretSinavGizliAnahtari(bilgi.sinavKodu || 'SINAV-2026');
+    const anahtar = String(sinavGizliAnahtar || (bilgi && bilgi.sinavGizliAnahtar) || '').trim();
+    if (!anahtar || anahtar.length < 12) {
+      // Sıfır sızıntı ilkesi: Öğretmen gizli anahtarı verilmeden sınav kodundan deterministik yedek anahtar ASLA türetilmez!
+      return '';
+    }
     const sinavKodu = String(bilgi.sinavKodu || 'SINAV-2026').trim();
     const grupHarf = ['A', 'B', 'C', 'D'].includes(String(bilgi.grup || 'A').toUpperCase())
       ? String(bilgi.grup || 'A').toUpperCase()
@@ -1418,7 +1437,7 @@
     const acikUzunluk = 1 + 4 + 1 + 3 + 3 + 1 + ogrNoBytes.length + dyPaketLen + testPaketLen;
     const acik = new Uint8Array(acikUzunluk);
     let p = 0;
-    acik[p++] = 2; // Sürüm 2
+    acik[p++] = 3; // Sürüm 3: 64-bit CSPRNG Nonce + 64-bit MAC
     acik.set(sinavHash4, p); p += 4;
     acik[p++] = (grupIdx & 0x03) | (ozelMi ? 0x04 : 0x00);
     acik[p++] = dySayisi;
@@ -1451,19 +1470,22 @@
       p += testPaketLen;
     }
 
-    const nonceHex = uretDelilLogHash(`${sinavKodu}|${ogrNo}|${grupHarf}`, 'OQV2-NONCE').slice(0, 6).toUpperCase();
-    const nonceBytes = hexToBytes(nonceHex); // 3 bayt
+    // Her şifrelemede yepyeni 64-bit (8 bayt) CSPRNG Nonce (Two-Time Pad / Keystream tekrarı imkansız)
+    const nonceBytes = kriptografikRastgeleBaytUret(8);
+    const nonceHex = Array.from(nonceBytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
     const akis = uretOqv2AnahtarAkisi(anahtar, nonceHex, acik.length);
     const sifreli = new Uint8Array(acik.length);
     for (let i = 0; i < acik.length; i++) sifreli[i] = acik[i] ^ akis[i];
 
     const sifreliHex = Array.from(sifreli, (b) => b.toString(16).padStart(2, '0')).join('');
-    const macBytes = hexToBytes(uretDelilLogHash(`${anahtar}|${nonceHex}|${sifreliHex}`, 'OQV2-MAC').slice(0, 12)); // 6 bayt (48-bit MAC)
+    const macBytes = hexToBytes(uretDelilLogHash(`${anahtar}|${nonceHex}|${sifreliHex}`, 'OQV2-MAC-V3').slice(0, 16)); // 8 bayt (64-bit MAC)
 
-    const toplam = new Uint8Array(3 + sifreli.length + 6);
-    toplam.set(nonceBytes, 0);
-    toplam.set(sifreli, 3);
-    toplam.set(macBytes, 3 + sifreli.length);
+    // Çerçeve: [0x03 çerçeve bayrağı (1B)] + [64-bit CSPRNG Nonce (8B)] + [Şifreli Yük] + [64-bit MAC (8B)]
+    const toplam = new Uint8Array(1 + 8 + sifreli.length + 8);
+    toplam[0] = 0xA3;
+    toplam.set(nonceBytes, 1);
+    toplam.set(sifreli, 9);
+    toplam.set(macBytes, 9 + sifreli.length);
 
     return `OQV2:${bytesToUrlBase64(toplam)}`;
   }
@@ -1474,21 +1496,40 @@
       return { gecerli: false, hata: 'OQV2 formatında şifreli kağıt QR kodu değil.' };
     }
     const anahtar = String(sinavGizliAnahtar || '').trim();
-    if (!anahtar) {
+    if (!anahtar || anahtar.length < 12) {
       return { gecerli: false, anahtarEksik: true, hata: 'Şifreli öğrenci kağıdını çözmek için önce Öğretmen Master Kurulum QR kodunu okutun.' };
     }
     try {
       const toplam = urlBase64ToBytes(ham.slice(5));
       if (toplam.length < 21) return { gecerli: false, hata: 'Bozuk veya eksik OQV2 QR verisi.' };
-      const nonceBytes = toplam.slice(0, 3);
-      const macGelen = toplam.slice(toplam.length - 6);
-      const sifreli = toplam.slice(3, toplam.length - 6);
+
+      const v3CerceveMi = toplam[0] === 0xA3 && toplam.length >= 30;
+      let nonceBytes;
+      let macGelen;
+      let sifreli;
+      let macAlanAdi;
+      let macUzunluk;
+
+      if (v3CerceveMi) {
+        nonceBytes = toplam.slice(1, 9);
+        macGelen = toplam.slice(toplam.length - 8);
+        sifreli = toplam.slice(9, toplam.length - 8);
+        macAlanAdi = 'OQV2-MAC-V3';
+        macUzunluk = 8;
+      } else {
+        nonceBytes = toplam.slice(0, 3);
+        macGelen = toplam.slice(toplam.length - 6);
+        sifreli = toplam.slice(3, toplam.length - 6);
+        macAlanAdi = 'OQV2-MAC';
+        macUzunluk = 6;
+      }
+
       const nonceHex = Array.from(nonceBytes, (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
       const sifreliHex = Array.from(sifreli, (b) => b.toString(16).padStart(2, '0')).join('');
-      const macBeklenen = hexToBytes(uretDelilLogHash(`${anahtar}|${nonceHex}|${sifreliHex}`, 'OQV2-MAC').slice(0, 12));
+      const macBeklenen = hexToBytes(uretDelilLogHash(`${anahtar}|${nonceHex}|${sifreliHex}`, macAlanAdi).slice(0, macUzunluk * 2));
 
       let fark = 0;
-      for (let i = 0; i < 6; i++) fark |= (macGelen[i] ^ macBeklenen[i]);
+      for (let i = 0; i < macUzunluk; i++) fark |= (macGelen[i] ^ macBeklenen[i]);
       if (fark !== 0) {
         return { gecerli: false, imzaHatasi: true, hata: 'QR güvenlik imzası doğrulanamadı (farklı sınav anahtarı veya değiştirilmiş etiket).' };
       }
@@ -1499,7 +1540,7 @@
 
       let p = 0;
       const surum = acik[p++];
-      if (surum !== 2) return { gecerli: false, hata: 'Desteklenmeyen OQV2 sürümü.' };
+      if (surum !== 2 && surum !== 3) return { gecerli: false, hata: 'Desteklenmeyen OQV2 sürümü.' };
       const sinavHashHex = Array.from(acik.slice(p, p + 4), (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
       p += 4;
       if (beklenenSinavKodu) {
@@ -5572,6 +5613,304 @@
     };
   }
 
+  /* ------------------------------------------------------------------------
+     Z2 KOMPAKT İKİLİ (BCD + KANONİK TÜRKÇE HUFFMAN + LZ77) MASTER QR KODEĞİ
+     Ortak numara öneki olmayan 150+ uzun Türkçe isimli öğrenciyi tek QR içine sığdırır
+     ------------------------------------------------------------------------ */
+  const Z2_HUFF_S4 = [' ', 'a', 'e', 'i', 'n', 'r'];
+  const Z2_HUFF_S5 = ['l', 'ı', 'k', 'd', 'm', 'y', 'u', 's', 't', 'o', 'b', 'ü'];
+  const Z2_HUFF_S6 = ['ş', 'z', 'g', 'ç', 'c', 'p', 'h', 'v', 'ğ', 'ö', 'f', 'j', '-', '.'];
+
+  const Z2_KOD_HARITA = (() => {
+    const m = new Map();
+    Z2_HUFF_S4.forEach((ch, idx) => m.set(ch, { kod: idx, bit: 4 }));
+    Z2_HUFF_S5.forEach((ch, idx) => m.set(ch, { kod: 12 + idx, bit: 5 }));
+    Z2_HUFF_S6.forEach((ch, idx) => m.set(ch, { kod: 48 + idx, bit: 6 }));
+    m.set("'", { kod: 124, bit: 7 });
+    return m;
+  })();
+
+  const Z2_DEKOD_TABLO = (() => {
+    const tablo = new Array(128);
+    for (let k = 0; k < 6; k++) {
+      for (let alt = 0; alt < 8; alt++) tablo[(k << 3) | alt] = { tip: 'harf', ch: Z2_HUFF_S4[k], bit: 4 };
+    }
+    for (let k = 0; k < 12; k++) {
+      for (let alt = 0; alt < 4; alt++) tablo[((12 + k) << 2) | alt] = { tip: 'harf', ch: Z2_HUFF_S5[k], bit: 5 };
+    }
+    for (let k = 0; k < 14; k++) {
+      for (let alt = 0; alt < 2; alt++) tablo[((48 + k) << 1) | alt] = { tip: 'harf', ch: Z2_HUFF_S6[k], bit: 6 };
+    }
+    tablo[124] = { tip: 'harf', ch: "'", bit: 7 };
+    tablo[125] = { tip: 'lz', bit: 7 };
+    tablo[126] = { tip: 'son', bit: 7 };
+    tablo[127] = { tip: 'esc', bit: 7 };
+    return tablo;
+  })();
+
+  function baslikHarfTr(metin) {
+    return String(metin || '')
+      .split(/(\s+|-)/)
+      .map((parca) => {
+        if (!parca || /^(\s+|-)$/.test(parca)) return parca;
+        const ilk = parca.slice(0, 1).toLocaleUpperCase('tr-TR');
+        const kalan = parca.slice(1).toLocaleLowerCase('tr-TR');
+        return ilk + kalan;
+      })
+      .join('');
+  }
+
+  function kodlaZ2MasterSetupPaketi(temelPaket, ogrenciListesi) {
+    const bitler = [];
+    const yazBit = (deger, bitSayisi) => {
+      for (let b = bitSayisi - 1; b >= 0; b--) {
+        bitler.push((deger >>> b) & 1);
+      }
+    };
+    const yazBaytlar = (u8) => {
+      for (let i = 0; i < u8.length; i++) yazBit(u8[i], 8);
+    };
+
+    const meta = {
+      k: temelPaket.sinavKodu,
+      a: temelPaket.dersAd,
+      p: [
+        temelPaket.dySayisi,
+        temelPaket.dyToplamPuan,
+        temelPaket.testSayisi,
+        temelPaket.testToplamPuan,
+        temelPaket.klasikSayisi,
+        temelPaket.klasikToplamPuan,
+        temelPaket.sikSayisi,
+        temelPaket.haneSayisi
+      ],
+      m: temelPaket.kimlikModu,
+      s: temelPaket.sinavGizliAnahtar,
+      c: ['A', 'B', 'C', 'D'].map((g) => {
+        const x = (temelPaket.cevapAnahtarlari && temelPaket.cevapAnahtarlari[g]) || { dy: '', test: '' };
+        return [x.dy || '', x.test || ''];
+      })
+    };
+    const metaBytes = new TextEncoder().encode(JSON.stringify(meta));
+    yazBit(metaBytes.length, 16);
+    yazBaytlar(metaBytes);
+    yazBit(ogrenciListesi.length, 12);
+
+    const ortakOnEk = (() => {
+      if (ogrenciListesi.length < 2) return '';
+      let pre = ogrenciListesi[0].ogrNo;
+      for (let i = 1; i < ogrenciListesi.length && pre; i++) {
+        const s = ogrenciListesi[i].ogrNo;
+        let j = 0;
+        const m = Math.min(pre.length, Math.max(0, s.length - 1));
+        while (j < m && pre[j] === s[j]) j++;
+        pre = pre.slice(0, j);
+      }
+      return pre.length >= 2 && pre.length <= 12 ? pre : '';
+    })();
+    const preBytes = new TextEncoder().encode(ortakOnEk);
+    yazBit(preBytes.length, 4);
+    yazBaytlar(preBytes);
+
+    const gecmis = [];
+    const gecmisEkle = (ch) => {
+      gecmis.push(ch);
+      if (gecmis.length > 1024) gecmis.shift();
+    };
+
+    for (let idx = 0; idx < ogrenciListesi.length; idx++) {
+      const ogr = ogrenciListesi[idx];
+      const noKalan = ortakOnEk && ogr.ogrNo.startsWith(ortakOnEk) ? ogr.ogrNo.slice(ortakOnEk.length) : ogr.ogrNo;
+      if (/^\d{1,15}$/.test(noKalan)) {
+        yazBit(1, 1);
+        yazBit(noKalan.length, 4);
+        for (let i = 0; i < noKalan.length; i++) {
+          yazBit(noKalan.charCodeAt(i) - 48, 4);
+        }
+      } else {
+        const nb = new TextEncoder().encode(noKalan.slice(0, 31));
+        yazBit(0, 1);
+        yazBit(nb.length, 5);
+        yazBaytlar(nb);
+      }
+
+      const adStr = ogr.adSoyad;
+      let vakaMod = 2;
+      let akisMetin = adStr;
+      if (adStr === baslikHarfTr(adStr)) {
+        vakaMod = 0;
+        akisMetin = adStr.toLocaleLowerCase('tr-TR');
+      } else if (adStr === adStr.toLocaleUpperCase('tr-TR')) {
+        vakaMod = 1;
+        akisMetin = adStr.toLocaleLowerCase('tr-TR');
+      }
+      yazBit(vakaMod, 2);
+
+      let p = 0;
+      while (p < akisMetin.length) {
+        let enIyiUz = 0;
+        let enIyiMesafe = 0;
+        const maksBak = Math.min(19, akisMetin.length - p);
+        if (maksBak >= 4 && gecmis.length >= 4) {
+          for (let g = gecmis.length - 1; g >= 0; g--) {
+            if (gecmis[g] !== akisMetin[p]) continue;
+            let uz = 1;
+            while (uz < maksBak && g + uz < gecmis.length && gecmis[g + uz] === akisMetin[p + uz]) uz++;
+            if (uz >= 4 && uz > enIyiUz) {
+              enIyiUz = uz;
+              enIyiMesafe = gecmis.length - g;
+              if (enIyiUz === 19) break;
+            }
+          }
+        }
+        if (enIyiUz >= 4 && enIyiMesafe >= 1 && enIyiMesafe <= 1024) {
+          yazBit(125, 7);
+          yazBit(enIyiMesafe - 1, 10);
+          yazBit(enIyiUz - 4, 4);
+          for (let k = 0; k < enIyiUz; k++) gecmisEkle(akisMetin[p + k]);
+          p += enIyiUz;
+        } else {
+          const ch = akisMetin[p];
+          const h = Z2_KOD_HARITA.get(ch);
+          if (h) {
+            yazBit(h.kod, h.bit);
+          } else {
+            yazBit(127, 7);
+            yazBit(ch.charCodeAt(0) & 0xFFFF, 16);
+          }
+          gecmisEkle(ch);
+          p++;
+        }
+      }
+      yazBit(126, 7); // EON
+    }
+
+    const baytSayisi = Math.ceil(bitler.length / 8);
+    const cikti = new Uint8Array(baytSayisi);
+    for (let i = 0; i < bitler.length; i++) {
+      if (bitler[i]) cikti[i >>> 3] |= (1 << (7 - (i & 7)));
+    }
+    return 'Z2.' + bytesToUrlBase64(cikti);
+  }
+
+  function cozZ2MasterSetupPaketi(kodluMetin) {
+    if (!kodluMetin || !kodluMetin.startsWith('Z2.')) return null;
+    const u8 = urlBase64ToBytes(kodluMetin.slice(3));
+    const toplamBit = u8.length * 8;
+    let bitPos = 0;
+
+    const bakBit = (adet) => {
+      let d = 0;
+      for (let i = 0; i < adet; i++) {
+        const p = bitPos + i;
+        const b = p < toplamBit ? ((u8[p >>> 3] >>> (7 - (p & 7))) & 1) : 0;
+        d = (d << 1) | b;
+      }
+      return d >>> 0;
+    };
+    const okuBit = (adet) => {
+      if (bitPos + adet > toplamBit) throw new Error('Z2 bit sınırı aşıldı');
+      const d = bakBit(adet);
+      bitPos += adet;
+      return d;
+    };
+    const okuBaytlar = (uz) => {
+      const b = new Uint8Array(uz);
+      for (let i = 0; i < uz; i++) b[i] = okuBit(8);
+      return b;
+    };
+
+    const metaUz = okuBit(16);
+    if (metaUz <= 2 || metaUz > 4096) return null;
+    const meta = JSON.parse(new TextDecoder().decode(okuBaytlar(metaUz)));
+    const ogrSayi = okuBit(12);
+    if (ogrSayi > 1000) return null;
+    const preUz = okuBit(4);
+    const ortakOnEk = preUz > 0 ? new TextDecoder().decode(okuBaytlar(preUz)) : '';
+
+    const gecmis = [];
+    const gecmisEkle = (ch) => {
+      gecmis.push(ch);
+      if (gecmis.length > 1024) gecmis.shift();
+    };
+
+    const ogrenciler = [];
+    for (let idx = 0; idx < ogrSayi; idx++) {
+      const sayisalMi = okuBit(1);
+      let noKalan = '';
+      if (sayisalMi === 1) {
+        const hane = okuBit(4);
+        for (let i = 0; i < hane; i++) noKalan += String(okuBit(4));
+      } else {
+        const nbUz = okuBit(5);
+        noKalan = new TextDecoder().decode(okuBaytlar(nbUz));
+      }
+      const ogrNo = ortakOnEk + noKalan;
+
+      const vakaMod = okuBit(2);
+      let hamAd = '';
+      let guvenlikSayac = 0;
+      while (guvenlikSayac++ < 256) {
+        const onizle7 = bakBit(7);
+        const giris = Z2_DEKOD_TABLO[onizle7];
+        if (!giris) throw new Error('Geçersiz Z2 Huffman kodu');
+        okuBit(giris.bit);
+        if (giris.tip === 'son') break;
+        if (giris.tip === 'harf') {
+          hamAd += giris.ch;
+          gecmisEkle(giris.ch);
+        } else if (giris.tip === 'esc') {
+          const ch = String.fromCharCode(okuBit(16));
+          hamAd += ch;
+          gecmisEkle(ch);
+        } else if (giris.tip === 'lz') {
+          const mesafe = okuBit(10) + 1;
+          const uz = okuBit(4) + 4;
+          const bas = gecmis.length - mesafe;
+          if (bas < 0) throw new Error('Geçersiz Z2 LZ mesafesi');
+          const kopya = gecmis.slice(bas, bas + uz);
+          for (let k = 0; k < kopya.length; k++) {
+            hamAd += kopya[k];
+            gecmisEkle(kopya[k]);
+          }
+        }
+      }
+
+      let adSoyad = hamAd;
+      if (vakaMod === 0) adSoyad = baslikHarfTr(hamAd);
+      else if (vakaMod === 1) adSoyad = hamAd.toLocaleUpperCase('tr-TR');
+
+      if (ogrNo && adSoyad) {
+        ogrenciler.push({ ogrNo, adSoyad, bolum: 'Genel' });
+      }
+    }
+
+    const pArr = Array.isArray(meta.p) ? meta.p : [];
+    const cArr = Array.isArray(meta.c) ? meta.c : [];
+    const cevapAnahtarlari = {};
+    ['A', 'B', 'C', 'D'].forEach((g, i) => {
+      const c = Array.isArray(cArr[i]) ? cArr[i] : ['', ''];
+      cevapAnahtarlari[g] = { dy: String(c[0] || ''), test: String(c[1] || '') };
+    });
+
+    return {
+      sinavKodu: String(meta.k || 'SINAV-2026'),
+      dersAd: String(meta.a || 'Sınav'),
+      dySayisi: Number(pArr[0]) || 0,
+      dyToplamPuan: Number(pArr[1]) || 0,
+      testSayisi: Number(pArr[2]) || 0,
+      testToplamPuan: Number(pArr[3]) || 0,
+      klasikSayisi: Number(pArr[4]) || 0,
+      klasikToplamPuan: Number(pArr[5]) || 0,
+      sikSayisi: Number(pArr[6]) || 5,
+      haneSayisi: Number(pArr[7]) || 2,
+      kimlikModu: String(meta.m || 'son2'),
+      sinavGizliAnahtar: String(meta.s || ''),
+      cevapAnahtarlari,
+      ogrenciler
+    };
+  }
+
   /* Sınav Cevap Anahtarı ve Yapısını Telefon QR'ına Sığacak Kompakt Formatta Üretme & Çözme */
   function uretKompaktSetupQrPaketi(yapi = {}, ogrenciler = [], tabanAdres = '') {
     if (typeof ogrenciler === 'string' && !tabanAdres) {
@@ -5605,7 +5944,7 @@
       testSoruPuan: yapi.testSoruPuan,
       klasikSoruPuan: yapi.klasikSoruPuan
     });
-    const gizliAnahtar = String(yapi.sinavGizliAnahtar || '').trim() || uretSinavGizliAnahtari(yapi.sinavKodu || 'SINAV-2026');
+    const gizliAnahtar = String(yapi.sinavGizliAnahtar || '').trim() || uretSinavGizliAnahtari();
 
     const temelPaket = {
       sinavKodu: String(yapi.sinavKodu || 'SINAV-2026'),
@@ -5631,15 +5970,13 @@
       .filter((o) => o && String(o.ogrNo || '').trim() && String(o.adSoyad || '').trim())
       .map((o) => ({
         ogrNo: String(o.ogrNo).trim(),
-        adSoyad: String(o.adSoyad).trim().replace(/[\r\n\t|]+/g, ' ')
+        adSoyad: String(o.adSoyad).trim().replace(/\s+/g, ' ').replace(/[\r\n\t|]+/g, ' ')
       }));
 
-    const kodlaUrl = (nesne) => {
-      const b64 = utf8ToBase64Guvenli(JSON.stringify(nesne));
-      const kodlu = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const kodlaHamTokenUrl = (kodlu) => {
       const tamUrl = `${temizTaban ? temizTaban + '/optik-mobil.html' : 'optik-mobil.html'}#setup=${kodlu}`;
       return {
-        b64,
+        b64: kodlu,
         encoded: kodlu,
         hashHref: `optik-mobil.html#setup=${kodlu}`,
         url: tamUrl,
@@ -5647,80 +5984,44 @@
       };
     };
 
-    const ortakNoOnEkiBul = (liste) => {
-      if (!Array.isArray(liste) || liste.length < 2) return '';
-      let onEk = liste[0].ogrNo;
-      for (let i = 1; i < liste.length && onEk; i++) {
-        const n = liste[i].ogrNo;
-        let j = 0;
-        const maks = Math.min(onEk.length, n.length - 1);
-        while (j < maks && onEk[j] === n[j]) j++;
-        onEk = onEk.slice(0, j);
-      }
-      return onEk.length >= 2 ? onEk : '';
+    const kodlaUrl = (nesne) => {
+      const b64 = utf8ToBase64Guvenli(JSON.stringify(nesne));
+      const kodlu = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      return kodlaHamTokenUrl(kodlu);
     };
 
-    const trAsciiKisa = (m) => String(m || '')
-      .replace(/Ğ/g, 'G').replace(/ğ/g, 'g')
-      .replace(/Ü/g, 'U').replace(/ü/g, 'u')
-      .replace(/Ş/g, 'S').replace(/ş/g, 's')
-      .replace(/İ/g, 'I').replace(/ı/g, 'i')
-      .replace(/Ö/g, 'O').replace(/ö/g, 'o')
-      .replace(/Ç/g, 'C').replace(/ç/g, 'c');
-
-    if (gecerliOgrenciler.length > 0) {
-      // 1) <= 25 öğrenci için tam ad soyad (24 karakter) + < 950 karakter sınırı
-      if (gecerliOgrenciler.length <= 25) {
-        const ogrSatirTam = gecerliOgrenciler.map((o) => `${o.ogrNo}|${o.adSoyad.slice(0, 24)}`).join('\n');
-        const birlikte = kodlaUrl({ ...temelPaket, oS: ogrSatirTam });
-        if (birlikte.tamUrl.length <= 945) {
-          return {
-            ...birlikte,
-            ogrenciDahilMi: true,
-            ogrenciSayisi: gecerliOgrenciler.length,
-            not: `Sınav anahtarı, 100p ölçeği, şifre anahtarı ve ${gecerliOgrenciler.length} kişilik tam öğrenci listesi tek QR içine sığdırıldı.`
-          };
-        }
-      }
-      // 2) 26..240 kişilik sınıflar ve amfiler için ortak numara öneki + kademeli ad sıkıştırması (<= 2860 krk)
-      if (gecerliOgrenciler.length <= 240) {
-        const oPre = ortakNoOnEkiBul(gecerliOgrenciler);
-        const kademeler = [
-          { ilk: 10, son: 10, ascii: false, maksUrl: 2300 },
-          { ilk: 7, son: 7, ascii: false, maksUrl: 2600 },
-          { ilk: 5, son: 5, ascii: false, maksUrl: 2860 },
-          { ilk: 4, son: 5, ascii: true, maksUrl: 2880 },
-          { ilk: 3, son: 4, ascii: true, maksUrl: 2890 }
-        ];
-        for (const kad of kademeler) {
-          const satirlar = gecerliOgrenciler.map((o) => {
-            const hamAd = kad.ascii ? trAsciiKisa(o.adSoyad) : o.adSoyad;
-            const parcalar = hamAd.split(/\s+/).filter(Boolean);
-            const kisaAd = parcalar.length > 1
-              ? `${parcalar[0].slice(0, kad.ilk)} ${parcalar[parcalar.length - 1].slice(0, kad.son)}`
-              : hamAd.slice(0, kad.ilk + kad.son);
-            const noKisa = oPre ? o.ogrNo.slice(oPre.length) : o.ogrNo;
-            return `${noKisa}|${kisaAd}`;
-          }).join('\n');
-          const paketNesne = oPre
-            ? { ...temelPaket, oPre, oS: satirlar }
-            : { ...temelPaket, oS: satirlar };
-          const aday = kodlaUrl(paketNesne);
-          if (aday.tamUrl.length <= kad.maksUrl) {
-            return {
-              ...aday,
-              ogrenciDahilMi: true,
-              ogrenciSayisi: gecerliOgrenciler.length,
-              not: `Sınav anahtarı ve ${gecerliOgrenciler.length} kişilik sınıf listesi tek Öğretmen Master QR içine gömüldü.`
-            };
+    if (gecerliOgrenciler.length > 0 && gecerliOgrenciler.length <= 260) {
+      // Kademe 0: Tam Ad-Soyad + Z2 BCD/Huffman/LZ77 sıkıştırması (ortak önek olmasa bile 126+ uzun Türkçe adı tam korur)
+      const adButceleri = [64, 34, 26, 20, 15, 11];
+      for (const adSinir of adButceleri) {
+        const hazirListe = gecerliOgrenciler.map((o) => {
+          if (o.adSoyad.length <= adSinir) return o;
+          const parcalar = o.adSoyad.split(' ').filter(Boolean);
+          if (parcalar.length >= 2) {
+            const soyad = parcalar[parcalar.length - 1];
+            const adButce = Math.max(3, adSinir - soyad.length - 1);
+            const onAd = parcalar.slice(0, -1).join(' ').slice(0, adButce).trim();
+            return { ogrNo: o.ogrNo, adSoyad: `${onAd} ${soyad}`.slice(0, adSinir).trim() };
           }
+          return { ogrNo: o.ogrNo, adSoyad: o.adSoyad.slice(0, adSinir).trim() };
+        });
+        const z2Token = kodlaZ2MasterSetupPaketi(temelPaket, hazirListe);
+        const aday = kodlaHamTokenUrl(z2Token);
+        if (aday.tamUrl.length <= 2890) {
+          return {
+            ...aday,
+            ogrenciDahilMi: true,
+            tamAdKorunduMu: adSinir >= 64,
+            ogrenciSayisi: gecerliOgrenciler.length,
+            not: `Sınav anahtarı, şifre çözücü ve ${gecerliOgrenciler.length} kişilik sınıf listesi tek Öğretmen Master QR içine sıkıştırıldı.`
+          };
         }
       }
     }
 
-    const sadeceSetup = kodlaUrl(temelPaket);
+    const z2SadeceSetup = kodlaHamTokenUrl(kodlaZ2MasterSetupPaketi(temelPaket, []));
     return {
-      ...sadeceSetup,
+      ...z2SadeceSetup,
       ogrenciDahilMi: false,
       ogrenciSayisi: gecerliOgrenciler.length,
       not: gecerliOgrenciler.length > 0
@@ -5738,10 +6039,16 @@
       ham = ham.slice(6).split('&')[0];
     }
     try {
-      let cozulmusB64 = decodeURIComponent(ham).replace(/-/g, '+').replace(/_/g, '/');
-      while (cozulmusB64.length % 4 !== 0) cozulmusB64 += '=';
-      const jsonStr = base64ToUtf8Guvenli(cozulmusB64);
-      const v = JSON.parse(jsonStr);
+      const cozulmusHam = decodeURIComponent(ham);
+      let v = null;
+      if (cozulmusHam.startsWith('Z2.')) {
+        v = cozZ2MasterSetupPaketi(cozulmusHam);
+      } else {
+        let cozulmusB64 = cozulmusHam.replace(/-/g, '+').replace(/_/g, '/');
+        while (cozulmusB64.length % 4 !== 0) cozulmusB64 += '=';
+        const jsonStr = base64ToUtf8Guvenli(cozulmusB64);
+        v = JSON.parse(jsonStr);
+      }
       if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
 
       // Şema ve sınır doğrulaması (0 <= dySayisi <= 50, 0 <= testSayisi <= 100, geçerli harfler)

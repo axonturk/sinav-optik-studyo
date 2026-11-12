@@ -1104,6 +1104,7 @@ export default {
         return gonderJson(200, {
           basarili: true,
           bulundu: Boolean(mevcut && mevcut.veri),
+          depoTuru: (env && env.SINAV_DB) ? 'd1' : 'worker_bellek',
           kullaniciAdi,
           revizyonNo: mevcut ? mevcut.revizyonNo : 0,
           ozetBilgi: mevcut ? mevcut.ozetBilgi : '',
@@ -1120,16 +1121,20 @@ export default {
         }
         const mevcut = await okuMevcutKasa();
         const mevcutRev = mevcut ? (Number(mevcut.revizyonNo) || 0) : 0;
-        const bazRev = govde.bazRevizyonNo !== undefined ? Number(govde.bazRevizyonNo) : null;
-        const zorlaEz = govde.zorlaEz === true;
+        const bazRev = (govde && govde.bazRevizyonNo !== undefined && govde.bazRevizyonNo !== null)
+          ? Number(govde.bazRevizyonNo)
+          : null;
+        const silmeOnayi = Boolean(govde && govde.silmeOnayi === true);
+        const zorlaEz = Boolean(govde && govde.zorlaEz === true);
 
         const yeniOzet = hesaplaKasaOzeti(gelenVeri);
         const eskiOzet = mevcut && mevcut.veri ? hesaplaKasaOzeti(mevcut.veri) : { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
 
-        if (mevcut && !zorlaEz) {
-          if (bazRev !== null && Number.isFinite(bazRev) && bazRev < mevcutRev) {
+        if (mevcut && mevcutRev > 0) {
+          // 1) Sıkı iyimser eşzamanlılık kilidi: zorlaEz veya silmeOnayi açık olsa bile bazRevizyonNo === mevcutRev ZORUNLUDUR!
+          if (bazRev === null || !Number.isFinite(bazRev) || bazRev !== mevcutRev) {
             return gonderJson(409, {
-              hata: 'Bulutta başka bir sekme veya cihazdan kaydedilmiş daha güncel veri var.',
+              hata: 'Bulut kasası revizyon uyuşmazlığı: Güncel revizyon numarası eşleşmiyor.',
               cakisma: true,
               bulutRevizyonNo: mevcutRev,
               revizyonNo: mevcutRev,
@@ -1138,13 +1143,32 @@ export default {
               veriPaketi: mevcut.veri
             });
           }
-          // Kör veri silme engeli: Bulutta soru/öğrenci varken istemci 0 soru/öğrenci ile ezmeye kalkarsa
-          if (
-            (eskiOzet.soru > 0 && yeniOzet.soru === 0) ||
-            (eskiOzet.ogrenci > 0 && yeniOzet.ogrenci === 0)
-          ) {
+
+          // 2) Tam boşaltma yasağı: Dolu bir kasa boş nesne ({}) veya 0/0/0 durumla ASLA ezilemez!
+          const eskiDoluMu = eskiOzet.ders > 0 || eskiOzet.soru > 0 || eskiOzet.ogrenci > 0;
+          const yeniTamBosMu = yeniOzet.ders === 0 && yeniOzet.soru === 0 && yeniOzet.ogrenci === 0;
+          if (eskiDoluMu && yeniTamBosMu) {
             return gonderJson(409, {
-              hata: 'Veri kaybı koruması: Buluttaki soru veya öğrenci listesi boş veri ile ezilemez.',
+              hata: 'Veri kaybı koruması: Dolu kasa boş veri ile sıfırlanamaz.',
+              cakisma: true,
+              veriKaybiKorumasi: true,
+              bulutRevizyonNo: mevcutRev,
+              revizyonNo: mevcutRev,
+              ozetBilgi: mevcut.ozetBilgi,
+              bulutVeri: mevcut.veri,
+              veriPaketi: mevcut.veri
+            });
+          }
+
+          // 3) Kısmi veri silinmesi engeli: Açık silmeOnayi olmadan ders, soru, öğrenci veya kayıtlı sınav sayısı 1 adet bile azaltılamaz!
+          const azalmaVarMi =
+            yeniOzet.ders < eskiOzet.ders ||
+            yeniOzet.soru < eskiOzet.soru ||
+            yeniOzet.ogrenci < eskiOzet.ogrenci ||
+            yeniOzet.sinav < eskiOzet.sinav;
+          if (azalmaVarMi && !silmeOnayi) {
+            return gonderJson(409, {
+              hata: 'Veri kaybı koruması: Açık silme onayı olmadan mevcut ders, soru, öğrenci veya sınav sayısı azaltılamaz.',
               cakisma: true,
               veriKaybiKorumasi: true,
               bulutRevizyonNo: mevcutRev,
@@ -1160,6 +1184,7 @@ export default {
           mevcut &&
           mevcut.veriJson &&
           (govde.anlikYedekAl === true ||
+            silmeOnayi ||
             zorlaEz ||
             yeniOzet.soru !== eskiOzet.soru ||
             yeniOzet.ogrenci !== eskiOzet.ogrenci ||
@@ -1170,21 +1195,50 @@ export default {
           await ekleYedekGecmisi(mevcutRev, mevcut.veriJson, mevcut.ozetBilgi || 'Otomatik yedek');
         }
 
-        const yeniRev = Math.max(mevcutRev + 1, (Number(govde.revizyonNo) || 0));
+        const yeniRev = mevcutRev + 1;
         const simdi = Date.now();
         const ozetBilgi = String(govde.islemNotu || yeniOzet.metin).slice(0, 180);
         const veriJson = JSON.stringify(gelenVeri);
 
         if (env && env.SINAV_DB) {
-          await env.SINAV_DB.prepare(
-            `INSERT INTO bulut_kasalar (kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT(kullanici_adi) DO UPDATE SET
-               revizyon_no = excluded.revizyon_no,
-               veri_json = excluded.veri_json,
-               ozet_bilgi = excluded.ozet_bilgi,
-               guncelleme_ms = excluded.guncelleme_ms`
-          ).bind(kullaniciAdi, yeniRev, veriJson, ozetBilgi, simdi).run();
+          if (mevcut && mevcutRev > 0) {
+            const guncelleSonuc = await env.SINAV_DB.prepare(
+              `UPDATE bulut_kasalar
+               SET revizyon_no = ?1, veri_json = ?2, ozet_bilgi = ?3, guncelleme_ms = ?4
+               WHERE kullanici_adi = ?5 AND revizyon_no = ?6`
+            ).bind(yeniRev, veriJson, ozetBilgi, simdi, kullaniciAdi, mevcutRev).run();
+            const degisen = guncelleSonuc && guncelleSonuc.meta ? Number(guncelleSonuc.meta.changes || 0) : 1;
+            if (degisen === 0) {
+              const guncel = await okuMevcutKasa();
+              const gRev = guncel ? (Number(guncel.revizyonNo) || mevcutRev) : mevcutRev;
+              return gonderJson(409, {
+                hata: 'Eşzamanlı yazma çakışması engellendi.',
+                cakisma: true,
+                bulutRevizyonNo: gRev,
+                revizyonNo: gRev,
+                bulutVeri: guncel ? guncel.veri : null,
+                veriPaketi: guncel ? guncel.veri : null
+              });
+            }
+          } else {
+            try {
+              await env.SINAV_DB.prepare(
+                `INSERT INTO bulut_kasalar (kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5)`
+              ).bind(kullaniciAdi, yeniRev, veriJson, ozetBilgi, simdi).run();
+            } catch (_) {
+              const guncel = await okuMevcutKasa();
+              const gRev = guncel ? (Number(guncel.revizyonNo) || 1) : 1;
+              return gonderJson(409, {
+                hata: 'Eşzamanlı ilk kayıt çakışması engellendi.',
+                cakisma: true,
+                bulutRevizyonNo: gRev,
+                revizyonNo: gRev,
+                bulutVeri: guncel ? guncel.veri : null,
+                veriPaketi: guncel ? guncel.veri : null
+              });
+            }
+          }
         } else {
           sunucuDurumu.bulutKasalarBellek.set(kullaniciAdi, {
             kullaniciAdi,
@@ -1199,6 +1253,7 @@ export default {
         return gonderJson(200, {
           basarili: true,
           kaydedildi: true,
+          depoTuru: (env && env.SINAV_DB) ? 'd1' : 'worker_bellek',
           kullaniciAdi,
           revizyonNo: yeniRev,
           ozetBilgi,

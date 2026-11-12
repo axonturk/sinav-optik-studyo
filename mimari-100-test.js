@@ -47,7 +47,13 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
   const tarayici = await puppeteer.launch({
     executablePath: CHROME,
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding'
+    ]
   });
 
   try {
@@ -284,7 +290,7 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     const dogruCozum = Cekirdek.cozSifreliOptikKagitQrPaketi(oqv2Metin, gizliAnahtar, 'YON101-VIZE');
 
     kontrol('OQV2 kağıt QR kodu düz metin cevap veya öğrenci no sızdırmaz', oqv2Metin.startsWith('OQV2:') && !duzMetinSizintiVarMi, oqv2Metin);
-    kontrol('OQV2 kağıt QR kodu anahtarsız veya sahte anahtarla çözülemez (48-bit MAC koruması)', !anahtarsizCozum.gecerli && !yanlisAnahtarCozum.gecerli && Boolean(yanlisAnahtarCozum.imzaHatasi));
+    kontrol('OQV2 kağıt QR kodu anahtarsız veya sahte anahtarla çözülemez (64-bit Nonce + 64-bit MAC koruması)', !anahtarsizCozum.gecerli && !yanlisAnahtarCozum.gecerli && Boolean(yanlisAnahtarCozum.imzaHatasi));
     kontrol('OQV2 kağıt QR kodu doğru öğretmen gizli anahtarıyla çevrimdışı %100 çözülür', dogruCozum.gecerli && dogruCozum.ogrNo === '2021' && dogruCozum.grup === 'B' && dogruCozum.cevapAnahtari.test.join('') === ozelTest.join(''));
 
     const kalabalikSinif125 = Array.from({ length: 125 }, (_, i) => ({
@@ -643,12 +649,13 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     const geriAlMobilGorunur = await mobil.$eval('#btn-mobil-geri-al', (el) => !el.hidden);
     await mobil.click('#btn-mobil-geri-al');
     await bekle(150);
-    const masaustuKorunduMu = await sayfa.evaluate(() => {
+    const masaustuKorunduMu = await mobil.evaluate(() => {
       const masa = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
       return (masa.dersler || []).length >= 2 && (masa.sorular || []).length >= 10;
     });
     kontrol('Mobil PWA Geri Al çalıştı ve SINAV_MOBIL_OMR_DEPO_V2 izolasyonu sayesinde masaüstü ders/soru deposu %100 korundu', geriAlMobilGorunur && masaustuKorunduMu && mobilHatalar.length === 0, mobilHatalar.join(' | '));
     await mobil.close();
+    await sayfa.bringToFront();
 
     // =========================================================================
     // 6. KİOSK <TEXTAREA> DÜZENLEME MUAFİYETİ + KÜMÜLATİF ÖÇ GR PAYDASI + ÖZEL OBS CSV GR
@@ -705,6 +712,316 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
       }
     );
     kontrol('Özel OBS CSV çıktısı sınava girmeyen öğrenciyi GR olarak içerir ve YUZDELIK_DILIM üretir', ozelObsCsv.includes('2017;ENES BATIN KIRILMAZ;GR;GİRMEDİ;-') && ozelObsCsv.includes('2004;BURAK DEMİRBÜKER;90;GİRDİ;100'), ozelObsCsv);
+
+    // =========================================================================
+    // 7. DENETİM KARŞI-ÖRNEK KAPISI (7/7 KALICI KARŞI-ÖRNEK REGRESYON KALKANI)
+    // =========================================================================
+    console.log('\n7) Denetim Karşı-Örnek Kapısı: OQV2 Nonce, Bulut Kasa Kısmi Silme, Çoklu Sekme Mobil, ?0 vs 80, Snapshot Kilidi, 126 Z2 QR ve FRM-059 (5/13/20)');
+
+    // 7.1: Bulut Kasa sıkı bazRevizyonNo, zorlaEz:{} ve kısmi azalma (silmeOnayi) karşı-örnekleri
+    const guncelKasaGet = await (await fetch(`${taban}/api/bulut-kasa`, {
+      headers: { Authorization: `Bearer ${hocaToken}` }
+    })).json();
+    const guncelRev = guncelKasaGet.revizyonNo;
+    const guncelVeri = guncelKasaGet.veri;
+
+    const eksikBazYanit = await fetch(`${taban}/api/bulut-kasa`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
+      body: JSON.stringify({ veri: guncelVeri })
+    });
+    const yuksekBazYanit = await fetch(`${taban}/api/bulut-kasa`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
+      body: JSON.stringify({ veri: guncelVeri, bazRevizyonNo: guncelRev + 99, zorlaEz: true })
+    });
+    const zorlaBosYanit = await fetch(`${taban}/api/bulut-kasa`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
+      body: JSON.stringify({ veri: {}, bazRevizyonNo: guncelRev, zorlaEz: true, silmeOnayi: true })
+    });
+    const kismiAzalanPaket = JSON.parse(JSON.stringify(guncelVeri));
+    kismiAzalanPaket.dersler = kismiAzalanPaket.dersler.slice(0, 1);
+    const onaysizKismiSilYanit = await fetch(`${taban}/api/bulut-kasa`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
+      body: JSON.stringify({ veri: kismiAzalanPaket, bazRevizyonNo: guncelRev })
+    });
+    kontrol(
+      'Karşı-Örnek 1 (Bulut Kasa): Eksik/yüksek bazRevizyonNo, zorlaEz:{} ve onaysız kısmi veri azalması 409 Conflict ile reddedildi',
+      eksikBazYanit.status === 409 && yuksekBazYanit.status === 409 && zorlaBosYanit.status === 409 && onaysizKismiSilYanit.status === 409,
+      `${eksikBazYanit.status}/${yuksekBazYanit.status}/${zorlaBosYanit.status}/${onaysizKismiSilYanit.status}`
+    );
+
+    // 7.2: OQV2 128-bit CSPRNG anahtar, anahtarsız üretim engeli ve 64-bit benzersiz Nonce karşı-örneği
+    const csprngAnahtar1 = Cekirdek.uretSinavGizliAnahtari('SABIT-TOHUM');
+    const csprngAnahtar2 = Cekirdek.uretSinavGizliAnahtari('SABIT-TOHUM');
+    const anahtarsizQr = Cekirdek.uretSifreliOptikKagitQrPaketi({
+      sinavKodu: 'YON101-VIZE', ogrNo: '2021', grup: 'A', dySayisi: 5, testSayisi: 5,
+      dyAnahtar: ['D', 'Y', 'D', 'Y', 'D'], testAnahtar: ['A', 'B', 'C', 'D', 'E']
+    }, '');
+    const ayniOgrenciQr1 = Cekirdek.uretSifreliOptikKagitQrPaketi({
+      sinavKodu: 'YON101-VIZE', ogrNo: '2021', grup: 'A', dySayisi: 5, testSayisi: 5,
+      dyAnahtar: ['D', 'D', 'D', 'D', 'D'], testAnahtar: ['A', 'A', 'A', 'A', 'A'], ozelCevapAnahtariMi: true
+    }, csprngAnahtar1);
+    const ayniOgrenciQr2 = Cekirdek.uretSifreliOptikKagitQrPaketi({
+      sinavKodu: 'YON101-VIZE', ogrNo: '2021', grup: 'A', dySayisi: 5, testSayisi: 5,
+      dyAnahtar: ['Y', 'Y', 'Y', 'Y', 'Y'], testAnahtar: ['E', 'E', 'E', 'E', 'E'], ozelCevapAnahtariMi: true
+    }, csprngAnahtar1);
+    const hamBaytCoz = (qr) => {
+      const b64 = qr.slice(5).replace(/-/g, '+').replace(/_/g, '/');
+      return Buffer.from(b64, 'base64');
+    };
+    const b1 = hamBaytCoz(ayniOgrenciQr1);
+    const b2 = hamBaytCoz(ayniOgrenciQr2);
+    const nonce1Hex = b1.subarray(1, 9).toString('hex');
+    const nonce2Hex = b2.subarray(1, 9).toString('hex');
+    kontrol(
+      'Karşı-Örnek 2 (OQV2 Kripto): CSPRNG anahtarlar farklı, anahtarsız QR üretilmez ve aynı öğrencinin 2 şifrelemesinde 64-bit Nonce tekrarı olmaz (sameNonce=false)',
+      csprngAnahtar1 !== csprngAnahtar2 && anahtarsizQr === '' && b1[0] === 0xA3 && nonce1Hex !== nonce2Hex,
+      `n1=${nonce1Hex}, n2=${nonce2Hex}`
+    );
+
+    // 7.3: Snapshot Basıldı Kilidi — stored.cevapAnahtarlari.A.test === Master QR A.test ve tüm düzenleme kontrolleri disabled
+    const snapKilitKontrol = await sayfa.evaluate(() => {
+      const btnKaydet = document.getElementById('btn-sinavi-kaydet-snapshot');
+      if (btnKaydet) btnKaydet.click();
+      const btnKilitle = document.getElementById('btn-sinav-basildi-kilitle');
+      if (btnKilitle) btnKilitle.click();
+      const depo = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+      const aktifSnap = (depo.kayitliSinavlar || []).find((k) => k.id === depo.aktifKayitliSinavId);
+      const linkHref = document.getElementById('link-mobil-okuyucu').getAttribute('href') || '';
+      const cozulenMaster = window.SinavOptikCekirdek.cozKompaktSetupQrPaketi(linkHref);
+      const storedTestA = aktifSnap && aktifSnap.cevapAnahtarlari && aktifSnap.cevapAnahtarlari.A ? aktifSnap.cevapAnahtarlari.A.test.join('') : '';
+      const masterTestA = cozulenMaster && cozulenMaster.cevapAnahtarlari && cozulenMaster.cevapAnahtarlari.A ? cozulenMaster.cevapAnahtarlari.A.test.join('') : '';
+      return {
+        storedTestA,
+        masterTestA,
+        esitMi: Boolean(storedTestA && storedTestA === masterTestA),
+        kombinasyonKilitli: document.getElementById('btn-kombinasyon-uygula').disabled === true,
+        ogrenciModuKilitli: document.getElementById('baski-ogrenci-soru-modu').disabled === true,
+        sablon25Kilitli: document.getElementById('btn-hazir-sablon-25').disabled === true
+      };
+    });
+    kontrol(
+      'Karşı-Örnek 3 (Snapshot Kilidi): Kayıtlı sınav A grubu anahtarı ile Master QR A grubu anahtarı %100 aynı ve kombinasyon/mod düğmeleri kilitli',
+      snapKilitKontrol.esitMi && snapKilitKontrol.kombinasyonKilitli && snapKilitKontrol.ogrenciModuKilitli && snapKilitKontrol.sablon25Kilitli,
+      JSON.stringify(snapKilitKontrol)
+    );
+    // Sonraki FRM-059 adımı için kilidi aç ve taslağa dön
+    await sayfa.click('#btn-sinav-basildi-kilitle');
+    await sayfa.select('#sec-kayitli-sinav', '');
+    await bekle(150);
+
+    // 7.4: Z2 Master Kurulum QR — 126 adet SIFIR ortak önekli 10 haneli numara + kesilmemiş uzun Türkçe ad soyad
+    const ornekAdlar = ['ABDURRAHMAN ALPARSLAN', 'ZEYNEP SULTAN', 'MUHAMMED MUSTAFA', 'ŞERİFE NURBANU', 'ÇAĞATAY GÖKTUĞ', 'İBRAHİM HALİL', 'ÖMER FARUK', 'AYŞEGÜL BÜŞRA'];
+    const ornekSoyadlar = ['KARAKOYUNLUOĞLU', 'BÜYÜKÇEKMECELİOĞLU', 'KAHRAMANMARAŞLIOĞLU', 'ŞEREFLİKOÇHİSARLI', 'DEMİRCİOĞULLARI', 'ÇETİNKAYAOĞLU', 'GÜMÜŞHANELİOĞLU'];
+    const sifirOnekli126 = Array.from({ length: 126 }, (_, i) => {
+      const onHane = String(((i * 73856093 + 19349663) >>> 0) % 9000000000 + 1000000000).slice(0, 8) + String(i % 100).padStart(2, '0');
+      return {
+        ogrNo: onHane,
+        adSoyad: `${ornekAdlar[i % ornekAdlar.length]} ${ornekSoyadlar[i % ornekSoyadlar.length]}`
+      };
+    });
+    const z2Paket = Cekirdek.uretKompaktSetupQrPaketi({
+      sinavKodu: 'YON101-FINAL',
+      dersAd: 'İleri Ağ Mimarileri',
+      dySayisi: 10,
+      testSayisi: 15,
+      klasikSayisi: 0,
+      dyToplamPuan: 25,
+      testToplamPuan: 75,
+      klasikToplamPuan: 0,
+      sinavGizliAnahtar: csprngAnahtar1,
+      cevapAnahtarlari: { A: { dy: Array(10).fill('D'), test: Array(15).fill('C'), klasik: [] } },
+      ogrenciler: sifirOnekli126
+    }, 'https://sinav.axonturk.workers.dev');
+    const z2Cozulen = Cekirdek.cozKompaktSetupQrPaketi(z2Paket.url);
+    const z2TamIsimEslesme = z2Cozulen && Array.isArray(z2Cozulen.ogrenciler)
+      ? z2Cozulen.ogrenciler.filter((o, idx) => o.ogrNo === sifirOnekli126[idx].ogrNo && o.adSoyad === sifirOnekli126[idx].adSoyad).length
+      : 0;
+    kontrol(
+      'Karşı-Örnek 4 (Z2 Master QR): Ortak öneki olmayan 126 öğrenci + kesilmemiş uzun Türkçe isimler tek QR içine sığdı (<2900 krk, 126/126 tam eşleşme)',
+      z2Paket.ogrenciDahilMi === true && z2Paket.url.length < 2900 && z2TamIsimEslesme === 126,
+      `len=${z2Paket.url.length}, eslesen=${z2TamIsimEslesme}`
+    );
+
+    // 7.5: FRM-059 Sınav Yoklama Evrakı — 5, 13 ve 20 öğrencide (kunyeli mod dahil) tek A4 ve tüm satırlar >= 26px (28px)
+    const frm059BoyutRapor = await sayfa.evaluate(() => {
+      const sonuclar = {};
+      const kaliteTip = document.getElementById('kalite-form-tipi');
+      if (kaliteTip) {
+        kaliteTip.value = 'kunyeli';
+        kaliteTip.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const kapsamEl = document.getElementById('baski-kapsam-sec');
+      for (const adet of [5, 13, 20]) {
+        const depo = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+        depo.ogrenciler = Array.from({ length: adet }, (_, i) => ({
+          ogrNo: String(20265001 + i),
+          adSoyad: `YOKLAMA ÖĞRENCİSİ ${i + 1}`,
+          dersIdler: ['ders-yon']
+        }));
+        depo.revizyonNo = (Number(depo.revizyonNo) || 0) + 1;
+        localStorage.setItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2', JSON.stringify(depo));
+      }
+      return sonuclar;
+    });
+    const frm059Kontroller = [];
+    for (const adet of [5, 13, 20]) {
+      await sayfa.evaluate((n) => {
+        const depo = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+        depo.ogrenciler = Array.from({ length: n }, (_, i) => ({
+          ogrNo: String(20265001 + i),
+          adSoyad: `YOKLAMA ÖĞRENCİSİ ${i + 1}`,
+          dersIdler: ['ders-yon']
+        }));
+        depo.revizyonNo = (Number(depo.revizyonNo) || 0) + 50;
+        localStorage.setItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2', JSON.stringify(depo));
+        localStorage.setItem('SINAV_SON_REVIZYON_V1', String(depo.revizyonNo));
+      }, adet);
+      await sayfa.reload({ waitUntil: 'networkidle0' });
+      await bekle(250);
+      await sayfa.evaluate(() => {
+        const k = document.getElementById('btn-modal-hoca-kapat');
+        if (k && getComputedStyle(document.getElementById('modal-hoca-giris')).display !== 'none') k.click();
+        const kaliteEl = document.getElementById('kalite-form-tipi');
+        if (kaliteEl) {
+          kaliteEl.value = 'kunyeli';
+          kaliteEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        const kapsamEl = document.getElementById('baski-kapsam-sec');
+        if (kapsamEl) {
+          kapsamEl.value = 'yoklama';
+          kapsamEl.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+      await bekle(150);
+      const olcum = await sayfa.evaluate(() => {
+        const sahne = document.getElementById('a4-onizleme-sahne');
+        const sayfalar = Array.from(sahne.querySelectorAll('.a4-sayfa'));
+        const satirlar = Array.from(sahne.querySelectorAll('.yoklama-imza-satir'));
+        const minYuk = satirlar.reduce((m, tr) => Math.min(m, tr.getBoundingClientRect().height), 999);
+        const tasmaVar = sayfalar.some((sf) => sf.scrollHeight > sf.clientHeight + 2);
+        return { sayfaSayisi: sayfalar.length, satirSayisi: satirlar.length, minYuk: Number(minYuk.toFixed(1)), tasmaVar };
+      });
+      frm059Kontroller.push({ adet, ...olcum });
+    }
+    kontrol(
+      'Karşı-Örnek 5 (FRM-059): 5, 13 ve 20 öğrencide künyeli yoklama çizelgesi tek A4 sayfada taşmadan durur ve TÜM imza satırları >= 26px (28px) yüksekliğindedir',
+      frm059Kontroller.every((k) => k.sayfaSayisi === 1 && !k.tasmaVar && k.minYuk >= 26),
+      JSON.stringify(frm059Kontroller)
+    );
+
+    // 7.6 & 7.7: Mobil OMR 2 Sekme Yarışı (5304 + 5317) VE ?0 x4 + 80 Aynı Cevaplı İki Farklı Kağıt Karşı-Örneği
+    const mobilCokluSetup = Cekirdek.uretKompaktSetupQrPaketi({
+      sinavKodu: 'MOBIL-COKLU-2026',
+      dersAd: 'Yönlendiriciler',
+      dySayisi: 5,
+      testSayisi: 5,
+      klasikSayisi: 0,
+      dyToplamPuan: 30,
+      testToplamPuan: 70,
+      klasikToplamPuan: 0,
+      sinavGizliAnahtar: csprngAnahtar1,
+      cevapAnahtarlari: { A: { dy: ['D', 'D', 'D', 'D', 'D'], test: ['B', 'B', 'B', 'B', 'B'], klasik: [] } },
+      ogrenciler: [
+        { ogrNo: '20265304', adSoyad: 'BURAK DEMİRBÜKER' },
+        { ogrNo: '20265317', adSoyad: 'ENES BATIN KIRILMAZ' }
+      ]
+    }, taban);
+
+    const mSekme1 = await tarayici.newPage();
+    const mSekme2 = await tarayici.newPage();
+    await mSekme1.goto(mobilCokluSetup.url, { waitUntil: 'networkidle0' });
+    await mSekme1.evaluate(() => {
+      localStorage.removeItem('SINAV_MOBIL_OMR_DEPO_V2');
+    });
+    await mSekme1.reload({ waitUntil: 'networkidle0' });
+    await mSekme2.goto(mobilCokluSetup.url, { waitUntil: 'networkidle0' });
+    await bekle(200);
+
+    const uretSentetikKagitPng = async (pg, ogrKod, dyDizi, testDizi) => pg.evaluate(({ kod, dy, test }) => {
+      const C = window.SinavOptikCekirdek;
+      const d = window.__mobilDurumOku();
+      const canvas = document.getElementById('mobil-canvas-vizor');
+      C.cizSentetikOptikFormCanvas(canvas, d.sinavYapisi, {
+        grup: 'A',
+        ogrNoKod: kod,
+        dyCevaplar: dy,
+        testCevaplar: test,
+        klasikPuanlar: []
+      });
+      return canvas.toDataURL('image/png');
+    }, { kod: ogrKod, dy: dyDizi, test: testDizi });
+
+    const png04 = await uretSentetikKagitPng(mSekme1, '04', ['D', 'D', 'D', 'D', 'D'], ['B', 'B', 'B', 'B', 'B']);
+    const png17 = await uretSentetikKagitPng(mSekme2, '17', ['D', 'D', 'D', 'D', 'Y'], ['B', 'B', 'B', 'B', 'A']);
+    const yol04 = path.join(__dirname, '.gecici-m04.png');
+    const yol17 = path.join(__dirname, '.gecici-m17.png');
+    fs.writeFileSync(yol04, Buffer.from(png04.split(',')[1], 'base64'));
+    fs.writeFileSync(yol17, Buffer.from(png17.split(',')[1], 'base64'));
+
+    await (await mSekme1.$('#input-mobil-foto')).uploadFile(yol04);
+    await bekle(650);
+    await (await mSekme2.$('#input-mobil-foto')).uploadFile(yol17);
+    await bekle(650);
+    try { fs.unlinkSync(yol04); fs.unlinkSync(yol17); } catch (_) {}
+
+    const cokluSekmeDurum = await mSekme2.evaluate(() => {
+      const depo = JSON.parse(localStorage.getItem('SINAV_MOBIL_OMR_DEPO_V2') || '{}');
+      const nolar = (depo.okumaSonuclari || []).map((s) => s.ogrNo).sort();
+      return { nolar, sekme2Sayi: window.__mobilDurumOku().okumaSayisi };
+    });
+    const sekme1CanliSayi = await mSekme1.evaluate(() => window.__mobilDurumOku().okumaSayisi);
+    kontrol(
+      'Karşı-Örnek 6 (Mobil Çoklu Sekme): Sekme 1 (20265304) ve Sekme 2 (20265317) taramaları birbirini ezmeden birleşti (her iki sekmede ve depoda 2 kayıt)',
+      cokluSekmeDurum.nolar.join(',') === '20265304,20265317' && cokluSekmeDurum.sekme2Sayi === 2 && sekme1CanliSayi === 2,
+      JSON.stringify({ cokluSekmeDurum, sekme1CanliSayi })
+    );
+
+    // 7.7: Aynı cevap dizilimli ama farklı kodlanmış iki eşleşmeyen kağıt (?0 x4 ardından 80) birbirini ezmez!
+    const pngSoru0 = await mSekme1.evaluate(() => {
+      const C = window.SinavOptikCekirdek;
+      const d = window.__mobilDurumOku();
+      const canvas = document.getElementById('mobil-canvas-vizor');
+      // Yalnız birler basamağını ('0') kodla, onlar basamağını boş bırak -> okunanNoKod = '?0'
+      C.cizSentetikOptikFormCanvas(canvas, d.sinavYapisi, {
+        grup: 'A',
+        ogrNoKod: '?0',
+        dyCevaplar: ['D', 'Y', 'D', 'Y', 'D'],
+        testCevaplar: ['A', 'B', 'C', 'D', 'E'],
+        klasikPuanlar: []
+      });
+      return canvas.toDataURL('image/png');
+    });
+    const png80 = await uretSentetikKagitPng(mSekme1, '80', ['D', 'Y', 'D', 'Y', 'D'], ['A', 'B', 'C', 'D', 'E']);
+    const yolSoru0 = path.join(__dirname, '.gecici-msoru0.png');
+    const yol80 = path.join(__dirname, '.gecici-m80.png');
+    fs.writeFileSync(yolSoru0, Buffer.from(pngSoru0.split(',')[1], 'base64'));
+    fs.writeFileSync(yol80, Buffer.from(png80.split(',')[1], 'base64'));
+
+    const inp1 = await mSekme1.$('#input-mobil-foto');
+    for (let t = 0; t < 4; t++) {
+      await inp1.uploadFile(yolSoru0);
+      await bekle(550);
+    }
+    await inp1.uploadFile(yol80);
+    await bekle(600);
+    try { fs.unlinkSync(yolSoru0); fs.unlinkSync(yol80); } catch (_) {}
+
+    const farkliKodAyniCevap = await mSekme1.evaluate(() => {
+      const d = window.__mobilDurumOku();
+      const eslesmeyenKodlar = d.okumaSonuclari.filter((s) => s.numaraEslesmediMi).map((s) => s.okunanNoKod);
+      return { toplam: d.okumaSayisi, eslesmeyenKodlar };
+    });
+    kontrol(
+      'Karşı-Örnek 7 (Mobil ?0 vs 80): Aynı cevaplı ?0 kağıdı 4 kez okununca tekilleşti, ardından aynı cevaplı 80 kağıdı okununca ezilmeden ayrı satır olarak korundu',
+      farkliKodAyniCevap.toplam === 4 && farkliKodAyniCevap.eslesmeyenKodlar.length === 2 && farkliKodAyniCevap.eslesmeyenKodlar.includes('80'),
+      JSON.stringify(farkliKodAyniCevap)
+    );
+    await mSekme1.close();
+    await mSekme2.close();
 
     kontrol('Masaüstü Stüdyo sayfasında hiçbir beklenmeyen JS hatası oluşmadı', sayfaHatalar.length === 0, sayfaHatalar.join(' | '));
     await sayfa.close();
