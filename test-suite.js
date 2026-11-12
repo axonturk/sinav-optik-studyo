@@ -895,7 +895,7 @@ async function calistirTumTestler() {
         sinavId: 'SINAV-2026-FINAL',
         sinavBaslik: '2026-2027 Güz Final Sınavı',
         dersAd: 'BİL304 - Ağ Güvenliği',
-        hocaAd: 'Dr. Öğr. Üyesi Fatih Çakmak'
+        hocaAd: 'Öğr. Gör. Örnek Eğitmen'
       });
       assert.ok(resmiTxt.includes('RESMİ ONLİNE SINAV GÜVENLİK, KİOSK VE İHLAL DELİL LOG RAPORU'));
       assert.ok(resmiTxt.includes('IHLAL_SEKME_UYGULAMA'));

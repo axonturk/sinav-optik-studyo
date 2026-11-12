@@ -22,7 +22,14 @@ const tikla = async (sayfa, sec) => { await sayfa.$eval(sec, (e) => e.scrollInto
   sayfa.on('pageerror', (e) => hatalar.push(e.message));
   sayfa.on('dialog', async (d) => { if (d.type() === 'confirm') { if (onayCevabi) await d.accept(); else await d.dismiss(); } else { hatalar.push('dialog: ' + d.message()); await d.dismiss(); } });
   const hocaGirisAc = async () => {
-    await sayfa.evaluate(() => { const b = document.getElementById('btn-hoca-giris-yap'); if (b) b.click(); });
+    await sayfa.evaluate(() => {
+      const u = document.getElementById('hoca-giris-kullanici');
+      const p = document.getElementById('hoca-giris-sifre');
+      if (u && !u.value) u.value = 'hoca';
+      if (p && !p.value) p.value = 'Demo!Hoca2026';
+      const b = document.getElementById('btn-hoca-giris-yap');
+      if (b) b.click();
+    });
     await bekle(300);
     await sayfa.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k) k.click(); });
     await bekle(150);

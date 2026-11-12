@@ -1,12 +1,13 @@
 /* Uygulama kabuğunu çevrimdışı çalıştıran servis işçisi (PWA).
    - Statik dosyalar: ağ öncelikli, ağ yoksa önbellek (güncel sürüm her zaman önceliklidir).
    - /api/ uçları ASLA önbelleğe alınmaz (Zero-Trust: sınav/puan verisi sunucudan canlı gelir). */
-const SURUM = 'sinav-optik-v9';
+const SURUM = 'sinav-optik-v10';
 const KABUK = [
   './',
   './optik-mobil.html',
   './index.html',
   './ortak.css',
+  './icons.svg',
   './guvenlik-ve-veri.js',
   './studyo-uygulama.js',
   './qrcode-generator.js',

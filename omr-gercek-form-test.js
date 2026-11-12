@@ -326,7 +326,14 @@ async function arayuzTestleri(tarayici, taban) {
   st.on('pageerror', (e) => stHata.push('pageerror: ' + e.message));
   st.on('dialog', async (d) => { stHata.push('dialog: ' + d.message()); await d.dismiss(); });
   await st.goto(taban + '/index.html', { waitUntil: 'networkidle0' });
-  await st.evaluate(() => { const b = document.getElementById('btn-hoca-giris-yap'); if (b) b.click(); });
+  await st.evaluate(() => {
+    const u = document.getElementById('hoca-giris-kullanici');
+    const p = document.getElementById('hoca-giris-sifre');
+    if (u && !u.value) u.value = 'hoca';
+    if (p && !p.value) p.value = 'Demo!Hoca2026';
+    const b = document.getElementById('btn-hoca-giris-yap');
+    if (b) b.click();
+  });
   await bekle(300);
   await st.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k) k.click(); });
   await bekle(150);

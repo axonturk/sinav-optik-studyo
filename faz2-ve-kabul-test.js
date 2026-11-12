@@ -376,6 +376,12 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: INDIRILEN });
 
       await sayfa.goto(`${taban}/index.html`, { waitUntil: 'networkidle0' });
+      await sayfa.evaluate(() => {
+        const u = document.getElementById('hoca-giris-kullanici');
+        const p = document.getElementById('hoca-giris-sifre');
+        if (u && !u.value) u.value = 'hoca';
+        if (p && !p.value) p.value = 'Demo!Hoca2026';
+      });
       await sayfa.click('#btn-hoca-giris-yap');
       await bekle(300);
       await sayfa.click('#btn-modal-hoca-kapat');
@@ -619,6 +625,12 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       await bekle(250);
       const girisModalAcik = await sayfa.$eval('#modal-hoca-giris', (el) => el.style.display === 'flex');
       if (girisModalAcik) {
+        await sayfa.evaluate(() => {
+          const u = document.getElementById('hoca-giris-kullanici');
+          const p = document.getElementById('hoca-giris-sifre');
+          if (u && !u.value) u.value = 'hoca';
+          if (p && !p.value) p.value = 'Demo!Hoca2026';
+        });
         await sayfa.click('#btn-hoca-giris-yap');
         await bekle(300);
         await sayfa.click('#btn-modal-hoca-kapat');
@@ -651,6 +663,10 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
         await sayfa.evaluate(() => {
           window.__printCagri = 0;
           window.print = () => { window.__printCagri++; };
+          const u = document.getElementById('hoca-giris-kullanici');
+          const p = document.getElementById('hoca-giris-sifre');
+          if (u && !u.value) u.value = 'hoca';
+          if (p && !p.value) p.value = 'Demo!Hoca2026';
           const b = document.getElementById('btn-hoca-giris-yap');
           if (b && document.getElementById('modal-hoca-giris').style.display === 'flex') b.click();
         });
@@ -861,6 +877,10 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       await sayfa.evaluate(() => {
         window.__printCagri = 0;
         window.print = () => { window.__printCagri++; };
+        const u = document.getElementById('hoca-giris-kullanici');
+        const p = document.getElementById('hoca-giris-sifre');
+        if (u && !u.value) u.value = 'hoca';
+        if (p && !p.value) p.value = 'Demo!Hoca2026';
         const b = document.getElementById('btn-hoca-giris-yap');
         if (b && document.getElementById('modal-hoca-giris').style.display === 'flex') b.click();
       });
@@ -1086,6 +1106,10 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       }, bolognaDersId);
       await sayfa.reload({ waitUntil: 'networkidle0' });
       await sayfa.evaluate(() => {
+        const u = document.getElementById('hoca-giris-kullanici');
+        const p = document.getElementById('hoca-giris-sifre');
+        if (u && !u.value) u.value = 'hoca';
+        if (p && !p.value) p.value = 'Demo!Hoca2026';
         const b = document.getElementById('btn-hoca-giris-yap');
         if (b && document.getElementById('modal-hoca-giris').style.display === 'flex') b.click();
       });
@@ -1198,6 +1222,10 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       }, bolognaDersId);
       await sayfa.reload({ waitUntil: 'networkidle0' });
       await sayfa.evaluate(() => {
+        const u = document.getElementById('hoca-giris-kullanici');
+        const p = document.getElementById('hoca-giris-sifre');
+        if (u && !u.value) u.value = 'hoca';
+        if (p && !p.value) p.value = 'Demo!Hoca2026';
         const b = document.getElementById('btn-hoca-giris-yap');
         if (b && document.getElementById('modal-hoca-giris').style.display === 'flex') b.click();
       });

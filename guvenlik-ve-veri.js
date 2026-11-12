@@ -7058,9 +7058,9 @@
 
   const VARSAYILAN_HOCA_HESAP = {
     kullaniciAdi: 'hoca',
-    adSoyad: 'Dr. Öğr. Üyesi Fatih Çakmak',
-    eposta: 'fatihcakmak@gmail.com',
-    telefon: '05065168500',
+    adSoyad: 'Öğr. Gör. Örnek Eğitmen',
+    eposta: 'ornek.hoca@kurum.edu.tr',
+    telefon: '05000000000',
     sifre: 'Demo!Hoca2026',
     rol: 'yonetici',
     durum: 'aktif'
@@ -8264,7 +8264,7 @@
     'Dersin Öğretim Şekli\tYüz Yüze',
     'Dersin Amacı\tBu derste ağ işlemlerinin yapılması ile ilgili yeterliklerin kazandırılması amaçlanmaktadır.',
     'Dersin İçeriği\tBilgisayar Ağları, Ağ Kabloları, Ağ Adresleme, Paylaşım ve güvenlik, Ağ Çevre Birimleri',
-    'Dersi Verenler\tÖğr.Gör. Fatih Akman Çakmak',
+    'Dersi Verenler\tÖğr. Gör. Örnek Eğitmen',
     'Değerlendirme Ölçütleri',
     'Yarıyıl Çalışmaları\tSayısı\tKatkı',
     'Ara Sınav\t1\t% 40',

@@ -151,6 +151,12 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     sayfa.on('dialog', async (d) => { await d.accept(); });
 
     await sayfa.goto(`${taban}/index.html`, { waitUntil: 'networkidle0' });
+    await sayfa.evaluate(() => {
+      const u = document.getElementById('hoca-giris-kullanici');
+      const p = document.getElementById('hoca-giris-sifre');
+      if (u && !u.value) u.value = 'hoca';
+      if (p && !p.value) p.value = 'Demo!Hoca2026';
+    });
     await sayfa.click('#btn-hoca-giris-yap');
     await bekle(900);
     await sayfa.evaluate(() => {
@@ -359,6 +365,10 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     await sayfa.reload({ waitUntil: 'networkidle0' });
     await bekle(600);
     await sayfa.evaluate(() => {
+      const u = document.getElementById('hoca-giris-kullanici');
+      const p = document.getElementById('hoca-giris-sifre');
+      if (u && !u.value) u.value = 'hoca';
+      if (p && !p.value) p.value = 'Demo!Hoca2026';
       const b = document.getElementById('btn-hoca-giris-yap');
       if (b && getComputedStyle(document.getElementById('modal-hoca-giris')).display !== 'none') b.click();
     });

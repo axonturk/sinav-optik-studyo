@@ -250,8 +250,9 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
       kapatYukseklik: rKapat.height,
       girisYukseklik: rGiris.height,
       basvuruYukseklik: rBasvuru.height,
-      varsayilanEposta: document.getElementById('hoca-kayit-eposta').value,
-      varsayilanTelefon: document.getElementById('hoca-kayit-telefon').value
+      varsayilanSifreBosMu: document.getElementById('hoca-giris-sifre').value === '',
+      varsayilanEpostaBosMu: document.getElementById('hoca-kayit-eposta').value === '',
+      varsayilanTelefonBosMu: document.getElementById('hoca-kayit-telefon').value === ''
     };
   });
   kontrol(
@@ -262,9 +263,10 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
     'UI: Hoca modalı ekrana sığıyor, üst başlık ve düğmeler ezilmiyor'
   );
   kontrol(
-    modalGeometri.varsayilanEposta === 'fatihcakmak@gmail.com' &&
-      modalGeometri.varsayilanTelefon === '05065168500',
-    'UI: Yönetici iletişim bilgileri (fatihcakmak@gmail.com / 05065168500) kayıtlı geldi'
+    modalGeometri.varsayilanSifreBosMu &&
+      modalGeometri.varsayilanEpostaBosMu &&
+      modalGeometri.varsayilanTelefonBosMu,
+    'UI: Açık kaynak gizliliği — giriş şifresi ve kayıt iletişim kutuları varsayılan olarak boş (hazır şifre/kişisel veri sızıntısı yok)'
   );
 
   // Yeni hoca başvurusu gönder (UI üzerinden: dr_zeynep)
@@ -331,7 +333,7 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
 
   // Yanlış telefonla kurtarma denemesi -> reddedilmeli
   await sayfa.evaluate(() => {
-    document.getElementById('hoca-kurtarma-eposta').value = 'fatihcakmak@gmail.com';
+    document.getElementById('hoca-kurtarma-eposta').value = 'ornek.hoca@kurum.edu.tr';
     document.getElementById('hoca-kurtarma-telefon').value = '05009998877';
     document.getElementById('hoca-kurtarma-yeni-sifre').value = 'YeniAdmin!2026';
     document.getElementById('hoca-kurtarma-yeni-sifre-tekrar').value = 'YeniAdmin!2026';
@@ -341,12 +343,12 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   const kurtarmaHataGorundu = await sayfa.$eval('#hoca-giris-hata', (el) => !el.hidden && el.innerText.includes('403'));
   kontrol(kurtarmaHataGorundu, 'UI: Hatalı telefon numarasıyla admin şifre sıfırlama girişimi 403 ile reddedildi');
 
-  // Doğru e-posta (fatihcakmak@gmail.com) ve doğru telefon (05065168500) ile admin şifresini sıfırla
+  // Doğru e-posta (ornek.hoca@kurum.edu.tr) ve doğru telefon (05000000000) ile admin şifresini sıfırla
   await sayfa.evaluate(() => {
-    document.getElementById('hoca-kurtarma-eposta').value = 'fatihcakmak@gmail.com';
-    document.getElementById('hoca-kurtarma-telefon').value = '05065168500';
-    document.getElementById('hoca-kurtarma-yeni-sifre').value = 'Fatih!Yeni2026';
-    document.getElementById('hoca-kurtarma-yeni-sifre-tekrar').value = 'Fatih!Yeni2026';
+    document.getElementById('hoca-kurtarma-eposta').value = 'ornek.hoca@kurum.edu.tr';
+    document.getElementById('hoca-kurtarma-telefon').value = '05000000000';
+    document.getElementById('hoca-kurtarma-yeni-sifre').value = 'Kurum!Yeni2026';
+    document.getElementById('hoca-kurtarma-yeni-sifre-tekrar').value = 'Kurum!Yeni2026';
   });
   await sayfa.click('#btn-hoca-sifre-sifirla');
   await new Promise((r) => setTimeout(r, 250));
@@ -359,7 +361,7 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   const kurtarmaSonrasiAcikMi = await sayfa.$eval('#ana-icerik-alani', (el) => el.style.pointerEvents === 'auto');
   kontrol(
     kurtarmaSonrasiKullanici === 'hoca' && kurtarmaSonrasiAcikMi,
-    'UI: Yönetici (fatihcakmak@gmail.com / 05065168500) şifresini sıfırlayıp yeni şifresiyle başarıyla giriş yaptı'
+    'UI: Yönetici (ornek.hoca@kurum.edu.tr / 05000000000) şifresini sıfırlayıp yeni şifresiyle başarıyla giriş yaptı'
   );
 
   // 5. 5 Katmanlı Tam Karantina (Sert Kiosk) ve Sınav Bazlı Delil Niteliğinde Log Kaydı Testi
@@ -482,7 +484,7 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
       delilPanelBilgi.canliMetin.includes('IP:') &&
       delilPanelBilgi.canliMetin.includes('CihazID(Donanımİmzası):HW-') &&
       delilPanelBilgi.canliMetin.includes('#ISPAT-') &&
-      delilPanelBilgi.oturumTablo.includes('📜 Delil İndir'),
+      delilPanelBilgi.oturumTablo.includes('Delil İndir'),
     'UI Delil Log Paneli: IP adresi, Donanım Parmak İzi (HW-ID), #ISPAT mührü, KURALLAR_ONAYLANDI ve tüm ihlaller listelendi'
   );
 
