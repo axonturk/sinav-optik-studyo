@@ -2085,8 +2085,15 @@
 
     const BOS_ESIK = 0.22;
     const CIFT_ISARET_ALT_ESIK = 0.36;
+    const medyanIdx = Math.floor(sirali.length / 2);
+    const medyanDoluluk = sirali[medyanIdx] ? sirali[medyanIdx].doluluk : 0;
+    const kontrastOrani = enKoyu ? enKoyu.doluluk / Math.max(0.04, ikinciKoyu.doluluk) : 0;
 
-    if (!enKoyu || enKoyu.doluluk < BOS_ESIK) {
+    if (
+      !enKoyu ||
+      enKoyu.doluluk < BOS_ESIK ||
+      (enKoyu.doluluk < 0.34 && (kontrastOrani < 1.32 || (enKoyu.doluluk - medyanDoluluk) < 0.10))
+    ) {
       return {
         durum: 'BOS',
         secilen: null,
@@ -2096,8 +2103,6 @@
         olcumler
       };
     }
-
-    const kontrastOrani = enKoyu.doluluk / Math.max(0.04, ikinciKoyu.doluluk);
 
     if (ikinciKoyu.doluluk >= CIFT_ISARET_ALT_ESIK && kontrastOrani < 1.28) {
       return {
@@ -5614,33 +5619,88 @@
   }
 
   /* ------------------------------------------------------------------------
-     Z2 KOMPAKT İKİLİ (BCD + KANONİK TÜRKÇE HUFFMAN + LZ77) MASTER QR KODEĞİ
-     Ortak numara öneki olmayan 150+ uzun Türkçe isimli öğrenciyi tek QR içine sığdırır
+     Z2 KOMPAKT İKİLİ (BİNARİ BAŞLIK + SABİT HANELİ TAM SAYI + KANONİK TÜRKÇE HUFFMAN + 8K SÖZLÜKLÜ LZ77) MASTER QR KODEĞİ
+     Ortak numara öneki olmayan 126+ uzun ve benzersiz Türkçe isimli öğrenciyi kayıpsız tek QR içine sığdırır
      ------------------------------------------------------------------------ */
-  const Z2_HUFF_S4 = [' ', 'a', 'e', 'i', 'n', 'r'];
-  const Z2_HUFF_S5 = ['l', 'ı', 'k', 'd', 'm', 'y', 'u', 's', 't', 'o', 'b', 'ü'];
-  const Z2_HUFF_S6 = ['ş', 'z', 'g', 'ç', 'c', 'p', 'h', 'v', 'ğ', 'ö', 'f', 'j', '-', '.'];
+  const Z2_DEC_BIT = [0, 4, 7, 10, 14, 17, 20, 24, 27, 30, 34, 37, 40, 44, 47, 50, 54, 57, 60];
+  const Z2_UNSUZ_SET = new Set(['b', 'c', 'ç', 'd', 'f', 'g', 'ğ', 'h', 'j', 'k', 'l', 'm', 'n', 'p', 'r', 's', 'ş', 't', 'v', 'y', 'z']);
+  const Z2_MORFEM_TABLO = Array.from(new Set((
+    'abdurrahman|alparslan|muhammed|mustafa|ibrahim|süleyman|hüseyin|çağatay|şerife|nurbanu|ayşegül|' +
+    'fahriye|rümeysa|yasemin|alperen|doğukan|sümeyye|bengisu|nilüfer|ertuğrul|oğuzhan|metehan|batuhan|' +
+    'neslihan|gülbahar|aslıhan|zeynep|mehmet|ahmet|göktuğ|halil|faruk|büşra|necati|ceren|yağmur|bilge|' +
+    'kürşat|gürkan|melike|beyza|gülsüm|yusuf|kerem|berkay|aytaç|meryem|çağlar|turgut|özlem|pınar|' +
+    'nurdan|yiğit|murat|erdem|hatice|kübra|hande|gözde|emine|zehra|melek|gökçe|şeyma|dilara|cansu|' +
+    'nurgül|meltem|gülşen|fatma|cemre|sultan|selim|gökhan|ihsan|çağrı|kemal|selçuk|kâmil|hasan|' +
+    'ismail|osman|ramazan|abdullah|mahmut|recep|salih|kadir|serkan|burak|furkan|yunus|bekir|orhan|' +
+    'sinan|metin|yaşar|volkan|tolga|barış|deniz|alper|erkan|hakan|gökmen|tuğrul|bahadır|kubilay|' +
+    'hanife|merve|havva|zeliha|fadime|hacer|hülya|sevgi|filiz|dilek|songül|sibel|gamze|gizem|tuğba|' +
+    'betül|rabia|hilal|burcu|aybüke|ilayda|ırmak|eylül|defne|ecrin|nehir|gonca|şenay|tülay|gülay|' +
+    'ömer|onur|ipek|sude|irem|özge|ali|eda|adem|ümit|emre|enes|eren|umut|kaan|mert|berat|eyüp|' +
+    'uğur|ayşe|elif|esra|ebru|buse|aslı|ezgi|seda|azra|' +
+    'oğulları|lıoğlu|lioğlu|luoğlu|lüoğlu|oğlu|lılar|liler|lular|lüler|' +
+    'karakoyun|büyükçekmece|küçükçekmece|kahramanmaraş|şereflikoçhisar|gümüşhane|çetinkaya|pehlivan|koçyiğit|' +
+    'karakuş|çeliktaş|kırıkhan|bayrakçı|sarıoğlu|karadeniz|karahasan|çobanyıldız|taşkındemir|şahindemir|' +
+    'uzundemirci|özkahveci|karaoğlan|karaçoban|yılmazsoy|şahinbaş|soyluçakır|küçükali|karaağaç|özçelik|' +
+    'karataş|karahan|karabulut|gülmez|doğankaya|demirtaş|akpınar|gürbüz|tekin|albayrak|altıntaş|' +
+    'karadağ|karakaya|karakoç|kahraman|çekmece|şerefli|hisar|yıldırım|bayraktar|değirmenci|iskenderun|' +
+    'diyarbakır|gaziantep|şanlıurfa|eskişehir|balıkesir|çanakkale|kırklareli|kastamonu|zonguldak|adıyaman|' +
+    'osmaniye|nevşehir|kırşehir|kırıkkale|afyon|trabzon|malatya|erzurum|kayseri|samsun|sakarya|kocaeli|' +
+    'antalya|mersin|ankara|istanbul|konya|adana|bursa|izmir|hatay|sivas|çorum|tokat|ordu|rize|kars|van|' +
+    'demirci|kahveci|yazıcı|ekinci|topçu|balcı|avcı|' +
+    'kaya|demir|çelik|şahin|yıldız|yılmaz|öztürk|aydın|özdemir|arslan|doğan|kılıç|aslan|çetin|kara|koç|' +
+    'kurt|özkan|şimşek|polat|özcan|korkmaz|çakır|erdoğan|yavuz|aktaş|aksoy|akyüz|altun|altın|arıkan|' +
+    'aydemir|aydoğan|bakır|bayrak|bayram|bektaş|bilgin|bozkurt|bulut|büyük|küçük|yüksek|uzun|genç|gümüş|' +
+    'tepe|dağlı|dere|güneş|toprak|sarı|yeşil|kızıl|türk|yüce|soylu|güzel|taşkın|çoban|duman|fırat|' +
+    'dicle|toros|uludağ|anadolu|boz|baş|taş|soy|gül|han|can|nur|şah|alp|dağ|kuş|mor|gök|bil|sel|çuk|tuğ|rul'
+  ).split('|').filter((x) => x && x.length >= 3))).slice(0, 512);
+  const Z2_BASLANGIC_SOZLUGU = Z2_MORFEM_TABLO.join(' ') + ' ';
 
-  const Z2_KOD_HARITA = (() => {
-    const m = new Map();
-    Z2_HUFF_S4.forEach((ch, idx) => m.set(ch, { kod: idx, bit: 4 }));
-    Z2_HUFF_S5.forEach((ch, idx) => m.set(ch, { kod: 12 + idx, bit: 5 }));
-    Z2_HUFF_S6.forEach((ch, idx) => m.set(ch, { kod: 48 + idx, bit: 6 }));
-    m.set("'", { kod: 124, bit: 7 });
-    return m;
-  })();
+  function olusturZ2BaglamTablosu(gruplar) {
+    const harita = new Map();
+    const dekod = new Array(256);
+    let yuva = 0;
+    for (const [bit, semboller] of gruplar) {
+      const genislik = 1 << (8 - bit);
+      for (const sem of semboller) {
+        const kod = yuva >>> (8 - bit);
+        const kayit = sem.startsWith('__')
+          ? { tip: sem.slice(2), kod, bit }
+          : { tip: 'harf', ch: sem, kod, bit };
+        harita.set(sem, kayit);
+        for (let a = 0; a < genislik; a++) dekod[yuva + a] = kayit;
+        yuva += genislik;
+      }
+    }
+    return { harita, dekod };
+  }
 
-  const Z2_DEKOD_TABLO = (() => {
+  // Bağlam 1: Ünsüz sonrası (Türkçede ~%80 ünlü gelir -> a,e,i,ı,u 3 bit!) — Toplam yuva: 5*32 + 7*8 + 4*4 + 2*2 + 20*1 = 256
+  const Z2_TABLO_UNSUZ_SONRASI = olusturZ2BaglamTablosu([
+    [3, ['a', 'e', 'i', 'ı', 'u']],
+    [5, ['ü', 'o', 'ö', ' ', 'r', 'l', 'n']],
+    [6, ['k', 't', 's', '__son']],
+    [7, ['__morfem', '__lz']],
+    [8, ['d', 'm', 'y', 'b', 'ş', 'z', 'g', 'ç', 'c', 'p', 'h', 'v', 'ğ', 'f', 'j', 'â', 'î', 'û', '-', '__esc']]
+  ]);
+
+  // Bağlam 0: Başlangıç / Boşluk / Ünlü sonrası (~%97 ünsüz, boşluk veya morfem gelir!) — Toplam yuva: 8*16 + 10*8 + 8*4 + 4*2 + 8*1 = 256
+  const Z2_TABLO_UNLU_SONRASI = olusturZ2BaglamTablosu([
+    [4, [' ', 'n', 'r', 'l', 'k', 'm', 's', 't']],
+    [5, ['y', 'd', 'b', 'ş', 'z', 'g', 'ç', 'a', 'e', '__morfem']],
+    [6, ['c', 'p', 'h', 'v', 'ğ', 'ö', 'i', 'o']],
+    [7, ['u', 'ü', 'ı', '__lz']],
+    [8, ['f', 'j', 'â', 'î', 'û', '-', '__son', '__esc']]
+  ]);
+
+  // Geriye dönük Z2 v1 tablosu
+  const Z2_V1_DEKOD_TABLO = (() => {
+    const s4 = [' ', 'a', 'e', 'i', 'n', 'r'];
+    const s5 = ['l', 'ı', 'k', 'd', 'm', 'y', 'u', 's', 't', 'o', 'b', 'ü'];
+    const s6 = ['ş', 'z', 'g', 'ç', 'c', 'p', 'h', 'v', 'ğ', 'ö', 'f', 'j', '-', '.'];
     const tablo = new Array(128);
-    for (let k = 0; k < 6; k++) {
-      for (let alt = 0; alt < 8; alt++) tablo[(k << 3) | alt] = { tip: 'harf', ch: Z2_HUFF_S4[k], bit: 4 };
-    }
-    for (let k = 0; k < 12; k++) {
-      for (let alt = 0; alt < 4; alt++) tablo[((12 + k) << 2) | alt] = { tip: 'harf', ch: Z2_HUFF_S5[k], bit: 5 };
-    }
-    for (let k = 0; k < 14; k++) {
-      for (let alt = 0; alt < 2; alt++) tablo[((48 + k) << 1) | alt] = { tip: 'harf', ch: Z2_HUFF_S6[k], bit: 6 };
-    }
+    for (let k = 0; k < 6; k++) for (let alt = 0; alt < 8; alt++) tablo[(k << 3) | alt] = { tip: 'harf', ch: s4[k], bit: 4 };
+    for (let k = 0; k < 12; k++) for (let alt = 0; alt < 4; alt++) tablo[((12 + k) << 2) | alt] = { tip: 'harf', ch: s5[k], bit: 5 };
+    for (let k = 0; k < 14; k++) for (let alt = 0; alt < 2; alt++) tablo[((48 + k) << 1) | alt] = { tip: 'harf', ch: s6[k], bit: 6 };
     tablo[124] = { tip: 'harf', ch: "'", bit: 7 };
     tablo[125] = { tip: 'lz', bit: 7 };
     tablo[126] = { tip: 'son', bit: 7 };
@@ -5662,38 +5722,87 @@
 
   function kodlaZ2MasterSetupPaketi(temelPaket, ogrenciListesi) {
     const bitler = [];
+    const metinKodlayici = new TextEncoder();
     const yazBit = (deger, bitSayisi) => {
       for (let b = bitSayisi - 1; b >= 0; b--) {
         bitler.push((deger >>> b) & 1);
       }
     };
+    const yazBigIntBit = (degerBig, bitSayisi) => {
+      for (let b = bitSayisi - 1; b >= 0; b--) {
+        bitler.push(Number((degerBig >> BigInt(b)) & 1n));
+      }
+    };
     const yazBaytlar = (u8) => {
       for (let i = 0; i < u8.length; i++) yazBit(u8[i], 8);
     };
-
-    const meta = {
-      k: temelPaket.sinavKodu,
-      a: temelPaket.dersAd,
-      p: [
-        temelPaket.dySayisi,
-        temelPaket.dyToplamPuan,
-        temelPaket.testSayisi,
-        temelPaket.testToplamPuan,
-        temelPaket.klasikSayisi,
-        temelPaket.klasikToplamPuan,
-        temelPaket.sikSayisi,
-        temelPaket.haneSayisi
-      ],
-      m: temelPaket.kimlikModu,
-      s: temelPaket.sinavGizliAnahtar,
-      c: ['A', 'B', 'C', 'D'].map((g) => {
-        const x = (temelPaket.cevapAnahtarlari && temelPaket.cevapAnahtarlari[g]) || { dy: '', test: '' };
-        return [x.dy || '', x.test || ''];
-      })
+    const yazUtf8Kisa = (metin, uzunlukBit) => {
+      const maksBayt = (1 << uzunlukBit) - 1;
+      const u8 = metinKodlayici.encode(String(metin || '')).slice(0, maksBayt);
+      yazBit(u8.length, uzunlukBit);
+      yazBaytlar(u8);
     };
-    const metaBytes = new TextEncoder().encode(JSON.stringify(meta));
-    yazBit(metaBytes.length, 16);
-    yazBaytlar(metaBytes);
+
+    // Çerçeve İşaretçisi: 0xB2 (kompakt ikili başlık + sabit haneli numara + 8K sözlüklü LZ77)
+    yazBit(0xB2, 8);
+
+    const dySayisi = Math.max(0, Math.min(63, Number(temelPaket.dySayisi) || 0));
+    const testSayisi = Math.max(0, Math.min(127, Number(temelPaket.testSayisi) || 0));
+    const klasikSayisi = Math.max(0, Math.min(63, Number(temelPaket.klasikSayisi) || 0));
+    const sikSayisi = Math.max(2, Math.min(15, Number(temelPaket.sikSayisi) || 5));
+    const haneSayisi = Math.max(1, Math.min(15, Number(temelPaket.haneSayisi) || 2));
+    const dyPuan100 = Math.max(0, Math.min(16383, Math.round((Number(temelPaket.dyToplamPuan) || 0) * 100)));
+    const testPuan100 = Math.max(0, Math.min(16383, Math.round((Number(temelPaket.testToplamPuan) || 0) * 100)));
+    const klasikPuan100 = Math.max(0, Math.min(16383, Math.round((Number(temelPaket.klasikToplamPuan) || 0) * 100)));
+
+    yazUtf8Kisa(temelPaket.sinavKodu || 'SINAV-2026', 8);
+    yazUtf8Kisa(temelPaket.dersAd || 'Sınav', 8);
+    yazUtf8Kisa(temelPaket.kimlikModu || 'son2', 6);
+
+    yazBit(dySayisi, 6);
+    yazBit(testSayisi, 7);
+    yazBit(klasikSayisi, 6);
+    yazBit(sikSayisi, 4);
+    yazBit(haneSayisi, 4);
+    yazBit(dyPuan100, 14);
+    yazBit(testPuan100, 14);
+    yazBit(klasikPuan100, 14);
+
+    const gizliStr = String(temelPaket.sinavGizliAnahtar || '');
+    if (/^[0-9a-f]{32}$/.test(gizliStr)) {
+      yazBit(1, 1);
+      for (let i = 0; i < 16; i++) {
+        yazBit(parseInt(gizliStr.slice(i * 2, i * 2 + 2), 16), 8);
+      }
+    } else {
+      yazBit(0, 1);
+      yazUtf8Kisa(gizliStr, 8);
+    }
+
+    ['A', 'B', 'C', 'D'].forEach((g) => {
+      const x = (temelPaket.cevapAnahtarlari && temelPaket.cevapAnahtarlari[g]) || { dy: '', test: '' };
+      const dyStr = String(x.dy || '');
+      const testStr = String(x.test || '');
+      if (!dyStr && !testStr) {
+        yazBit(0, 1);
+      } else if (
+        dyStr.length === dySayisi &&
+        /^[DY]*$/.test(dyStr) &&
+        testStr.length === testSayisi &&
+        /^[ABCDE]*$/.test(testStr)
+      ) {
+        yazBit(1, 1);
+        yazBit(1, 1);
+        for (let i = 0; i < dyStr.length; i++) yazBit(dyStr[i] === 'D' ? 1 : 0, 1);
+        for (let i = 0; i < testStr.length; i++) yazBit('ABCDE'.indexOf(testStr[i]), 3);
+      } else {
+        yazBit(1, 1);
+        yazBit(0, 1);
+        yazUtf8Kisa(dyStr, 7);
+        yazUtf8Kisa(testStr, 7);
+      }
+    });
+
     yazBit(ogrenciListesi.length, 12);
 
     const ortakOnEk = (() => {
@@ -5708,29 +5817,58 @@
       }
       return pre.length >= 2 && pre.length <= 12 ? pre : '';
     })();
-    const preBytes = new TextEncoder().encode(ortakOnEk);
+    const preBytes = metinKodlayici.encode(ortakOnEk);
     yazBit(preBytes.length, 4);
     yazBaytlar(preBytes);
 
-    const gecmis = [];
+    const haneFrekans = new Array(16).fill(0);
+    for (let i = 0; i < ogrenciListesi.length; i++) {
+      const nk = ortakOnEk && ogrenciListesi[i].ogrNo.startsWith(ortakOnEk)
+        ? ogrenciListesi[i].ogrNo.slice(ortakOnEk.length)
+        : ogrenciListesi[i].ogrNo;
+      if (/^\d{1,15}$/.test(nk)) haneFrekans[nk.length]++;
+    }
+    let varsayilanHane = 0;
+    for (let h = 1; h <= 15; h++) {
+      if (haneFrekans[h] > haneFrekans[varsayilanHane]) varsayilanHane = h;
+    }
+    yazBit(varsayilanHane, 4);
+
+    const gecmis = Array.from(Z2_BASLANGIC_SOZLUGU);
     const gecmisEkle = (ch) => {
       gecmis.push(ch);
-      if (gecmis.length > 1024) gecmis.shift();
+      if (gecmis.length > 8192) gecmis.shift();
+    };
+    const secBaglamTablosu = (oncekiCh) => (oncekiCh && Z2_UNSUZ_SET.has(oncekiCh) ? Z2_TABLO_UNSUZ_SONRASI : Z2_TABLO_UNLU_SONRASI);
+    const dilimHuffMaliyet = (metin, bas, uz, baslangicOncekiCh) => {
+      let top = 0;
+      let prev = baslangicOncekiCh;
+      for (let i = 0; i < uz; i++) {
+        const c = metin[bas + i];
+        const tb = secBaglamTablosu(prev);
+        const h = tb.harita.get(c);
+        top += h ? h.bit : (tb.harita.get('__esc').bit + 16);
+        prev = c;
+      }
+      return top;
     };
 
     for (let idx = 0; idx < ogrenciListesi.length; idx++) {
       const ogr = ogrenciListesi[idx];
       const noKalan = ortakOnEk && ogr.ogrNo.startsWith(ortakOnEk) ? ogr.ogrNo.slice(ortakOnEk.length) : ogr.ogrNo;
-      if (/^\d{1,15}$/.test(noKalan)) {
+      if (varsayilanHane > 0 && noKalan.length === varsayilanHane && /^\d+$/.test(noKalan)) {
         yazBit(1, 1);
-        yazBit(noKalan.length, 4);
-        for (let i = 0; i < noKalan.length; i++) {
-          yazBit(noKalan.charCodeAt(i) - 48, 4);
-        }
-      } else {
-        const nb = new TextEncoder().encode(noKalan.slice(0, 31));
+        yazBigIntBit(BigInt(noKalan), Z2_DEC_BIT[varsayilanHane]);
+      } else if (/^\d{1,18}$/.test(noKalan)) {
         yazBit(0, 1);
-        yazBit(nb.length, 5);
+        yazBit(1, 1);
+        yazBit(noKalan.length, 5);
+        yazBigIntBit(BigInt(noKalan), Z2_DEC_BIT[noKalan.length]);
+      } else {
+        const nb = metinKodlayici.encode(noKalan.slice(0, 63));
+        yazBit(0, 1);
+        yazBit(0, 1);
+        yazBit(nb.length, 6);
         yazBaytlar(nb);
       }
 
@@ -5747,42 +5885,111 @@
       yazBit(vakaMod, 2);
 
       let p = 0;
+      let oncekiCh = '';
       while (p < akisMetin.length) {
+        const aktifTablo = secBaglamTablosu(oncekiCh);
+        const morfemOp = aktifTablo.harita.get('__morfem');
+        const lzOp = aktifTablo.harita.get('__lz');
+        let secimTip = 'harf';
         let enIyiUz = 0;
         let enIyiMesafe = 0;
-        const maksBak = Math.min(19, akisMetin.length - p);
-        if (maksBak >= 4 && gecmis.length >= 4) {
+        let enIyiKisaLzMi = false;
+        let enIyiMorfemIdx = -1;
+        let enIyiMorfemBoslukMu = false;
+        let enIyiKazanc = 0;
+
+        for (let mIdx = 0; mIdx < Z2_MORFEM_TABLO.length; mIdx++) {
+          const morfem = Z2_MORFEM_TABLO[mIdx];
+          if (p + morfem.length <= akisMetin.length && akisMetin.startsWith(morfem, p)) {
+            const boslukVar = p + morfem.length < akisMetin.length && akisMetin[p + morfem.length] === ' ';
+            const toplamUz = morfem.length + (boslukVar ? 1 : 0);
+            const huffTop = dilimHuffMaliyet(akisMetin, p, toplamUz, oncekiCh);
+            const kazanc = huffTop - (morfemOp.bit + 10);
+            if (kazanc > enIyiKazanc) {
+              enIyiKazanc = kazanc;
+              secimTip = 'morfem';
+              enIyiMorfemIdx = mIdx;
+              enIyiMorfemBoslukMu = boslukVar;
+              enIyiUz = toplamUz;
+            }
+          }
+        }
+
+        const maksBak = Math.min(35, akisMetin.length - p);
+        if (maksBak >= 3 && gecmis.length >= 3) {
           for (let g = gecmis.length - 1; g >= 0; g--) {
             if (gecmis[g] !== akisMetin[p]) continue;
             let uz = 1;
             while (uz < maksBak && g + uz < gecmis.length && gecmis[g + uz] === akisMetin[p + uz]) uz++;
-            if (uz >= 4 && uz > enIyiUz) {
-              enIyiUz = uz;
-              enIyiMesafe = gecmis.length - g;
-              if (enIyiUz === 19) break;
+            const mesafe = gecmis.length - g;
+            if (uz >= 3 && mesafe <= 1024) {
+              const kisaUz = Math.min(uz, 10);
+              const huffTop = dilimHuffMaliyet(akisMetin, p, kisaUz, oncekiCh);
+              const kazanc = huffTop - (lzOp.bit + 1 + 10 + 3);
+              if (kazanc > enIyiKazanc) {
+                enIyiKazanc = kazanc;
+                secimTip = 'lz';
+                enIyiKisaLzMi = true;
+                enIyiUz = kisaUz;
+                enIyiMesafe = mesafe;
+              }
+            }
+            if (uz >= 4 && mesafe <= 8192) {
+              const huffTop = dilimHuffMaliyet(akisMetin, p, uz, oncekiCh);
+              const kazanc = huffTop - (lzOp.bit + 1 + 13 + 5);
+              if (kazanc > enIyiKazanc) {
+                enIyiKazanc = kazanc;
+                secimTip = 'lz';
+                enIyiKisaLzMi = false;
+                enIyiUz = uz;
+                enIyiMesafe = mesafe;
+                if (enIyiUz === 35) break;
+              }
             }
           }
         }
-        if (enIyiUz >= 4 && enIyiMesafe >= 1 && enIyiMesafe <= 1024) {
-          yazBit(125, 7);
-          yazBit(enIyiMesafe - 1, 10);
-          yazBit(enIyiUz - 4, 4);
-          for (let k = 0; k < enIyiUz; k++) gecmisEkle(akisMetin[p + k]);
+        if (secimTip === 'morfem' && enIyiMorfemIdx >= 0) {
+          yazBit(morfemOp.kod, morfemOp.bit);
+          yazBit(enIyiMorfemIdx, 9);
+          yazBit(enIyiMorfemBoslukMu ? 1 : 0, 1);
+          for (let k = 0; k < enIyiUz; k++) {
+            oncekiCh = akisMetin[p + k];
+            gecmisEkle(oncekiCh);
+          }
+          p += enIyiUz;
+        } else if (secimTip === 'lz' && enIyiUz >= 3) {
+          yazBit(lzOp.kod, lzOp.bit);
+          if (enIyiKisaLzMi) {
+            yazBit(0, 1);
+            yazBit(enIyiMesafe - 1, 10);
+            yazBit(enIyiUz - 3, 3);
+          } else {
+            yazBit(1, 1);
+            yazBit(enIyiMesafe - 1, 13);
+            yazBit(enIyiUz - 4, 5);
+          }
+          for (let k = 0; k < enIyiUz; k++) {
+            oncekiCh = akisMetin[p + k];
+            gecmisEkle(oncekiCh);
+          }
           p += enIyiUz;
         } else {
           const ch = akisMetin[p];
-          const h = Z2_KOD_HARITA.get(ch);
+          const h = aktifTablo.harita.get(ch);
           if (h) {
             yazBit(h.kod, h.bit);
           } else {
-            yazBit(127, 7);
+            const escOp = aktifTablo.harita.get('__esc');
+            yazBit(escOp.kod, escOp.bit);
             yazBit(ch.charCodeAt(0) & 0xFFFF, 16);
           }
+          oncekiCh = ch;
           gecmisEkle(ch);
           p++;
         }
       }
-      yazBit(126, 7); // EON
+      const sonOp = secBaglamTablosu(oncekiCh).harita.get('__son');
+      yazBit(sonOp.kod, sonOp.bit);
     }
 
     const baytSayisi = Math.ceil(bitler.length / 8);
@@ -5796,7 +6003,9 @@
   function cozZ2MasterSetupPaketi(kodluMetin) {
     if (!kodluMetin || !kodluMetin.startsWith('Z2.')) return null;
     const u8 = urlBase64ToBytes(kodluMetin.slice(3));
+    if (!u8 || u8.length < 4) return null;
     const toplamBit = u8.length * 8;
+    const metinCozucu = new TextDecoder();
     let bitPos = 0;
 
     const bakBit = (adet) => {
@@ -5814,19 +6023,173 @@
       bitPos += adet;
       return d;
     };
+    const okuBigIntBit = (adet) => {
+      if (bitPos + adet > toplamBit) throw new Error('Z2 bit sınırı aşıldı');
+      let d = 0n;
+      for (let i = 0; i < adet; i++) {
+        const p = bitPos + i;
+        const b = (u8[p >>> 3] >>> (7 - (p & 7))) & 1;
+        d = (d << 1n) | BigInt(b);
+      }
+      bitPos += adet;
+      return d;
+    };
     const okuBaytlar = (uz) => {
       const b = new Uint8Array(uz);
       for (let i = 0; i < uz; i++) b[i] = okuBit(8);
       return b;
     };
+    const okuUtf8Kisa = (uzunlukBit) => {
+      const uz = okuBit(uzunlukBit);
+      return uz > 0 ? metinCozucu.decode(okuBaytlar(uz)) : '';
+    };
 
+    if (u8[0] === 0xB2) {
+      okuBit(8); // 0xB2 çerçeve başlığı
+      const sinavKodu = okuUtf8Kisa(8) || 'SINAV-2026';
+      const dersAd = okuUtf8Kisa(8) || 'Sınav';
+      const kimlikModu = okuUtf8Kisa(6) || 'son2';
+      const dySayisi = okuBit(6);
+      const testSayisi = okuBit(7);
+      const klasikSayisi = okuBit(6);
+      const sikSayisi = okuBit(4) || 5;
+      const haneSayisi = okuBit(4) || 2;
+      const dyToplamPuan = Number((okuBit(14) / 100).toFixed(2));
+      const testToplamPuan = Number((okuBit(14) / 100).toFixed(2));
+      const klasikToplamPuan = Number((okuBit(14) / 100).toFixed(2));
+
+      let sinavGizliAnahtar = '';
+      if (okuBit(1) === 1) {
+        const kb = okuBaytlar(16);
+        for (let i = 0; i < 16; i++) sinavGizliAnahtar += kb[i].toString(16).padStart(2, '0');
+      } else {
+        sinavGizliAnahtar = okuUtf8Kisa(8);
+      }
+
+      const cevapAnahtarlari = {};
+      ['A', 'B', 'C', 'D'].forEach((g) => {
+        if (okuBit(1) === 0) {
+          cevapAnahtarlari[g] = { dy: '', test: '' };
+        } else if (okuBit(1) === 1) {
+          let dy = '';
+          let test = '';
+          for (let i = 0; i < dySayisi; i++) dy += okuBit(1) === 1 ? 'D' : 'Y';
+          for (let i = 0; i < testSayisi; i++) test += 'ABCDE'[okuBit(3)] || 'A';
+          cevapAnahtarlari[g] = { dy, test };
+        } else {
+          cevapAnahtarlari[g] = { dy: okuUtf8Kisa(7), test: okuUtf8Kisa(7) };
+        }
+      });
+
+      const ogrSayi = okuBit(12);
+      if (ogrSayi > 1000) return null;
+      const preUz = okuBit(4);
+      const ortakOnEk = preUz > 0 ? metinCozucu.decode(okuBaytlar(preUz)) : '';
+      const varsayilanHane = okuBit(4);
+
+      const gecmis = Array.from(Z2_BASLANGIC_SOZLUGU);
+      const gecmisEkle = (ch) => {
+        gecmis.push(ch);
+        if (gecmis.length > 8192) gecmis.shift();
+      };
+
+      const ogrenciler = [];
+      for (let idx = 0; idx < ogrSayi; idx++) {
+        let noKalan = '';
+        if (okuBit(1) === 1) {
+          if (varsayilanHane < 1 || varsayilanHane > 15) return null;
+          noKalan = okuBigIntBit(Z2_DEC_BIT[varsayilanHane]).toString(10).padStart(varsayilanHane, '0');
+        } else if (okuBit(1) === 1) {
+          const hane = okuBit(5);
+          if (hane < 1 || hane > 18) return null;
+          noKalan = okuBigIntBit(Z2_DEC_BIT[hane]).toString(10).padStart(hane, '0');
+        } else {
+          const nbUz = okuBit(6);
+          noKalan = metinCozucu.decode(okuBaytlar(nbUz));
+        }
+        const ogrNo = ortakOnEk + noKalan;
+
+        const vakaMod = okuBit(2);
+        let hamAd = '';
+        let oncekiCh = '';
+        let guvenlikSayac = 0;
+        while (guvenlikSayac++ < 512) {
+          const aktifTablo = oncekiCh && Z2_UNSUZ_SET.has(oncekiCh) ? Z2_TABLO_UNSUZ_SONRASI : Z2_TABLO_UNLU_SONRASI;
+          const onizle8 = bakBit(8);
+          const giris = aktifTablo.dekod[onizle8];
+          if (!giris) throw new Error('Geçersiz Z2 bağlamsal Huffman kodu');
+          okuBit(giris.bit);
+          if (giris.tip === 'son') break;
+          if (giris.tip === 'harf') {
+            hamAd += giris.ch;
+            oncekiCh = giris.ch;
+            gecmisEkle(giris.ch);
+          } else if (giris.tip === 'morfem') {
+            const mIdx = okuBit(9);
+            const boslukMu = okuBit(1) === 1;
+            const morfemBaz = Z2_MORFEM_TABLO[mIdx];
+            if (!morfemBaz) throw new Error('Geçersiz Z2 morfem dizini');
+            const morfem = boslukMu ? (morfemBaz + ' ') : morfemBaz;
+            hamAd += morfem;
+            for (let k = 0; k < morfem.length; k++) {
+              oncekiCh = morfem[k];
+              gecmisEkle(oncekiCh);
+            }
+          } else if (giris.tip === 'esc') {
+            const ch = String.fromCharCode(okuBit(16));
+            hamAd += ch;
+            oncekiCh = ch;
+            gecmisEkle(ch);
+          } else if (giris.tip === 'lz') {
+            const uzunMu = okuBit(1);
+            const mesafe = uzunMu === 1 ? (okuBit(13) + 1) : (okuBit(10) + 1);
+            const uz = uzunMu === 1 ? (okuBit(5) + 4) : (okuBit(3) + 3);
+            const bas = gecmis.length - mesafe;
+            if (bas < 0) throw new Error('Geçersiz Z2 LZ mesafesi');
+            const kopya = gecmis.slice(bas, bas + uz);
+            for (let k = 0; k < kopya.length; k++) {
+              hamAd += kopya[k];
+              oncekiCh = kopya[k];
+              gecmisEkle(oncekiCh);
+            }
+          }
+        }
+
+        let adSoyad = hamAd;
+        if (vakaMod === 0) adSoyad = baslikHarfTr(hamAd);
+        else if (vakaMod === 1) adSoyad = hamAd.toLocaleUpperCase('tr-TR');
+
+        if (ogrNo && adSoyad) {
+          ogrenciler.push({ ogrNo, adSoyad, bolum: 'Genel' });
+        }
+      }
+
+      return {
+        sinavKodu,
+        dersAd,
+        dySayisi,
+        dyToplamPuan,
+        testSayisi,
+        testToplamPuan,
+        klasikSayisi,
+        klasikToplamPuan,
+        sikSayisi,
+        haneSayisi,
+        kimlikModu,
+        sinavGizliAnahtar,
+        cevapAnahtarlari,
+        ogrenciler
+      };
+    }
+
+    // Geriye dönük Z2 v1 uyumluluğu
     const metaUz = okuBit(16);
     if (metaUz <= 2 || metaUz > 4096) return null;
-    const meta = JSON.parse(new TextDecoder().decode(okuBaytlar(metaUz)));
+    const meta = JSON.parse(metinCozucu.decode(okuBaytlar(metaUz)));
     const ogrSayi = okuBit(12);
     if (ogrSayi > 1000) return null;
     const preUz = okuBit(4);
-    const ortakOnEk = preUz > 0 ? new TextDecoder().decode(okuBaytlar(preUz)) : '';
+    const ortakOnEk = preUz > 0 ? metinCozucu.decode(okuBaytlar(preUz)) : '';
 
     const gecmis = [];
     const gecmisEkle = (ch) => {
@@ -5843,7 +6206,7 @@
         for (let i = 0; i < hane; i++) noKalan += String(okuBit(4));
       } else {
         const nbUz = okuBit(5);
-        noKalan = new TextDecoder().decode(okuBaytlar(nbUz));
+        noKalan = metinCozucu.decode(okuBaytlar(nbUz));
       }
       const ogrNo = ortakOnEk + noKalan;
 
@@ -5852,7 +6215,7 @@
       let guvenlikSayac = 0;
       while (guvenlikSayac++ < 256) {
         const onizle7 = bakBit(7);
-        const giris = Z2_DEKOD_TABLO[onizle7];
+        const giris = Z2_V1_DEKOD_TABLO[onizle7];
         if (!giris) throw new Error('Geçersiz Z2 Huffman kodu');
         okuBit(giris.bit);
         if (giris.tip === 'son') break;
@@ -5991,8 +6354,8 @@
     };
 
     if (gecerliOgrenciler.length > 0 && gecerliOgrenciler.length <= 260) {
-      // Kademe 0: Tam Ad-Soyad + Z2 BCD/Huffman/LZ77 sıkıştırması (ortak önek olmasa bile 126+ uzun Türkçe adı tam korur)
-      const adButceleri = [64, 34, 26, 20, 15, 11];
+      // Kademe 0: Tam Ad-Soyad + Z2 ikili sıkıştırma (ortak önek olmasa bile 126+ uzun Türkçe adı %100 kayıpsız tam korur)
+      const adButceleri = [160, 64, 42, 34, 26, 20];
       for (const adSinir of adButceleri) {
         const hazirListe = gecerliOgrenciler.map((o) => {
           if (o.adSoyad.length <= adSinir) return o;
@@ -6011,7 +6374,7 @@
           return {
             ...aday,
             ogrenciDahilMi: true,
-            tamAdKorunduMu: adSinir >= 64,
+            tamAdKorunduMu: hazirListe.every((x, i) => x.adSoyad === gecerliOgrenciler[i].adSoyad),
             ogrenciSayisi: gecerliOgrenciler.length,
             not: `Sınav anahtarı, şifre çözücü ve ${gecerliOgrenciler.length} kişilik sınıf listesi tek Öğretmen Master QR içine sıkıştırıldı.`
           };

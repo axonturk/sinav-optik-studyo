@@ -590,6 +590,7 @@
       'use strict';
       const C = window.SinavOptikCekirdek;
       const MOBIL_DEPO_ANAHTAR = 'SINAV_MOBIL_OMR_DEPO_V2';
+      const MOBIL_ATOMIK_KAYIT_ONEK = 'SINAV_MOBIL_KAYIT_V2_';
       const MASAUSTU_DEPO_ANAHTAR = 'SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2';
 
       let sesAcik = true;
@@ -601,6 +602,7 @@
       let eslestirmeModalAcikMi = false;
       let sonSilinenMobilYedek = null;
       let bekleyenKagitOqv2 = '';
+      let mobilUzlasmaZamanlayici = null;
       const mobilSekmeId = 'MSEK-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
       const silinenMobilKayitIdleri = new Set();
       let sonYerelSifirlamaMs = 0;
@@ -704,6 +706,19 @@
         return '';
       }
 
+      function temizSinavAnahtariHesapla(hamKod) {
+        const temiz = String(hamKod || 'MOBIL-2026').trim().replace(/[^0-9A-Za-z_-]/g, '_').slice(0, 64);
+        return temiz || 'MOBIL-2026';
+      }
+
+      function etkinMobilSinavAnahtari() {
+        return temizSinavAnahtariHesapla(mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.sinavKodu);
+      }
+
+      function aktifSinavAtomikOnek() {
+        return MOBIL_ATOMIK_KAYIT_ONEK + etkinMobilSinavAnahtari() + '__';
+      }
+
       try {
         if (typeof BroadcastChannel !== 'undefined') {
           const yetkiKanal = new BroadcastChannel('sinav_omr_yetki');
@@ -803,29 +818,50 @@
         const hashToken = ayiklaHashParametresi(location.hash, 'omrToken');
         if (hashToken) kaydetMobilHocaToken(hashToken);
 
+        let onCozulmusSetup = null;
+        if (location.hash && location.hash.includes('setup=')) {
+          try {
+            onCozulmusSetup = C.cozKompaktSetupQrPaketi(location.hash);
+          } catch (err) {
+            console.warn('Setup QR parametresi çözülemedi:', err.message);
+          }
+        }
+
         let mobilVeriYuklendiMi = false;
         try {
           const hamMobilDepo = localStorage.getItem(MOBIL_DEPO_ANAHTAR);
           if (hamMobilDepo) {
             const hamJson = JSON.parse(hamMobilDepo);
             const veri = C.semaDogrulaVeTemizle(hamJson);
-            if (Array.isArray(veri.ogrenciler) && veri.ogrenciler.length > 0) mobilDurum.ogrenciler = veri.ogrenciler;
-            if (Array.isArray(veri.okumaSonuclari)) mobilDurum.okumaSonuclari = veri.okumaSonuclari;
+            const diskAnahtar = (hamJson && hamJson.aktifSinavAnahtari) ||
+              temizSinavAnahtariHesapla(hamJson && hamJson.mobilSinavYapisi && hamJson.mobilSinavYapisi.sinavKodu);
+            const hedefAnahtar = onCozulmusSetup ? temizSinavAnahtariHesapla(onCozulmusSetup.sinavKodu) : diskAnahtar;
+
             if (Array.isArray(hamJson && hamJson.silinenIdler)) {
               hamJson.silinenIdler.forEach((id) => { if (id) silinenMobilKayitIdleri.add(String(id)); });
             }
             if (Number(hamJson && hamJson.tamSifirlamaMs) > 0) {
               sonYerelSifirlamaMs = Number(hamJson.tamSifirlamaMs);
             }
-            if (hamJson && hamJson.mobilSinavYapisi && typeof hamJson.mobilSinavYapisi === 'object') {
-              Object.assign(mobilDurum.sinavYapisi, hamJson.mobilSinavYapisi);
+
+            if (onCozulmusSetup && hedefAnahtar !== diskAnahtar) {
+              const kayitliSinavListesi = hamJson && hamJson.sinavSonuclariHaritasi && hamJson.sinavSonuclariHaritasi[hedefAnahtar];
+              mobilDurum.okumaSonuclari = Array.isArray(kayitliSinavListesi)
+                ? (C.semaDogrulaVeTemizle({ okumaSonuclari: kayitliSinavListesi }).okumaSonuclari || [])
+                : [];
+            } else {
+              if (Array.isArray(veri.ogrenciler) && veri.ogrenciler.length > 0) mobilDurum.ogrenciler = veri.ogrenciler;
+              if (Array.isArray(veri.okumaSonuclari)) mobilDurum.okumaSonuclari = veri.okumaSonuclari;
+              if (hamJson && hamJson.mobilSinavYapisi && typeof hamJson.mobilSinavYapisi === 'object') {
+                Object.assign(mobilDurum.sinavYapisi, hamJson.mobilSinavYapisi);
+              }
             }
             mobilVeriYuklendiMi = true;
           }
         } catch (_) {}
 
         // Tek yönlü salt-okunur yedek: Mobil depo boşsa ve aynı tarayıcıda masaüstü stüdyoda öğrenci varsa yalnız OKU (asla geri yazma!)
-        if (mobilDurum.ogrenciler.length === 0) {
+        if (!onCozulmusSetup && mobilDurum.ogrenciler.length === 0) {
           try {
             const hamMasaustu = localStorage.getItem(MASAUSTU_DEPO_ANAHTAR);
             if (hamMasaustu) {
@@ -853,26 +889,39 @@
           }
         }
 
-        if (location.hash && location.hash.includes('setup=')) {
-          try {
-            const cozulmusSetup = C.cozKompaktSetupQrPaketi(location.hash);
-            if (cozulmusSetup) {
-              delete mobilDurum.sinavYapisi.soruPuanlari;
-              Object.assign(mobilDurum.sinavYapisi, cozulmusSetup);
-              if (Array.isArray(cozulmusSetup.ogrenciler) && cozulmusSetup.ogrenciler.length > 0) {
-                mobilDurum.ogrenciler = cozulmusSetup.ogrenciler;
-              }
-              uygulaMobil100PuanNormalizasyon({
-                dyToplamPuan: cozulmusSetup.dyToplamPuan,
-                testToplamPuan: cozulmusSetup.testToplamPuan,
-                klasikToplamPuan: cozulmusSetup.klasikToplamPuan
-              }, true);
+        if (onCozulmusSetup) {
+          delete mobilDurum.sinavYapisi.soruPuanlari;
+          Object.assign(mobilDurum.sinavYapisi, onCozulmusSetup);
+          if (Array.isArray(onCozulmusSetup.ogrenciler) && onCozulmusSetup.ogrenciler.length > 0) {
+            mobilDurum.ogrenciler = onCozulmusSetup.ogrenciler;
+          }
+          const atomikKayitlar = okuTumAtomikMobilKayitlar(sonYerelSifirlamaMs, silinenMobilKayitIdleri);
+          if (atomikKayitlar.length > 0) {
+            mobilDurum.okumaSonuclari = birlestirMobilOkumaListeleri(
+              atomikKayitlar,
+              mobilDurum.okumaSonuclari,
+              silinenMobilKayitIdleri
+            );
+          }
+          uygulaMobil100PuanNormalizasyon({
+            dyToplamPuan: onCozulmusSetup.dyToplamPuan,
+            testToplamPuan: onCozulmusSetup.testToplamPuan,
+            klasikToplamPuan: onCozulmusSetup.klasikToplamPuan
+          }, true);
+          kaydetYerelDepoya();
+        } else {
+          const atomikKayitlar = okuTumAtomikMobilKayitlar(sonYerelSifirlamaMs, silinenMobilKayitIdleri);
+          if (atomikKayitlar.length > 0) {
+            const oncekiImza = imzaMobilListeDurumu(mobilDurum.okumaSonuclari);
+            mobilDurum.okumaSonuclari = birlestirMobilOkumaListeleri(
+              atomikKayitlar,
+              mobilDurum.okumaSonuclari,
+              silinenMobilKayitIdleri
+            );
+            if (imzaMobilListeDurumu(mobilDurum.okumaSonuclari) !== oncekiImza) {
               kaydetYerelDepoya();
             }
-          } catch (err) {
-            console.warn('Setup QR parametresi çözülemedi:', err.message);
           }
-        } else {
           // Eski oturumdan kalan 90 tavanlı (örn. 15 D/Y + 10 Test = 90) yapıları da otomatik 100 puana normalize et
           uygulaMobil100PuanNormalizasyon(
             mobilDurum.sinavYapisi.dyToplamPuan !== undefined
@@ -1023,6 +1072,17 @@
           const parca = metin.slice(metin.indexOf('setup='));
           const cozulmusSetup = C.cozKompaktSetupQrPaketi('#' + parca);
           if (cozulmusSetup) {
+            const eskiAnahtar = etkinMobilSinavAnahtari();
+            const yeniAnahtar = temizSinavAnahtariHesapla(cozulmusSetup.sinavKodu);
+            if (yeniAnahtar !== eskiAnahtar) {
+              try {
+                const mDepo = JSON.parse(localStorage.getItem(MOBIL_DEPO_ANAHTAR) || '{}');
+                const hedefHarita = mDepo && mDepo.sinavSonuclariHaritasi && mDepo.sinavSonuclariHaritasi[yeniAnahtar];
+                mobilDurum.okumaSonuclari = Array.isArray(hedefHarita) ? hedefHarita : [];
+              } catch (_) {
+                mobilDurum.okumaSonuclari = [];
+              }
+            }
             delete mobilDurum.sinavYapisi.soruPuanlari;
             Object.assign(mobilDurum.sinavYapisi, cozulmusSetup);
             if (Array.isArray(cozulmusSetup.ogrenciler) && cozulmusSetup.ogrenciler.length > 0) {
@@ -1058,6 +1118,84 @@
         return false;
       }
 
+      function hafifletMobilKayit(s, varsayilanMs = 0) {
+        if (!s || typeof s !== 'object') return s;
+        const { kanonikIkili, kanonikGri, kanonikHarita, ...hafifSonuc } = s;
+        if (!Number(hafifSonuc._kayitMs)) {
+          hafifSonuc._kayitMs = varsayilanMs > 0 ? varsayilanMs : Date.now();
+        }
+        return hafifSonuc;
+      }
+
+      function hesaplaMobilAtomikAnahtar(k) {
+        if (!k || typeof k !== 'object') return '';
+        const onek = aktifSinavAtomikOnek();
+        const belirsizMi = Boolean(k.numaraEslesmediMi || k.kimlikEslesmeBekliyor);
+        if (!belirsizMi && k.ogrNo) {
+          return onek + 'OGR_' + String(k.ogrNo).replace(/[^0-9A-Za-z_-]/g, '_');
+        }
+        const imza = k.cevapImza || imzaHesaplaMobilKagit(k) || k.id || '';
+        return onek + 'BEL_' + encodeURIComponent(String(imza)).slice(0, 120);
+      }
+
+      function okuTumAtomikMobilKayitlar(minSifirlamaMs = 0, silinenSet = silinenMobilKayitIdleri) {
+        const bulunanlar = [];
+        const onek = aktifSinavAtomikOnek();
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const anahtar = localStorage.key(i);
+            if (!anahtar || !anahtar.startsWith(onek)) continue;
+            const ham = localStorage.getItem(anahtar);
+            if (!ham) continue;
+            const k = JSON.parse(ham);
+            if (!k || typeof k !== 'object') continue;
+            if (k.id && silinenSet && silinenSet.has(String(k.id))) continue;
+            const kMs = Number(k._kayitMs) || 0;
+            if (minSifirlamaMs > 0 && kMs > 0 && kMs < minSifirlamaMs) continue;
+            bulunanlar.push(k);
+          }
+        } catch (_) {}
+        bulunanlar.sort((a, b) => (Number(b._kayitMs) || 0) - (Number(a._kayitMs) || 0));
+        return bulunanlar;
+      }
+
+      function temizleTumAtomikMobilKayitlar(yalnizIdSet = null) {
+        const onek = aktifSinavAtomikOnek();
+        try {
+          const silinecekAnahtarlar = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const anahtar = localStorage.key(i);
+            if (!anahtar || !anahtar.startsWith(onek)) continue;
+            if (!yalnizIdSet) {
+              silinecekAnahtarlar.push(anahtar);
+            } else {
+              try {
+                const k = JSON.parse(localStorage.getItem(anahtar) || 'null');
+                if (k && k.id && yalnizIdSet.has(String(k.id))) {
+                  silinecekAnahtarlar.push(anahtar);
+                }
+              } catch (_) {}
+            }
+          }
+          silinecekAnahtarlar.forEach((a) => localStorage.removeItem(a));
+        } catch (_) {}
+      }
+
+      function imzaMobilListeDurumu(liste) {
+        return (Array.isArray(liste) ? liste : [])
+          .filter((k) => k && typeof k === 'object')
+          .map((k) => `${k.id || ''}:${k.ogrNo || ''}:${k.toplamPuan ?? ''}:${k.numaraEslesmediMi ? 1 : 0}`)
+          .sort()
+          .join('|');
+      }
+
+      function planlaMobilCokluSekmeUzlasma() {
+        clearTimeout(mobilUzlasmaZamanlayici);
+        mobilUzlasmaZamanlayici = setTimeout(() => {
+          senkronizeEtMobilDepodan();
+        }, 45);
+      }
+
       function birlestirMobilOkumaListeleri(oncelikliDizi, diskDizi, silinenSet) {
         const sonucListesi = [];
         const gorulenIdler = new Set();
@@ -1087,29 +1225,78 @@
         return sonucListesi;
       }
 
-      function senkronizeEtMobilDepodan() {
+      function senkronizeEtMobilDepodan(gelenMesaj = null) {
         try {
+          const aktifKod = etkinMobilSinavAnahtari();
+          if (gelenMesaj && gelenMesaj.sinavAnahtari && gelenMesaj.sinavAnahtari !== aktifKod) {
+            return;
+          }
           const mevcutHam = localStorage.getItem(MOBIL_DEPO_ANAHTAR);
-          if (!mevcutHam) return;
-          const mevcut = JSON.parse(mevcutHam);
-          if (!mevcut || typeof mevcut !== 'object') return;
-          if (Array.isArray(mevcut.silinenIdler)) {
+          const mevcut = mevcutHam ? JSON.parse(mevcutHam) : {};
+          if (mevcut && Array.isArray(mevcut.silinenIdler)) {
             mevcut.silinenIdler.forEach((id) => { if (id) silinenMobilKayitIdleri.add(String(id)); });
           }
-          const diskSifirMs = Number(mevcut.tamSifirlamaMs) || 0;
+          if (gelenMesaj && Array.isArray(gelenMesaj.silinenIdler)) {
+            gelenMesaj.silinenIdler.forEach((id) => { if (id) silinenMobilKayitIdleri.add(String(id)); });
+          }
+          if (silinenMobilKayitIdleri.size > 0) {
+            temizleTumAtomikMobilKayitlar(silinenMobilKayitIdleri);
+          }
+
+          const atomikKayitlar = okuTumAtomikMobilKayitlar(sonYerelSifirlamaMs, silinenMobilKayitIdleri);
+          if (!gelenMesaj && !mevcutHam && atomikKayitlar.length === 0) {
+            mobilDurum.okumaSonuclari = [];
+            const altSayacBos = document.getElementById('mobil-alt-sayac');
+            if (altSayacBos) altSayacBos.textContent = '0';
+            if (typeof guncelleMobilSonucListesi === 'function') guncelleMobilSonucListesi();
+            return;
+          }
+
+          const mevcutDiskOkumalar = (mevcut && (!mevcut.aktifSinavAnahtari || mevcut.aktifSinavAnahtari === aktifKod))
+            ? mevcut.okumaSonuclari
+            : (mevcut && mevcut.sinavSonuclariHaritasi && mevcut.sinavSonuclariHaritasi[aktifKod]);
+
+          const diskSifirMs = Math.max(
+            Number(mevcut && mevcut.tamSifirlamaMs) || 0,
+            Number(gelenMesaj && gelenMesaj.tamSifirlamaMs) || 0
+          );
+
           if (diskSifirMs > sonYerelSifirlamaMs) {
             sonYerelSifirlamaMs = diskSifirMs;
-            mobilDurum.okumaSonuclari = Array.isArray(mevcut.okumaSonuclari) ? mevcut.okumaSonuclari : [];
-          } else if (Array.isArray(mevcut.okumaSonuclari)) {
+            const bazDizi = Array.isArray(gelenMesaj && gelenMesaj.okumaSonuclari)
+              ? gelenMesaj.okumaSonuclari
+              : (Array.isArray(mevcutDiskOkumalar) ? mevcutDiskOkumalar : []);
+            const yeniAtomikler = okuTumAtomikMobilKayitlar(sonYerelSifirlamaMs, silinenMobilKayitIdleri);
             mobilDurum.okumaSonuclari = birlestirMobilOkumaListeleri(
-              mevcut.okumaSonuclari,
-              mobilDurum.okumaSonuclari,
+              bazDizi,
+              yeniAtomikler,
               silinenMobilKayitIdleri
             );
+          } else {
+            let birlesik = Array.isArray(mobilDurum.okumaSonuclari) ? mobilDurum.okumaSonuclari : [];
+            if (gelenMesaj && Array.isArray(gelenMesaj.okumaSonuclari)) {
+              birlesik = birlestirMobilOkumaListeleri(gelenMesaj.okumaSonuclari, birlesik, silinenMobilKayitIdleri);
+            }
+            if (atomikKayitlar.length > 0) {
+              birlesik = birlestirMobilOkumaListeleri(atomikKayitlar, birlesik, silinenMobilKayitIdleri);
+            }
+            if (Array.isArray(mevcutDiskOkumalar)) {
+              birlesik = birlestirMobilOkumaListeleri(birlesik, mevcutDiskOkumalar, silinenMobilKayitIdleri);
+            }
+            mobilDurum.okumaSonuclari = birlesik;
           }
-          if (Array.isArray(mevcut.ogrenciler) && mevcut.ogrenciler.length > 0 && mobilDurum.ogrenciler.length === 0) {
+
+          if (mevcut && Array.isArray(mevcut.ogrenciler) && mevcut.ogrenciler.length > 0 && mobilDurum.ogrenciler.length === 0) {
             mobilDurum.ogrenciler = mevcut.ogrenciler;
           }
+
+          // Öz-onarım (Self-Healing): Eşzamanlı yükleme sonrası birleşik küme ana depodan genişse diski ve diğer sekmeyi tek adımda iyileştir!
+          const diskImza = imzaMobilListeDurumu(mevcutDiskOkumalar);
+          const bellekImza = imzaMobilListeDurumu(mobilDurum.okumaSonuclari);
+          if (bellekImza !== diskImza) {
+            kaydetYerelDepoya();
+          }
+
           const altSayac = document.getElementById('mobil-alt-sayac');
           if (altSayac) altSayac.textContent = String(mobilDurum.okumaSonuclari.length);
           if (typeof guncelleMobilSonucListesi === 'function') guncelleMobilSonucListesi();
@@ -1118,6 +1305,7 @@
 
       function kaydetYerelDepoya(secenek = {}) {
         try {
+          const aktifKod = etkinMobilSinavAnahtari();
           const mevcutHam = localStorage.getItem(MOBIL_DEPO_ANAHTAR);
           const mevcut = mevcutHam ? JSON.parse(mevcutHam) : {};
           const zorlaSifirla = Boolean(secenek && secenek.zorlaSifirla);
@@ -1126,24 +1314,59 @@
             mevcut.silinenIdler.forEach((id) => { if (id) silinenMobilKayitIdleri.add(String(id)); });
           }
 
-          if (!zorlaSifirla && Array.isArray(mevcut.okumaSonuclari) && mevcut.okumaSonuclari.length > 0) {
-            mobilDurum.okumaSonuclari = birlestirMobilOkumaListeleri(
+          const etkinSifirMs = secenek && Number(secenek.tamSifirlamaMs) > 0
+            ? Number(secenek.tamSifirlamaMs)
+            : Math.max(sonYerelSifirlamaMs, Number(mevcut.tamSifirlamaMs) || 0);
+          if (etkinSifirMs > sonYerelSifirlamaMs) {
+            sonYerelSifirlamaMs = etkinSifirMs;
+          }
+
+          const mevcutDiskOkumalar = (!mevcut.aktifSinavAnahtari || mevcut.aktifSinavAnahtari === aktifKod)
+            ? mevcut.okumaSonuclari
+            : (mevcut.sinavSonuclariHaritasi && mevcut.sinavSonuclariHaritasi[aktifKod]);
+
+          if (zorlaSifirla) {
+            temizleTumAtomikMobilKayitlar();
+          } else {
+            if (silinenMobilKayitIdleri.size > 0) {
+              temizleTumAtomikMobilKayitlar(silinenMobilKayitIdleri);
+            }
+            const atomikKayitlar = okuTumAtomikMobilKayitlar(sonYerelSifirlamaMs, silinenMobilKayitIdleri);
+            let birlesik = birlestirMobilOkumaListeleri(
               mobilDurum.okumaSonuclari,
-              mevcut.okumaSonuclari,
+              atomikKayitlar,
               silinenMobilKayitIdleri
             );
+            if (Array.isArray(mevcutDiskOkumalar) && mevcutDiskOkumalar.length > 0) {
+              birlesik = birlestirMobilOkumaListeleri(
+                birlesik,
+                mevcutDiskOkumalar,
+                silinenMobilKayitIdleri
+              );
+            }
+            mobilDurum.okumaSonuclari = birlesik;
           }
 
           // 1.3 MB piksel dizilerini (kanonikIkili / kanonikGri / kanonikHarita) ayıklayarak QuotaExceededError'u önle; masaüstü deposuna ASLA yazma!
-          mevcut.okumaSonuclari = (mobilDurum.okumaSonuclari || []).map((s) => {
-            if (!s || typeof s !== 'object') return s;
-            const { kanonikIkili, kanonikGri, kanonikHarita, ...hafifSonuc } = s;
-            return hafifSonuc;
+          const varsayilanDamgaMs = zorlaSifirla ? Math.max(Date.now(), sonYerelSifirlamaMs + 1) : Date.now();
+          const hafifListe = (mobilDurum.okumaSonuclari || []).map((s) => hafifletMobilKayit(s, varsayilanDamgaMs));
+          mevcut.aktifSinavAnahtari = aktifKod;
+          mevcut.okumaSonuclari = hafifListe;
+          if (!mevcut.sinavSonuclariHaritasi || typeof mevcut.sinavSonuclariHaritasi !== 'object') {
+            mevcut.sinavSonuclariHaritasi = {};
+          }
+          mevcut.sinavSonuclariHaritasi[aktifKod] = hafifListe;
+
+          // Her kaydı kendi ayrık atomik anahtarına yaz (eşzamanlı 2+ sekme asla aynı anahtarı ezmez!)
+          hafifListe.forEach((hs) => {
+            const atomikAnahtar = hesaplaMobilAtomikAnahtar(hs);
+            if (atomikAnahtar) {
+              try { localStorage.setItem(atomikAnahtar, JSON.stringify(hs)); } catch (_) {}
+            }
           });
+
           mevcut.silinenIdler = Array.from(silinenMobilKayitIdleri).slice(-250);
-          if (secenek && Number(secenek.tamSifirlamaMs) > 0) {
-            mevcut.tamSifirlamaMs = Number(secenek.tamSifirlamaMs);
-          } else if (sonYerelSifirlamaMs > 0) {
+          if (sonYerelSifirlamaMs > 0) {
             mevcut.tamSifirlamaMs = sonYerelSifirlamaMs;
           }
           mevcut.mobilSinavYapisi = mobilDurum.sinavYapisi;
@@ -1157,8 +1380,19 @@
           if (altSayac) altSayac.textContent = String(mobilDurum.okumaSonuclari.length);
           if (mobilDepoBroadcastKanal) {
             try {
-              mobilDepoBroadcastKanal.postMessage({ tip: 'MOBIL_DEPO_GUNCELLENDI', sekmeId: mobilSekmeId });
+              mobilDepoBroadcastKanal.postMessage({
+                tip: 'MOBIL_DEPO_GUNCELLENDI',
+                sekmeId: mobilSekmeId,
+                sinavAnahtari: aktifKod,
+                zorlaSifirla,
+                tamSifirlamaMs: mevcut.tamSifirlamaMs || 0,
+                silinenIdler: mevcut.silinenIdler,
+                okumaSonuclari: hafifListe
+              });
             } catch (_) {}
+          }
+          if (!zorlaSifirla) {
+            planlaMobilCokluSekmeUzlasma();
           }
         } catch (err) {
           mobilUyariGoster('⚠️ Yerel depolama alanı dolu (' + (err && err.message ? err.message : 'Quota') + '). Lütfen sonuçları CSV/JSON olarak dışa aktarın.');
@@ -1494,6 +1728,10 @@
           mobilDurum.okumaSonuclari[idx] = sonuc;
         } else {
           mobilDurum.okumaSonuclari.unshift(sonuc);
+        }
+        sonuc._kayitMs = Date.now();
+        if (!sonuc.numaraEslesmediMi && sonuc.id) {
+          temizleTumAtomikMobilKayitlar(new Set([String(sonuc.id)]));
         }
 
         kaydetYerelDepoya();
@@ -2474,7 +2712,7 @@
         }
 
         window.addEventListener('storage', (ev) => {
-          if (!ev || ev.key === MOBIL_DEPO_ANAHTAR) {
+          if (!ev || !ev.key || ev.key === MOBIL_DEPO_ANAHTAR || ev.key.startsWith(MOBIL_ATOMIK_KAYIT_ONEK)) {
             senkronizeEtMobilDepodan();
           }
         });
@@ -2482,7 +2720,7 @@
         if (mobilDepoBroadcastKanal) {
           mobilDepoBroadcastKanal.onmessage = (ev) => {
             if (ev && ev.data && ev.data.tip === 'MOBIL_DEPO_GUNCELLENDI' && ev.data.sekmeId !== mobilSekmeId) {
-              senkronizeEtMobilDepodan();
+              senkronizeEtMobilDepodan(ev.data);
             }
           };
         }

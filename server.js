@@ -1168,20 +1168,15 @@ function istekIsleyici(req, res) {
         const eskiOzet = mevcut && mevcut.veri ? hesaplaKasaOzeti(mevcut.veri) : { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
 
         if (mevcut && mevcutRev > 0) {
-          if (bazRev === null || !Number.isFinite(bazRev) || bazRev !== mevcutRev) {
-            return gonderJson(res, 409, {
-              hata: 'Sunucu kasası revizyon uyuşmazlığı: Güncel revizyon numarası eşleşmiyor.',
-              cakisma: true,
-              bulutRevizyonNo: mevcutRev,
-              revizyonNo: mevcutRev,
-              ozetBilgi: mevcut.ozetBilgi,
-              bulutVeri: mevcut.veri,
-              veriPaketi: mevcut.veri
-            });
-          }
-
           const eskiDoluMu = eskiOzet.ders > 0 || eskiOzet.soru > 0 || eskiOzet.ogrenci > 0;
           const yeniTamBosMu = yeniOzet.ders === 0 && yeniOzet.soru === 0 && yeniOzet.ogrenci === 0;
+          const azalmaVarMi =
+            yeniOzet.ders < eskiOzet.ders ||
+            yeniOzet.soru < eskiOzet.soru ||
+            yeniOzet.ogrenci < eskiOzet.ogrenci ||
+            yeniOzet.sinav < eskiOzet.sinav;
+          const veriKaybiEngellendiMi = Boolean(eskiDoluMu && (yeniTamBosMu || (azalmaVarMi && !silmeOnayi)));
+
           if (eskiDoluMu && yeniTamBosMu) {
             return gonderJson(res, 409, {
               hata: 'Veri kaybı koruması: Dolu kasa boş veri ile sıfırlanamaz.',
@@ -1195,11 +1190,19 @@ function istekIsleyici(req, res) {
             });
           }
 
-          const azalmaVarMi =
-            yeniOzet.ders < eskiOzet.ders ||
-            yeniOzet.soru < eskiOzet.soru ||
-            yeniOzet.ogrenci < eskiOzet.ogrenci ||
-            yeniOzet.sinav < eskiOzet.sinav;
+          if (bazRev === null || !Number.isFinite(bazRev) || bazRev !== mevcutRev) {
+            return gonderJson(res, 409, {
+              hata: 'Sunucu kasası revizyon uyuşmazlığı: Güncel revizyon numarası eşleşmiyor.',
+              cakisma: true,
+              veriKaybiKorumasi: veriKaybiEngellendiMi,
+              bulutRevizyonNo: mevcutRev,
+              revizyonNo: mevcutRev,
+              ozetBilgi: mevcut.ozetBilgi,
+              bulutVeri: mevcut.veri,
+              veriPaketi: mevcut.veri
+            });
+          }
+
           if (azalmaVarMi && !silmeOnayi) {
             return gonderJson(res, 409, {
               hata: 'Veri kaybı koruması: Açık silme onayı olmadan mevcut ders, soru, öğrenci veya sınav sayısı azaltılamaz.',

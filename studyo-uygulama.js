@@ -117,6 +117,7 @@
       }
     },
     revizyonNo: 0,
+    sonBulutRevizyonNo: 0,
     sekmeId: 'SEKME-' + Math.random().toString(36).slice(2, 9),
     kayitliSinavlar: [],
     aktifKayitliSinavId: '',
@@ -644,6 +645,8 @@
       });
       const kayitliRev = Number(localStorage.getItem('SINAV_SON_REVIZYON_V1') || 0);
       if (Number.isFinite(kayitliRev) && kayitliRev > 0) durum.revizyonNo = kayitliRev;
+      const kayitliBulutRev = Number(localStorage.getItem('SINAV_SON_BULUT_REV_V1') || 0);
+      if (Number.isFinite(kayitliBulutRev) && kayitliBulutRev > 0) durum.sonBulutRevizyonNo = kayitliBulutRev;
       const ham = localStorage.getItem(DEPO_ANAHTAR);
       if (ham) {
         const hamNesne = JSON.parse(ham);
@@ -929,6 +932,7 @@
         if (silmeOnayi && yerelDoluMu && karsiRev > 0) {
           // Kullanıcının açık silme işlemi: güncel bulut baz revizyonunu alıp tek sefer yeniden dene
           durum.sonBulutRevizyonNo = karsiRev;
+          try { localStorage.setItem('SINAV_SON_BULUT_REV_V1', String(karsiRev)); } catch (_) {}
           durum.revizyonNo = Math.max(karsiRev, durum.revizyonNo || 0) + 1;
           verileriKaydet({ bulutAtla: true, zorlaEz: true, silmeOnayi: true });
           return await bulutKasayaSenkronla(zorlaEz, anlikYedekAl, true, yenidenDenemeSayaci + 1);
@@ -939,6 +943,7 @@
         uygulaYuklenenDurumNesnesi(birlesik);
         yukleAktifDersIzoleDurumu(durum.aktifDersId);
         durum.sonBulutRevizyonNo = karsiRev;
+        try { localStorage.setItem('SINAV_SON_BULUT_REV_V1', String(karsiRev)); } catch (_) {}
         durum.revizyonNo = Math.max(karsiRev, durum.revizyonNo || 0) + 1;
         verileriKaydet({ bulutAtla: true });
         yenileTumSekmePanelleriUI();
@@ -948,7 +953,10 @@
         if (Number(veri.revizyonNo) > 0) {
           durum.revizyonNo = Number(veri.revizyonNo);
           durum.sonBulutRevizyonNo = Number(veri.revizyonNo);
-          try { localStorage.setItem('SINAV_SON_REVIZYON_V1', String(durum.revizyonNo)); } catch (_) {}
+          try {
+            localStorage.setItem('SINAV_SON_REVIZYON_V1', String(durum.revizyonNo));
+            localStorage.setItem('SINAV_SON_BULUT_REV_V1', String(durum.sonBulutRevizyonNo));
+          } catch (_) {}
         }
         durum.bulutSenkronDurumu = 'senkron';
         guncelleKayitDurumCubuguUI();
@@ -958,6 +966,17 @@
     durum.bulutSenkronDurumu = 'yerel';
     guncelleKayitDurumCubuguUI();
     return { basarili: false };
+  }
+
+  function gercekYerelVeriVarMiKontrol() {
+    const ozelDersVar = Array.isArray(durum.dersler) && durum.dersler.some(
+      (d) => d && (d.id !== 'genel' || d.kod !== 'DERS' || d.ad !== 'Yeni Ders')
+    );
+    return ozelDersVar ||
+      (Array.isArray(durum.sorular) && durum.sorular.length > 0) ||
+      (Array.isArray(durum.ogrenciKayitlari) && durum.ogrenciKayitlari.length > 0) ||
+      (Array.isArray(durum.kayitliSinavlar) && durum.kayitliSinavlar.length > 0) ||
+      (Array.isArray(durum.okumaSonuclari) && durum.okumaSonuclari.length > 0);
   }
 
   async function bulutKasadanYukle(zorlaUzerineYaz = false) {
@@ -981,40 +1000,41 @@
         (!Array.isArray(bulutPaket.sorular) || bulutPaket.sorular.length === 0) &&
         (!Array.isArray(bulutOgrListe) || bulutOgrListe.length === 0)
       );
-      const yerelDoluMu = durum.dersler.length > 0 || durum.sorular.length > 0 || durum.ogrenciKayitlari.length > 0;
+      const yerelGercekDoluMu = gercekYerelVeriVarMiKontrol();
 
       if (bulutBosMu) {
-        if (yerelDoluMu) {
+        if (yerelGercekDoluMu) {
           await bulutKasayaSenkronla(false, true, false);
         }
         return { basarili: true, kaynak: 'yerel_korundu' };
       }
 
       const bulutRev = Number(veri.revizyonNo) || 0;
-      const yerelRev = Number(durum.revizyonNo) || 0;
+      const sonBilinenBulutRev = Number(durum.sonBulutRevizyonNo) || 0;
 
-      if (!zorlaUzerineYaz && yerelDoluMu && bulutRev <= yerelRev) {
-        if (bulutRev > 0) durum.sonBulutRevizyonNo = bulutRev;
+      if (!zorlaUzerineYaz && yerelGercekDoluMu && sonBilinenBulutRev > 0 && bulutRev <= sonBilinenBulutRev) {
+        if (bulutRev > 0) {
+          durum.sonBulutRevizyonNo = bulutRev;
+          try { localStorage.setItem('SINAV_SON_BULUT_REV_V1', String(bulutRev)); } catch (_) {}
+        }
         durum.bulutSenkronDurumu = 'senkron';
         guncelleKayitDurumCubuguUI();
-        if (yerelRev > bulutRev) {
-          planlaBulutSenkron(false, false);
-        }
         return { basarili: true, kaynak: 'yerel_guncel', revizyonNo: durum.revizyonNo };
       }
 
-      const uygulanacak = zorlaUzerineYaz
+      const uygulanacak = (zorlaUzerineYaz || !yerelGercekDoluMu)
         ? bulutPaket
-        : (yerelDoluMu ? birlestirIkiDurumKayipsiz(olusturTamVeriPaketi(), bulutPaket) : bulutPaket);
+        : birlestirIkiDurumKayipsiz(olusturTamVeriPaketi(), bulutPaket);
 
       uygulaYuklenenDurumNesnesi(uygulanacak);
       yukleAktifDersIzoleDurumu(durum.aktifDersId);
       if (bulutRev > 0) {
         durum.sonBulutRevizyonNo = bulutRev;
+        try { localStorage.setItem('SINAV_SON_BULUT_REV_V1', String(bulutRev)); } catch (_) {}
       }
       durum.revizyonNo = Math.max(bulutRev || 1, durum.revizyonNo || 1);
       durum.bulutSenkronDurumu = 'senkron';
-      verileriKaydet({ bulutAtla: !yerelDoluMu || zorlaUzerineYaz });
+      verileriKaydet({ bulutAtla: !yerelGercekDoluMu || zorlaUzerineYaz });
       yenileTumSekmePanelleriUI();
       return { basarili: true, kaynak: 'bulut_yuklendi', revizyonNo: durum.revizyonNo };
     } catch (_) {
@@ -1097,6 +1117,12 @@
     }
   }
 
+  function aktifSinavBasildiKilitliMi() {
+    if (!durum.aktifKayitliSinavId) return false;
+    const ks = (durum.kayitliSinavlar || []).find((x) => x && x.id === durum.aktifKayitliSinavId);
+    return Boolean(ks && ks.basildiKilidi);
+  }
+
   /* 14 Haftalık Sınav Kapsamı Seçim ve Manuel Kota Izgarasını Güncelleme */
   function guncelleHaftaSecimIzgarasiUI() {
     const kutu = document.getElementById('kutu-hafta-secim-izgara');
@@ -1112,6 +1138,7 @@
     }
     if (!kutu) return;
 
+    const basildiKilit = aktifSinavBasildiKilitliMi();
     const dersSorulari = durum.sorular.filter((s) => s.dersId === durum.aktifDersId || s.dersId === 'genel');
     let html = '';
     for (let h = 1; h <= 14; h++) {
@@ -1119,13 +1146,13 @@
       const bankadaAdet = dersSorulari.filter((s) => C.normalizeHaftaNo(s.hafta, 1) === h).length;
       const kotaDeger = durum.haftaKotalari[h] !== undefined ? durum.haftaKotalari[h] : 2;
       const kotaInputHTML = (dagilimModu === 'manuel_kota' && seciliMi)
-        ? `<input type="number" min="0" max="35" step="1" value="${kotaDeger}" data-hafta-kota="${h}" title="${h}. Haftadan seçilecek soru kotası" style="width:100%; min-width:0; padding:1px 2px; font-size:0.72rem; font-weight:700; text-align:center;" />`
+        ? `<input type="number" min="0" max="35" step="1" value="${kotaDeger}" data-hafta-kota="${h}" ${basildiKilit ? 'disabled' : ''} title="${h}. Haftadan seçilecek soru kotası" style="width:100%; min-width:0; padding:1px 2px; font-size:0.72rem; font-weight:700; text-align:center;" />`
         : '';
 
       html += `
-        <div style="display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:2px; min-width:0; padding:3px 3px; border-radius:5px; border:1px solid ${seciliMi ? 'var(--birincil)' : 'var(--kenar)'}; background:${seciliMi ? 'var(--birincil-acik)' : 'var(--bg-kart)'}; font-size:0.71rem; overflow:hidden;">
-          <label style="display:flex; align-items:center; justify-content:center; gap:2px; cursor:pointer; font-weight:${seciliMi ? '700' : '500'}; white-space:nowrap;">
-            <input type="checkbox" data-hafta-sec="${h}" ${seciliMi ? 'checked' : ''} style="width:auto; margin:0;" />
+        <div style="display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:2px; min-width:0; padding:3px 3px; border-radius:5px; border:1px solid ${seciliMi ? 'var(--birincil)' : 'var(--kenar)'}; background:${seciliMi ? 'var(--birincil-acik)' : 'var(--bg-kart)'}; font-size:0.71rem; overflow:hidden; ${basildiKilit ? 'opacity:0.65;' : ''}">
+          <label style="display:flex; align-items:center; justify-content:center; gap:2px; cursor:${basildiKilit ? 'not-allowed' : 'pointer'}; font-weight:${seciliMi ? '700' : '500'}; white-space:nowrap;">
+            <input type="checkbox" data-hafta-sec="${h}" ${seciliMi ? 'checked' : ''} ${basildiKilit ? 'disabled' : ''} style="width:auto; margin:0;" />
             <span>H${h}<span style="font-size:0.62rem; color:var(--metin-soluk);">(${bankadaAdet})</span></span>
           </label>
           ${kotaInputHTML}
@@ -1271,13 +1298,14 @@
       'ayar-haric-tut-sorulanlar', 'ayar-her-oc-en-az-bir', 'btn-puan-100-dengele',
       'btn-kombinasyon-uygula', 'btn-hazir-sablon-25', 'baski-ogrenci-soru-modu',
       'ayar-kitapcik-gruplar', 'btn-hafta-vize', 'btn-hafta-final',
-      'btn-hafta-son7', 'btn-hafta-tersle', 'btn-soru-secimlerini-sifirla'
+      'btn-hafta-son7', 'btn-hafta-tersle', 'btn-kagit-degisim-sifirla',
+      'btn-sinav-soruldu-isaretle', 'btn-soru-secimlerini-sifirla'
     ];
     kilitlenenIdler.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.disabled = kilit;
     });
-    document.querySelectorAll('#hafta-secim-izgara input[type="checkbox"], #hafta-kota-izgara input').forEach((el) => {
+    document.querySelectorAll('#kutu-hafta-secim-izgara input[type="checkbox"], #kutu-hafta-secim-izgara input, #hafta-secim-izgara input[type="checkbox"], #hafta-kota-izgara input').forEach((el) => {
       el.disabled = kilit;
     });
     document.querySelectorAll('#a4-onizleme-sahne [data-soru-degistir-idx], #a4-onizleme-sahne [data-soru-yukari-idx], #a4-onizleme-sahne [data-soru-asagi-idx], #a4-onizleme-sahne [data-soru-duzenle-id]').forEach((el) => {
@@ -7167,7 +7195,7 @@
         guncelleHocaYonetimPaneliUI();
         bilgiKutu.textContent = `✅ Hoş geldiniz ${durum.hocaHesap.adSoyad} (${durum.hocaHesap.kullaniciAdi}). Öğretmen oturumu doğrulandı.`;
         bilgiKutu.style.display = 'block';
-        bulutKasadanYukle(false).catch(() => {});
+        await bulutKasadanYukle(false).catch(() => {});
       });
     }
 

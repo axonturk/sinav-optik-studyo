@@ -1058,7 +1058,7 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
 
       // 5B. Soru Bankasında Enum-Kilitli Otomatik ÖÇ + Hafta + Bloom + Zorluk Analizi ve Onay Masası
       const bolognaDersId = await sayfa.$eval('#aktif-ders-sec', (el) => el.value);
-      await sayfa.evaluate((dId) => {
+      await sayfa.evaluate(async (dId) => {
         const d = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
         const digerSorular = (d.sorular || []).filter((q) => q.dersId !== dId);
         d.sorular = digerSorular.concat([
@@ -1067,6 +1067,21 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
           { id: 'ag-3', dersId: dId, tur: 'test', zorluk: 'Orta', hafta: 1, ocKodu: '', metin: '192.168.10.0/24 IPv4 alt ağ adresleme yapısını 4 alt ağa bölmek için subnet mask değerini hesaplayınız.', siklar: ['255.255.255.192', '255.255.0.0', '255.0.0.0', '255.255.255.0', '255.255.255.252'], dogruHarf: 'A' },
           { id: 'ag-4', dersId: dId, tur: 'klasik', zorluk: 'Zor', hafta: 1, ocKodu: '', metin: 'Kurumsal ağ paylaşım ve güvenlik duvarı erişim politikasını sıfır güven ilkelerine göre tasarlayınız.', puan: 20, cevapSatir: 4 }
         ]);
+        const token = sessionStorage.getItem('hoca_token') || '';
+        if (token) {
+          const mevcut = await fetch('/api/bulut-kasa', { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.json()).catch(() => null);
+          const bazRev = Number(mevcut && mevcut.revizyonNo) || 0;
+          const putYanit = await fetch('/api/bulut-kasa', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ veri: d, bazRevizyonNo: bazRev || undefined, silmeOnayi: true, zorlaEz: true })
+          }).then((r) => r.json()).catch(() => null);
+          if (putYanit && Number(putYanit.revizyonNo) > 0) {
+            d.revizyonNo = Number(putYanit.revizyonNo);
+            localStorage.setItem('SINAV_SON_REVIZYON_V1', String(d.revizyonNo));
+            localStorage.setItem('SINAV_SON_BULUT_REV_V1', String(d.revizyonNo));
+          }
+        }
         localStorage.setItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2', JSON.stringify(d));
       }, bolognaDersId);
       await sayfa.reload({ waitUntil: 'networkidle0' });

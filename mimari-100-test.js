@@ -740,6 +740,25 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
       body: JSON.stringify({ veri: {}, bazRevizyonNo: guncelRev, zorlaEz: true, silmeOnayi: true })
     });
+    const zorlaBosJson = await zorlaBosYanit.json();
+    const eksikRevBosYanit = await fetch(`${taban}/api/bulut-kasa`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
+      body: JSON.stringify({ veri: {} })
+    });
+    const eksikRevBosJson = await eksikRevBosYanit.json();
+    const eskiRevBosYanit = await fetch(`${taban}/api/bulut-kasa`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
+      body: JSON.stringify({ veri: {}, bazRevizyonNo: Math.max(0, guncelRev - 1) })
+    });
+    const eskiRevBosJson = await eskiRevBosYanit.json();
+    const ileriRevBosYanit = await fetch(`${taban}/api/bulut-kasa`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hocaToken}` },
+      body: JSON.stringify({ veri: {}, bazRevizyonNo: guncelRev + 50 })
+    });
+    const ileriRevBosJson = await ileriRevBosYanit.json();
     const kismiAzalanPaket = JSON.parse(JSON.stringify(guncelVeri));
     kismiAzalanPaket.dersler = kismiAzalanPaket.dersler.slice(0, 1);
     const onaysizKismiSilYanit = await fetch(`${taban}/api/bulut-kasa`, {
@@ -748,9 +767,15 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
       body: JSON.stringify({ veri: kismiAzalanPaket, bazRevizyonNo: guncelRev })
     });
     kontrol(
-      'Karşı-Örnek 1 (Bulut Kasa): Eksik/yüksek bazRevizyonNo, zorlaEz:{} ve onaysız kısmi veri azalması 409 Conflict ile reddedildi',
-      eksikBazYanit.status === 409 && yuksekBazYanit.status === 409 && zorlaBosYanit.status === 409 && onaysizKismiSilYanit.status === 409,
-      `${eksikBazYanit.status}/${yuksekBazYanit.status}/${zorlaBosYanit.status}/${onaysizKismiSilYanit.status}`
+      'Karşı-Örnek 1 (Bulut Kasa): Eksik/yüksek bazRevizyonNo, her revizyonda veri:{} (veriKaybiKorumasi:true) ve onaysız kısmi veri azalması 409 Conflict ile reddedildi',
+      eksikBazYanit.status === 409 &&
+        yuksekBazYanit.status === 409 &&
+        zorlaBosYanit.status === 409 && zorlaBosJson.veriKaybiKorumasi === true &&
+        eksikRevBosYanit.status === 409 && eksikRevBosJson.veriKaybiKorumasi === true &&
+        eskiRevBosYanit.status === 409 && eskiRevBosJson.veriKaybiKorumasi === true &&
+        ileriRevBosYanit.status === 409 && ileriRevBosJson.veriKaybiKorumasi === true &&
+        onaysizKismiSilYanit.status === 409,
+      `${eksikBazYanit.status}/${yuksekBazYanit.status}/${zorlaBosYanit.status}(${zorlaBosJson.veriKaybiKorumasi})/${eksikRevBosJson.veriKaybiKorumasi}/${eskiRevBosJson.veriKaybiKorumasi}/${ileriRevBosJson.veriKaybiKorumasi}/${onaysizKismiSilYanit.status}`
     );
 
     // 7.2: OQV2 128-bit CSPRNG anahtar, anahtarsız üretim engeli ve 64-bit benzersiz Nonce karşı-örneği
@@ -794,18 +819,28 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
       const cozulenMaster = window.SinavOptikCekirdek.cozKompaktSetupQrPaketi(linkHref);
       const storedTestA = aktifSnap && aktifSnap.cevapAnahtarlari && aktifSnap.cevapAnahtarlari.A ? aktifSnap.cevapAnahtarlari.A.test.join('') : '';
       const masterTestA = cozulenMaster && cozulenMaster.cevapAnahtarlari && cozulenMaster.cevapAnahtarlari.A ? cozulenMaster.cevapAnahtarlari.A.test.join('') : '';
+      const haftaKutulari = Array.from(document.querySelectorAll('#kutu-hafta-secim-izgara input[type="checkbox"]'));
       return {
         storedTestA,
         masterTestA,
         esitMi: Boolean(storedTestA && storedTestA === masterTestA),
         kombinasyonKilitli: document.getElementById('btn-kombinasyon-uygula').disabled === true,
         ogrenciModuKilitli: document.getElementById('baski-ogrenci-soru-modu').disabled === true,
-        sablon25Kilitli: document.getElementById('btn-hazir-sablon-25').disabled === true
+        sablon25Kilitli: document.getElementById('btn-hazir-sablon-25').disabled === true,
+        degisimSifirlaKilitli: document.getElementById('btn-kagit-degisim-sifirla').disabled === true,
+        haftaSayisi: haftaKutulari.length,
+        haftaKilitliSayisi: haftaKutulari.filter((c) => c.disabled === true).length
       };
     });
     kontrol(
-      'Karşı-Örnek 3 (Snapshot Kilidi): Kayıtlı sınav A grubu anahtarı ile Master QR A grubu anahtarı %100 aynı ve kombinasyon/mod düğmeleri kilitli',
-      snapKilitKontrol.esitMi && snapKilitKontrol.kombinasyonKilitli && snapKilitKontrol.ogrenciModuKilitli && snapKilitKontrol.sablon25Kilitli,
+      'Karşı-Örnek 3 (Snapshot Kilidi): Kayıtlı sınav A grubu anahtarı === Master QR A grubu anahtarı, 14/14 hafta kutusu ve tüm düzenleme düğmeleri disabled',
+      snapKilitKontrol.esitMi &&
+        snapKilitKontrol.kombinasyonKilitli &&
+        snapKilitKontrol.ogrenciModuKilitli &&
+        snapKilitKontrol.sablon25Kilitli &&
+        snapKilitKontrol.degisimSifirlaKilitli &&
+        snapKilitKontrol.haftaSayisi === 14 &&
+        snapKilitKontrol.haftaKilitliSayisi === 14,
       JSON.stringify(snapKilitKontrol)
     );
     // Sonraki FRM-059 adımı için kilidi aç ve taslağa dön
@@ -813,14 +848,30 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     await sayfa.select('#sec-kayitli-sinav', '');
     await bekle(150);
 
-    // 7.4: Z2 Master Kurulum QR — 126 adet SIFIR ortak önekli 10 haneli numara + kesilmemiş uzun Türkçe ad soyad
-    const ornekAdlar = ['ABDURRAHMAN ALPARSLAN', 'ZEYNEP SULTAN', 'MUHAMMED MUSTAFA', 'ŞERİFE NURBANU', 'ÇAĞATAY GÖKTUĞ', 'İBRAHİM HALİL', 'ÖMER FARUK', 'AYŞEGÜL BÜŞRA'];
-    const ornekSoyadlar = ['KARAKOYUNLUOĞLU', 'BÜYÜKÇEKMECELİOĞLU', 'KAHRAMANMARAŞLIOĞLU', 'ŞEREFLİKOÇHİSARLI', 'DEMİRCİOĞULLARI', 'ÇETİNKAYAOĞLU', 'GÜMÜŞHANELİOĞLU'];
-    const sifirOnekli126 = Array.from({ length: 126 }, (_, i) => {
+    // 7.4: Z2 Master Kurulum QR — Hem tekrarlı hem de 126 FARKLI (21-41 krk, KÂMİL dahil) SIFIR ortak önekli 10 haneli numaralı Türkçe ad-soyad kayıpsız sığar
+    const cesitliOnAdlar = [
+      'ABDURRAHMAN ALPARSLAN', 'ÖZGE NİLÜFER', 'AHMET SELÇUK', 'SUDE İREM', 'MUSTAFA KEMAL', 'MUSTAFA ÇAĞRI',
+      'CEMRE İPEK', 'AYŞEGÜL BÜŞRA', 'FATMA ZEHRA', 'MELTEM GÜLŞEN', 'ÇAĞATAY GÖKTUĞ', 'CANSU NURGÜL',
+      'ŞEYMA DİLARA', 'ZEYNEP SULTAN', 'GÖKÇE BENGİSU', 'KÂMİL HÜSEYİN', 'ZEHRA MELEK', 'EMİNE SÜMEYYE',
+      'HALİL İBRAHİM', 'HANDE GÖZDE', 'HATİCE KÜBRA', 'YİĞİT DOĞUKAN', 'MURAT ERDEM', 'İBRAHİM HALİL',
+      'FAHRİYE CEREN', 'EDA NURDAN', 'MUHAMMED MUSTAFA', 'TURGUT ALPEREN', 'ÖZLEM PINAR', 'YAĞMUR BİLGE',
+      'SÜLEYMAN NECATİ', 'ALİ İHSAN', 'ONUR ÇAĞLAR', 'MERYEM YASEMİN', 'YUSUF KEREM', 'BERKAY AYTAÇ',
+      'ÖMER FARUK', 'SELİM GÖKHAN', 'KÜRŞAT GÜRKAN', 'ŞERİFE NURBANU', 'BEYZA GÜLSÜM', 'RÜMEYSA MELİKE'
+    ];
+    const cesitliSoyadlar = [
+      'KARAKOYUNLUOĞLU', 'ÖZKAHVECİOĞLU', 'YÜKSEKGÜLMEZ', 'KÜÇÜKALİOĞLU', 'ŞAHİNDEMİROĞLU', 'BÜYÜKÇEKMECELİOĞLU',
+      'ÇELİKTAŞOĞULLARI', 'ÖZDOĞANKAYA', 'TAŞKINDEMİROĞLU', 'ÖZÇELİKPINAR', 'KAHRAMANMARAŞLIOĞLU', 'GÖKDEMİRTAŞ',
+      'AKPINARKOÇ', 'YÜKSEKKARAAĞAÇ', 'UZUNDEMİRCİOĞLU', 'ŞEREFLİKOÇHİSARLI', 'YÜCEKARABULUT', 'KARAKUŞOĞULLARI',
+      'SOYLUÇAKIROĞLU', 'TÜRKERKARAHAN', 'DEMİRCİOĞULLARI', 'ÖZKARAHASANOĞLU', 'ŞANLIGÜMÜŞHANE', 'KIRIKHANOĞULLARI',
+      'ÇOBANYILDIZOĞLU', 'ÇETİNKAYAOĞLU', 'GÜRBÜZCAN', 'SARIOĞLUTEKİN', 'YILMAZSOYOĞLU', 'KOÇYİĞİTOĞULLARI',
+      'GÜMÜŞHANELİOĞLU', 'KARAOĞLANOĞLU', 'GÜNEŞKARATAŞ', 'KARAÇOBANOĞLU', 'GÜZELÇETİNKAYA', 'SARIOĞULLARI',
+      'BAYRAKÇIOĞULLARI', 'ERDOĞANÖZÇELİK', 'PEHLİVANOĞULLARI', 'ŞAHİNBAŞOĞLU', 'KARADENİZLİOĞLU', 'KÜÇÜKKARAAĞAÇ'
+    ];
+    const sifirOnekliCesitli126 = Array.from({ length: 126 }, (_, i) => {
       const onHane = String(((i * 73856093 + 19349663) >>> 0) % 9000000000 + 1000000000).slice(0, 8) + String(i % 100).padStart(2, '0');
       return {
         ogrNo: onHane,
-        adSoyad: `${ornekAdlar[i % ornekAdlar.length]} ${ornekSoyadlar[i % ornekSoyadlar.length]}`
+        adSoyad: `${cesitliOnAdlar[i % 42]} ${cesitliSoyadlar[(i + Math.floor(i / 42)) % 42]}`
       };
     });
     const z2Paket = Cekirdek.uretKompaktSetupQrPaketi({
@@ -834,16 +885,16 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
       klasikToplamPuan: 0,
       sinavGizliAnahtar: csprngAnahtar1,
       cevapAnahtarlari: { A: { dy: Array(10).fill('D'), test: Array(15).fill('C'), klasik: [] } },
-      ogrenciler: sifirOnekli126
+      ogrenciler: sifirOnekliCesitli126
     }, 'https://sinav.axonturk.workers.dev');
     const z2Cozulen = Cekirdek.cozKompaktSetupQrPaketi(z2Paket.url);
     const z2TamIsimEslesme = z2Cozulen && Array.isArray(z2Cozulen.ogrenciler)
-      ? z2Cozulen.ogrenciler.filter((o, idx) => o.ogrNo === sifirOnekli126[idx].ogrNo && o.adSoyad === sifirOnekli126[idx].adSoyad).length
+      ? z2Cozulen.ogrenciler.filter((o, idx) => o.ogrNo === sifirOnekliCesitli126[idx].ogrNo && o.adSoyad === sifirOnekliCesitli126[idx].adSoyad).length
       : 0;
     kontrol(
-      'Karşı-Örnek 4 (Z2 Master QR): Ortak öneki olmayan 126 öğrenci + kesilmemiş uzun Türkçe isimler tek QR içine sığdı (<2900 krk, 126/126 tam eşleşme)',
-      z2Paket.ogrenciDahilMi === true && z2Paket.url.length < 2900 && z2TamIsimEslesme === 126,
-      `len=${z2Paket.url.length}, eslesen=${z2TamIsimEslesme}`
+      'Karşı-Örnek 4 (Z2 Master QR): 126 benzersiz 21-41 krk Türkçe ad-soyad (KÂMİL dahil) + sıfır ortak önekli 10 haneli numara %100 kayıpsız tek QR içine sığdı (<2890 krk, 126/126 tam ad)',
+      z2Paket.ogrenciDahilMi === true && z2Paket.tamAdKorunduMu === true && z2Paket.url.length <= 2890 && z2TamIsimEslesme === 126,
+      `len=${z2Paket.url.length}, benzersizAd=${new Set(sifirOnekliCesitli126.map((x) => x.adSoyad)).size}, eslesen=${z2TamIsimEslesme}`
     );
 
     // 7.5: FRM-059 Sınav Yoklama Evrakı — 5, 13 ve 20 öğrencide (kunyeli mod dahil) tek A4 ve tüm satırlar >= 26px (28px)
@@ -962,22 +1013,70 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     fs.writeFileSync(yol04, Buffer.from(png04.split(',')[1], 'base64'));
     fs.writeFileSync(yol17, Buffer.from(png17.split(',')[1], 'base64'));
 
-    await (await mSekme1.$('#input-mobil-foto')).uploadFile(yol04);
-    await bekle(650);
-    await (await mSekme2.$('#input-mobil-foto')).uploadFile(yol17);
-    await bekle(650);
+    // 6 ardışık temiz koşuda SIFIR gecikmeli (Promise.all) eşzamanlı 2 sekme fotoğraf yükleme yarışı!
+    const eszamanliKosuSonuclari = [];
+    for (let tur = 1; tur <= 6; tur++) {
+      await mSekme1.evaluate(() => {
+        const silinecekler = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k === 'SINAV_MOBIL_OMR_DEPO_V2' || (k && k.startsWith('SINAV_MOBIL_KAYIT_V2_'))) {
+            silinecekler.push(k);
+          }
+        }
+        silinecekler.forEach((k) => localStorage.removeItem(k));
+      });
+      await Promise.all([
+        mSekme1.reload({ waitUntil: 'networkidle0' }),
+        mSekme2.reload({ waitUntil: 'networkidle0' })
+      ]);
+      await bekle(120);
+
+      const [fInp1, fInp2] = await Promise.all([
+        mSekme1.$('#input-mobil-foto'),
+        mSekme2.$('#input-mobil-foto')
+      ]);
+      await Promise.all([
+        fInp1.uploadFile(yol04),
+        fInp2.uploadFile(yol17)
+      ]);
+      await bekle(550);
+
+      const yerlesenDurum = await mSekme1.evaluate(() => {
+        const depo = JSON.parse(localStorage.getItem('SINAV_MOBIL_OMR_DEPO_V2') || '{}');
+        return {
+          persisted: (depo.okumaSonuclari || []).map((s) => s.ogrNo).sort(),
+          live1: window.__mobilDurumOku().okumaSonuclari.map((s) => s.ogrNo).sort()
+        };
+      });
+      const live2 = await mSekme2.evaluate(() => window.__mobilDurumOku().okumaSonuclari.map((s) => s.ogrNo).sort());
+
+      await Promise.all([
+        mSekme1.reload({ waitUntil: 'networkidle0' }),
+        mSekme2.reload({ waitUntil: 'networkidle0' })
+      ]);
+      await bekle(120);
+      const [rel1, rel2] = await Promise.all([
+        mSekme1.evaluate(() => window.__mobilDurumOku().okumaSonuclari.map((s) => s.ogrNo).sort()),
+        mSekme2.evaluate(() => window.__mobilDurumOku().okumaSonuclari.map((s) => s.ogrNo).sort())
+      ]);
+      eszamanliKosuSonuclari.push({
+        tur,
+        tamamMi:
+          yerlesenDurum.persisted.join(',') === '20265304,20265317' &&
+          yerlesenDurum.live1.join(',') === '20265304,20265317' &&
+          live2.join(',') === '20265304,20265317' &&
+          rel1.join(',') === '20265304,20265317' &&
+          rel2.join(',') === '20265304,20265317',
+        persisted: yerlesenDurum.persisted
+      });
+    }
     try { fs.unlinkSync(yol04); fs.unlinkSync(yol17); } catch (_) {}
 
-    const cokluSekmeDurum = await mSekme2.evaluate(() => {
-      const depo = JSON.parse(localStorage.getItem('SINAV_MOBIL_OMR_DEPO_V2') || '{}');
-      const nolar = (depo.okumaSonuclari || []).map((s) => s.ogrNo).sort();
-      return { nolar, sekme2Sayi: window.__mobilDurumOku().okumaSayisi };
-    });
-    const sekme1CanliSayi = await mSekme1.evaluate(() => window.__mobilDurumOku().okumaSayisi);
     kontrol(
-      'Karşı-Örnek 6 (Mobil Çoklu Sekme): Sekme 1 (20265304) ve Sekme 2 (20265317) taramaları birbirini ezmeden birleşti (her iki sekmede ve depoda 2 kayıt)',
-      cokluSekmeDurum.nolar.join(',') === '20265304,20265317' && cokluSekmeDurum.sekme2Sayi === 2 && sekme1CanliSayi === 2,
-      JSON.stringify({ cokluSekmeDurum, sekme1CanliSayi })
+      'Karşı-Örnek 6 (Mobil Eşzamanlı Promise.all Yarışı x6): 6/6 eşzamanlı yükleme koşusunda her iki sekmede, localStorage ana deposunda ve F5 sonrasında 20265304 + 20265317 eksiksiz korundu',
+      eszamanliKosuSonuclari.length === 6 && eszamanliKosuSonuclari.every((r) => r.tamamMi),
+      JSON.stringify(eszamanliKosuSonuclari)
     );
 
     // 7.7: Aynı cevap dizilimli ama farklı kodlanmış iki eşleşmeyen kağıt (?0 x4 ardından 80) birbirini ezmez!
@@ -1017,7 +1116,10 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     });
     kontrol(
       'Karşı-Örnek 7 (Mobil ?0 vs 80): Aynı cevaplı ?0 kağıdı 4 kez okununca tekilleşti, ardından aynı cevaplı 80 kağıdı okununca ezilmeden ayrı satır olarak korundu',
-      farkliKodAyniCevap.toplam === 4 && farkliKodAyniCevap.eslesmeyenKodlar.length === 2 && farkliKodAyniCevap.eslesmeyenKodlar.includes('80'),
+      farkliKodAyniCevap.toplam === 4 &&
+        farkliKodAyniCevap.eslesmeyenKodlar.length === 2 &&
+        farkliKodAyniCevap.eslesmeyenKodlar.includes('80') &&
+        farkliKodAyniCevap.eslesmeyenKodlar.includes('?0'),
       JSON.stringify(farkliKodAyniCevap)
     );
     await mSekme1.close();
