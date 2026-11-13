@@ -59,6 +59,7 @@ const sunucuDurumu = {
   omrSenkronEventIdSet: new Set(),
   omrSenkronSeqSayac: 0,
   v2TablolarHazir: false,
+  bulutKasaSoruParcalari: new Map(),
   bulutKasalarBellek: new Map(),
   bulutGecmisBellek: new Map()
 };
@@ -418,20 +419,25 @@ async function akisOkuLimiti(stream, maksBayt = 16777216) {
   }
 }
 
-async function cozGzipB64Json(b64Metin) {
+async function cozGzipB64HamMetin(b64Metin, maksBayt = 16777216) {
   const u8 = b64ToU8(b64Metin);
   const ds = new DecompressionStream('gzip');
   const writer = ds.writable.getWriter();
   writer.write(u8).catch(() => {});
   writer.close().catch(() => {});
   try {
-    const acilmis = await akisOkuLimiti(ds.readable, 16777216);
-    const nesne = JSON.parse(new TextDecoder().decode(acilmis));
-    return Cekirdek.derinTemizleNesne(nesne, 0);
+    const acilmis = await akisOkuLimiti(ds.readable, maksBayt);
+    return new TextDecoder().decode(acilmis);
   } catch (err) {
     try { await writer.abort(err); } catch (_) {}
     throw err;
   }
+}
+
+async function cozGzipB64Json(b64Metin) {
+  const metin = await cozGzipB64HamMetin(b64Metin, 16777216);
+  const nesne = JSON.parse(metin);
+  return Cekirdek.derinTemizleNesne(nesne, 0);
 }
 
 async function paketleGzipB64Json(nesne) {
@@ -475,10 +481,113 @@ async function hazirlaV2D1Tablolar(env) {
       ),
       env.SINAV_DB.prepare(
         'CREATE TABLE IF NOT EXISTS omr_senkron_olaylari (seq_no INTEGER PRIMARY KEY AUTOINCREMENT, kullanici_adi TEXT NOT NULL, event_id TEXT NOT NULL, sinav_kodu TEXT NOT NULL, olay_turu TEXT NOT NULL, kaynak_cihaz TEXT NOT NULL DEFAULT \'mobil\', veri_json TEXT NOT NULL, zaman_ms INTEGER NOT NULL, UNIQUE(kullanici_adi, event_id))'
+      ),
+      env.SINAV_DB.prepare(
+        'CREATE TABLE IF NOT EXISTS bulut_kasa_soru_parcalari (kullanici_adi TEXT NOT NULL, parca_hash TEXT NOT NULL, soru_sayisi INTEGER NOT NULL DEFAULT 0, veri_gzip_b64 TEXT NOT NULL, guncelleme_ms INTEGER NOT NULL, PRIMARY KEY (kullanici_adi, parca_hash))'
+      ),
+      env.SINAV_DB.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_bulut_kasa_parca_kullanici ON bulut_kasa_soru_parcalari (kullanici_adi, guncelleme_ms DESC)'
       )
     ]);
     sunucuDurumu.v2TablolarHazir = true;
   } catch (_) {}
+}
+
+async function sorgulaSoruParcalariD1VeyaBellek(env, kullaniciAdi, parcaHashleri, veriDahil = false) {
+  const benzersiz = [];
+  const goruldu = new Set();
+  for (const h of (Array.isArray(parcaHashleri) ? parcaHashleri : [])) {
+    const s = String(h || '').trim();
+    if (!s || s.length > 128 || goruldu.has(s)) continue;
+    goruldu.add(s);
+    benzersiz.push(s);
+  }
+  const mevcutHarita = new Map();
+  if (benzersiz.length > 0) {
+    if (env && env.SINAV_DB) {
+      await hazirlaV2D1Tablolar(env);
+      const sutunlar = veriDahil ? 'parca_hash, soru_sayisi, veri_gzip_b64' : 'parca_hash, soru_sayisi';
+      for (let i = 0; i < benzersiz.length; i += 50) {
+        const grup = benzersiz.slice(i, i + 50);
+        const yerTutucular = grup.map((_, idx) => `?${idx + 2}`).join(', ');
+        const { results } = await env.SINAV_DB.prepare(
+          `SELECT ${sutunlar} FROM bulut_kasa_soru_parcalari WHERE kullanici_adi = ?1 AND parca_hash IN (${yerTutucular})`
+        ).bind(kullaniciAdi, ...grup).all();
+        for (const r of (results || [])) {
+          mevcutHarita.set(String(r.parca_hash), {
+            parcaHash: String(r.parca_hash),
+            soruSayisi: Number(r.soru_sayisi) || 0,
+            veriSikistirilmis: veriDahil ? String(r.veri_gzip_b64 || '') : ''
+          });
+        }
+      }
+    } else {
+      for (const h of benzersiz) {
+        const kayit = sunucuDurumu.bulutKasaSoruParcalari.get(`${kullaniciAdi}::${h}`);
+        if (kayit) {
+          mevcutHarita.set(h, {
+            parcaHash: h,
+            soruSayisi: Number(kayit.soruSayisi) || 0,
+            veriSikistirilmis: veriDahil ? String(kayit.veriSikistirilmis || '') : ''
+          });
+        }
+      }
+    }
+  }
+  const eksikHashler = [];
+  let toplamSoruSayisi = 0;
+  for (const h of (Array.isArray(parcaHashleri) ? parcaHashleri : [])) {
+    const s = String(h || '').trim();
+    if (!s) continue;
+    const k = mevcutHarita.get(s);
+    if (!k) eksikHashler.push(s);
+    else toplamSoruSayisi += k.soruSayisi;
+  }
+  return { mevcutHarita, eksikHashler, toplamSoruSayisi };
+}
+
+async function kaydetSoruParcasiD1VeyaBellek(env, kullaniciAdi, parcaHash, soruSayisi, veriSikistirilmis) {
+  const simdi = Date.now();
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    await env.SINAV_DB.prepare(
+      `INSERT OR REPLACE INTO bulut_kasa_soru_parcalari (kullanici_adi, parca_hash, soru_sayisi, veri_gzip_b64, guncelleme_ms)
+       VALUES (?1, ?2, ?3, ?4, ?5)`
+    ).bind(kullaniciAdi, parcaHash, soruSayisi, veriSikistirilmis, simdi).run();
+  } else {
+    sunucuDurumu.bulutKasaSoruParcalari.set(`${kullaniciAdi}::${parcaHash}`, {
+      parcaHash,
+      soruSayisi,
+      veriSikistirilmis,
+      guncellemeMs: simdi
+    });
+  }
+}
+
+async function birlestirParcaliKasaSorulariD1VeyaBellek(env, kullaniciAdi, metaObj, parcaHashleri) {
+  const temizMeta = Cekirdek.temizleYedekHassasAlanlar(Object.assign({}, metaObj || {}));
+  const hashListe = Array.isArray(parcaHashleri) ? parcaHashleri : [];
+  if (!hashListe.length) {
+    temizMeta.sorular = Array.isArray(temizMeta.sorular) ? temizMeta.sorular : [];
+    return temizMeta;
+  }
+  const { mevcutHarita } = await sorgulaSoruParcalariD1VeyaBellek(env, kullaniciAdi, hashListe, true);
+  const cozumlenenler = new Map();
+  for (const [h, kayit] of mevcutHarita.entries()) {
+    if (!kayit || !kayit.veriSikistirilmis) continue;
+    const metin = await cozGzipB64HamMetin(kayit.veriSikistirilmis, 16777216);
+    const parsed = JSON.parse(metin);
+    cozumlenenler.set(h, Array.isArray(parsed) ? parsed : []);
+  }
+  const sorular = [];
+  for (const h of hashListe) {
+    const dilim = cozumlenenler.get(String(h || '').trim());
+    if (Array.isArray(dilim)) {
+      for (let i = 0; i < dilim.length; i++) sorular.push(dilim[i]);
+    }
+  }
+  temizMeta.sorular = sorular;
+  return temizMeta;
 }
 
 async function listeleMobilSinavPaketleriD1VeyaBellek(env, kullaniciAdi) {
@@ -952,24 +1061,48 @@ export default {
         let mevcut = null;
         if (env && env.SINAV_DB) {
           const sat = await env.SINAV_DB.prepare(
-            'SELECT kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms FROM bulut_kasalar WHERE kullanici_adi = ?1'
+            `SELECT revizyon_no, guncelleme_ms, LENGTH(veri_json) AS veri_boyut,
+                    CASE WHEN LENGTH(veri_json) <= 250000 THEN veri_json ELSE '' END AS hafif_veri_json
+             FROM bulut_kasalar WHERE kullanici_adi = ?1`
           ).bind(kullaniciAdi).first();
           if (sat) {
             let veri = {};
-            try { veri = await acD1VeriJson(sat.veri_json); } catch (_) { veri = {}; }
+            const veriBoyut = Number(sat.veri_boyut) || 0;
+            if (sat.hafif_veri_json) {
+              try {
+                const dis = JSON.parse(sat.hafif_veri_json);
+                if (dis && dis.__kodlama === 'parcali-v2') {
+                  veri = Cekirdek.temizleYedekHassasAlanlar(Object.assign({}, dis.meta || {}));
+                } else {
+                  const acik = await acD1VeriJson(sat.hafif_veri_json);
+                  veri = (acik && typeof acik === 'object') ? Cekirdek.temizleYedekHassasAlanlar(acik) : {};
+                }
+              } catch (_) { veri = {}; }
+            } else if (veriBoyut > 250000 && veriBoyut <= 700000) {
+              try {
+                const tamSat = await env.SINAV_DB.prepare(
+                  'SELECT veri_json FROM bulut_kasalar WHERE kullanici_adi = ?1'
+                ).bind(kullaniciAdi).first();
+                if (tamSat && tamSat.veri_json) {
+                  const acik = await acD1VeriJson(tamSat.veri_json);
+                  veri = (acik && typeof acik === 'object') ? Cekirdek.temizleYedekHassasAlanlar(acik) : {};
+                }
+              } catch (_) { veri = {}; }
+            }
             mevcut = {
               revizyonNo: Number(sat.revizyon_no) || 0,
               guncellemeMs: Number(sat.guncelleme_ms) || 0,
-              veri: (veri && typeof veri === 'object') ? Cekirdek.temizleYedekHassasAlanlar(veri) : {}
+              veri
             };
           }
         } else {
           const bellek = sunucuDurumu.bulutKasalarBellek.get(kullaniciAdi) || null;
           if (bellek) {
+            const hamKaynak = bellek.parcaliV2 ? (bellek.parcaliV2.meta || {}) : (bellek.veri || {});
             mevcut = {
               revizyonNo: bellek.revizyonNo || 0,
               guncellemeMs: bellek.guncellemeMs || 0,
-              veri: bellek.veri ? Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(bellek.veri))) : {}
+              veri: Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(hamKaynak)))
             };
           }
         }
@@ -1903,12 +2036,19 @@ export default {
       }
     }
 
-    // Kalıcı Bulut Kasası (Cloudflare D1 SINAV_DB + Otomatik Yedek Geçmişi) — Doğrulanmış Hoca Oturumu Zorunlu
-    if (yol === '/api/bulut-kasa' || yol === '/api/bulut-kasa/gecmis' || yol === '/api/bulut-kasa/geri-yukle') {
+    // Kalıcı Bulut Kasası (Cloudflare D1 SINAV_DB + Parçalı V2 + Otomatik Yedek Geçmişi) — Doğrulanmış Hoca Oturumu Zorunlu
+    if (
+      yol === '/api/bulut-kasa' ||
+      yol === '/api/bulut-kasa/gecmis' ||
+      yol === '/api/bulut-kasa/geri-yukle' ||
+      yol === '/api/bulut-kasa/parca-kontrol' ||
+      yol === '/api/bulut-kasa/parca' ||
+      yol === '/api/bulut-kasa/parca-oku'
+    ) {
       let govde = null;
       if (metot === 'PUT' || metot === 'POST') {
         try {
-          govde = await okuJsonGovde(request, 16777216);
+          govde = await okuJsonGovde(request, yol === '/api/bulut-kasa/parca' ? 2097152 : 16777216);
         } catch (err) {
           return gonderJson(400, { hata: err.message });
         }
@@ -1920,6 +2060,81 @@ export default {
       }
       const kullaniciAdi = String(oturum.kullaniciAdi || 'hoca').trim().toLowerCase();
 
+      if (yol === '/api/bulut-kasa/parca-kontrol' && metot === 'POST') {
+        const hamHashler = Array.isArray(govde && govde.parcaHashleri) ? govde.parcaHashleri : [];
+        if (hamHashler.length > 1000) {
+          return gonderJson(400, { hata: 'Tek istekte en fazla 1000 parça hash kontrol edilebilir.' });
+        }
+        const temizHashler = hamHashler.map((h) => String(h || '').trim()).filter((h) => h && h.length <= 128);
+        const { eksikHashler } = await sorgulaSoruParcalariD1VeyaBellek(env, kullaniciAdi, temizHashler, false);
+        return gonderJson(200, { basarili: true, eksikHashler });
+      }
+
+      if (yol === '/api/bulut-kasa/parca' && (metot === 'PUT' || metot === 'POST')) {
+        const parcaHash = String((govde && govde.parcaHash) || '').trim();
+        const kodlama = String((govde && govde.kodlama) || '').trim().toLowerCase();
+        const veriSikistirilmis = typeof (govde && govde.veriSikistirilmis) === 'string' ? govde.veriSikistirilmis.trim() : '';
+        if (!parcaHash || parcaHash.length > 128 || kodlama !== 'gzip-b64' || !veriSikistirilmis) {
+          return gonderJson(400, { hata: 'Geçerli parcaHash, kodlama=gzip-b64 ve veriSikistirilmis zorunludur.' });
+        }
+        try {
+          const acilmisJson = await cozGzipB64HamMetin(veriSikistirilmis, 2097152);
+          if (Cekirdek.uretKasaParcaHash(acilmisJson) !== parcaHash) {
+            return gonderJson(400, { hata: 'Parça bütünlük karması (parcaHash) açılan veriyle uyuşmuyor.' });
+          }
+          const dizi = Cekirdek.derinTemizleNesne(JSON.parse(acilmisJson), 0);
+          if (!Array.isArray(dizi)) {
+            return gonderJson(400, { hata: 'Parça verisi bir soru dizisi olmalıdır.' });
+          }
+          let hassasAlanVardi = false;
+          for (let i = 0; i < dizi.length; i++) {
+            const s = dizi[i];
+            if (!s || typeof s !== 'object' || Array.isArray(s) || typeof s.id !== 'string' || typeof s.metin !== 'string' || !['dy', 'test', 'klasik'].includes(s.tur)) {
+              return gonderJson(400, { hata: `Şema hatası: parça sorusu [${i}] geçersiz.` });
+            }
+            if (Object.prototype.hasOwnProperty.call(s, 'sifre')) {
+              delete s.sifre;
+              hassasAlanVardi = true;
+            }
+            if (Object.prototype.hasOwnProperty.call(s, 'sifreTekrar')) {
+              delete s.sifreTekrar;
+              hassasAlanVardi = true;
+            }
+          }
+          const saklanacakB64 = hassasAlanVardi ? await paketleGzipB64Json(dizi) : veriSikistirilmis;
+          await kaydetSoruParcasiD1VeyaBellek(env, kullaniciAdi, parcaHash, dizi.length, saklanacakB64);
+          return gonderJson(200, { basarili: true, parcaHash, soruSayisi: dizi.length });
+        } catch (err) {
+          return gonderJson(400, { hata: `Soru parçası açılamadı veya doğrulanamadı: ${err.message}` });
+        }
+      }
+
+      if (yol === '/api/bulut-kasa/parca-oku' && metot === 'POST') {
+        const hamHashler = Array.isArray(govde && govde.parcaHashleri) ? govde.parcaHashleri : [];
+        const benzersiz = [];
+        const goruldu = new Set();
+        for (const h of hamHashler) {
+          const s = String(h || '').trim();
+          if (!s || s.length > 128 || goruldu.has(s)) continue;
+          goruldu.add(s);
+          benzersiz.push(s);
+          if (benzersiz.length >= 16) break;
+        }
+        const { mevcutHarita } = await sorgulaSoruParcalariD1VeyaBellek(env, kullaniciAdi, benzersiz, true);
+        const parcalar = [];
+        for (const h of benzersiz) {
+          const k = mevcutHarita.get(h);
+          if (k) {
+            parcalar.push({
+              parcaHash: k.parcaHash,
+              soruSayisi: k.soruSayisi,
+              veriSikistirilmis: k.veriSikistirilmis
+            });
+          }
+        }
+        return gonderJson(200, { basarili: true, parcalar });
+      }
+
       const okuMevcutKasa = async () => {
         if (env && env.SINAV_DB) {
           const sat = await env.SINAV_DB.prepare(
@@ -1927,7 +2142,21 @@ export default {
           ).bind(kullaniciAdi).first();
           if (sat) {
             let veri = null;
-            try { veri = await acD1VeriJson(sat.veri_json); } catch (_) { veri = null; }
+            let parcaliV2 = null;
+            try {
+              const dis = JSON.parse(sat.veri_json);
+              if (dis && dis.__kodlama === 'parcali-v2') {
+                parcaliV2 = {
+                  meta: Cekirdek.temizleYedekHassasAlanlar(dis.meta || {}),
+                  soruParcaHashleri: Array.isArray(dis.soruParcaHashleri) ? dis.soruParcaHashleri : [],
+                  toplamSoruSayisi: Number(dis.toplamSoruSayisi) || 0,
+                  ozet: dis.ozet || null
+                };
+                veri = await birlestirParcaliKasaSorulariD1VeyaBellek(env, kullaniciAdi, parcaliV2.meta, parcaliV2.soruParcaHashleri);
+              } else {
+                veri = await acD1VeriJson(sat.veri_json);
+              }
+            } catch (_) { veri = null; }
             if (veri && typeof veri === 'object') {
               veri = Cekirdek.temizleYedekHassasAlanlar(veri);
             }
@@ -1937,20 +2166,163 @@ export default {
               veri,
               veriJson: sat.veri_json,
               ozetBilgi: sat.ozet_bilgi || '',
-              guncellemeMs: Number(sat.guncelleme_ms) || 0
+              guncellemeMs: Number(sat.guncelleme_ms) || 0,
+              parcaliV2
             };
           }
           return null;
         }
-        return sunucuDurumu.bulutKasalarBellek.get(kullaniciAdi) || null;
+        const bellek = sunucuDurumu.bulutKasalarBellek.get(kullaniciAdi) || null;
+        if (!bellek) return null;
+        if (bellek.parcaliV2 && !bellek.veri) {
+          const tam = await birlestirParcaliKasaSorulariD1VeyaBellek(env, kullaniciAdi, bellek.parcaliV2.meta, bellek.parcaliV2.soruParcaHashleri);
+          return Object.assign({}, bellek, { veri: tam });
+        }
+        return bellek;
       };
 
-      const ekleYedekGecmisi = async (revNo, veriJson, islemNotu) => {
+      const okuMevcutKasaHafif = async () => {
+        if (env && env.SINAV_DB) {
+          const sat = await env.SINAV_DB.prepare(
+            `SELECT kullanici_adi, revizyon_no, ozet_bilgi, guncelleme_ms, LENGTH(veri_json) AS veri_boyut,
+                    CASE WHEN LENGTH(veri_json) <= 180000 THEN veri_json ELSE '' END AS hafif_veri_json
+             FROM bulut_kasalar WHERE kullanici_adi = ?1`
+          ).bind(kullaniciAdi).first();
+          if (!sat) return null;
+          const veriBoyut = Number(sat.veri_boyut) || 0;
+          let eskiOzet = null;
+          let parcaliV2 = null;
+          let veri = null;
+          if (sat.hafif_veri_json) {
+            try {
+              const dis = JSON.parse(sat.hafif_veri_json);
+              if (dis && dis.__kodlama === 'parcali-v2') {
+                const temizMeta = Cekirdek.temizleYedekHassasAlanlar(dis.meta || {});
+                parcaliV2 = {
+                  meta: temizMeta,
+                  soruParcaHashleri: Array.isArray(dis.soruParcaHashleri) ? dis.soruParcaHashleri : [],
+                  toplamSoruSayisi: Number(dis.toplamSoruSayisi) || 0,
+                  ozet: dis.ozet || null
+                };
+                eskiOzet = dis.ozet
+                  ? Object.assign({ ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 }, dis.ozet)
+                  : Object.assign(hesaplaKasaOzeti(temizMeta), { soru: parcaliV2.toplamSoruSayisi });
+              } else {
+                veri = await acD1VeriJson(sat.hafif_veri_json);
+                if (veri && typeof veri === 'object') {
+                  veri = Cekirdek.temizleYedekHassasAlanlar(veri);
+                  eskiOzet = hesaplaKasaOzeti(veri);
+                }
+              }
+            } catch (_) {}
+          } else {
+            eskiOzet = Cekirdek.cozKasaOzetBilgisi(sat.ozet_bilgi || '');
+            if (!eskiOzet && veriBoyut < 900000) {
+              const tam = await okuMevcutKasa();
+              if (tam) {
+                veri = tam.veri;
+                parcaliV2 = tam.parcaliV2 || null;
+                eskiOzet = veri ? hesaplaKasaOzeti(veri) : null;
+              }
+            }
+          }
+          if (!eskiOzet) {
+            eskiOzet = Cekirdek.cozKasaOzetBilgisi(sat.ozet_bilgi || '') || { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
+          }
+          return {
+            kullaniciAdi,
+            revizyonNo: Number(sat.revizyon_no) || 0,
+            ozetBilgi: sat.ozet_bilgi || '',
+            guncellemeMs: Number(sat.guncelleme_ms) || 0,
+            veriBoyut,
+            veriJson: sat.hafif_veri_json || null,
+            veri,
+            parcaliV2,
+            eskiOzet
+          };
+        }
+        const bellek = sunucuDurumu.bulutKasalarBellek.get(kullaniciAdi) || null;
+        if (!bellek) return null;
+        let eskiOzet = null;
+        if (bellek.parcaliV2) {
+          eskiOzet = bellek.parcaliV2.ozet || Object.assign(hesaplaKasaOzeti(bellek.parcaliV2.meta || {}), { soru: Number(bellek.parcaliV2.toplamSoruSayisi) || 0 });
+        } else if (bellek.veri) {
+          eskiOzet = hesaplaKasaOzeti(bellek.veri);
+        } else {
+          eskiOzet = Cekirdek.cozKasaOzetBilgisi(bellek.ozetBilgi || '') || { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
+        }
+        return {
+          kullaniciAdi,
+          revizyonNo: Number(bellek.revizyonNo) || 0,
+          ozetBilgi: bellek.ozetBilgi || '',
+          guncellemeMs: Number(bellek.guncellemeMs) || 0,
+          veriBoyut: bellek.veriJson ? bellek.veriJson.length : 0,
+          veriJson: bellek.veriJson || null,
+          veri: bellek.veri || null,
+          parcaliV2: bellek.parcaliV2 || null,
+          eskiOzet
+        };
+      };
+
+      const hazirla409KarsiYuk = async (mevcutHafif, parcaliIstemciMi) => {
+        if (!mevcutHafif) return {};
+        if (parcaliIstemciMi) {
+          if (mevcutHafif.parcaliV2) {
+            return {
+              kodlama: 'parcali-v2',
+              bulutMeta: mevcutHafif.parcaliV2.meta,
+              soruParcaHashleri: mevcutHafif.parcaliV2.soruParcaHashleri,
+              toplamSoruSayisi: mevcutHafif.parcaliV2.toplamSoruSayisi
+            };
+          }
+          if (env && env.SINAV_DB) {
+            const hamSat = await env.SINAV_DB.prepare(
+              'SELECT veri_json FROM bulut_kasalar WHERE kullanici_adi = ?1'
+            ).bind(kullaniciAdi).first();
+            if (hamSat && hamSat.veri_json) {
+              try {
+                const dis = JSON.parse(hamSat.veri_json);
+                if (dis && dis.__kodlama === 'gzip-b64' && typeof dis.veri === 'string') {
+                  return { kodlama: 'gzip-b64', veriSikistirilmis: dis.veri };
+                }
+                if (dis && dis.__kodlama === 'parcali-v2') {
+                  return {
+                    kodlama: 'parcali-v2',
+                    bulutMeta: Cekirdek.temizleYedekHassasAlanlar(dis.meta || {}),
+                    soruParcaHashleri: Array.isArray(dis.soruParcaHashleri) ? dis.soruParcaHashleri : [],
+                    toplamSoruSayisi: Number(dis.toplamSoruSayisi) || 0
+                  };
+                }
+                const temiz = Cekirdek.temizleYedekHassasAlanlar(dis);
+                return { bulutVeri: temiz, veriPaketi: temiz };
+              } catch (_) {}
+            }
+          }
+        }
+        if (mevcutHafif.veri) {
+          return { bulutVeri: mevcutHafif.veri, veriPaketi: mevcutHafif.veri };
+        }
+        const tam = await okuMevcutKasa();
+        return {
+          bulutVeri: tam ? tam.veri : null,
+          veriPaketi: tam ? tam.veri : null
+        };
+      };
+
+      const ekleYedekGecmisi = async (revNo, veriJson, islemNotu, veriBoyut = 0) => {
         const simdi = Date.now();
         if (env && env.SINAV_DB) {
-          await env.SINAV_DB.prepare(
-            'INSERT INTO bulut_yedek_gecmisi (kullanici_adi, revizyon_no, islem_notu, veri_json, olusturma_ms) VALUES (?1, ?2, ?3, ?4, ?5)'
-          ).bind(kullaniciAdi, revNo, String(islemNotu || '').slice(0, 180), veriJson, simdi).run();
+          if (veriBoyut > 600000) return;
+          if (veriJson) {
+            await env.SINAV_DB.prepare(
+              'INSERT INTO bulut_yedek_gecmisi (kullanici_adi, revizyon_no, islem_notu, veri_json, olusturma_ms) VALUES (?1, ?2, ?3, ?4, ?5)'
+            ).bind(kullaniciAdi, revNo, String(islemNotu || '').slice(0, 180), veriJson, simdi).run();
+          } else {
+            await env.SINAV_DB.prepare(
+              `INSERT INTO bulut_yedek_gecmisi (kullanici_adi, revizyon_no, islem_notu, veri_json, olusturma_ms)
+               SELECT kullanici_adi, revizyon_no, ?2, veri_json, ?3 FROM bulut_kasalar WHERE kullanici_adi = ?1`
+            ).bind(kullaniciAdi, String(islemNotu || '').slice(0, 180), simdi).run();
+          }
           await env.SINAV_DB.prepare(
             `DELETE FROM bulut_yedek_gecmisi WHERE kullanici_adi = ?1 AND id NOT IN (
                SELECT id FROM bulut_yedek_gecmisi WHERE kullanici_adi = ?1 ORDER BY id DESC LIMIT 25
@@ -1965,14 +2337,113 @@ export default {
       };
 
       if (yol === '/api/bulut-kasa' && metot === 'GET') {
-        const mevcut = await okuMevcutKasa();
-        const temizVeri = mevcut && mevcut.veri ? Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(mevcut.veri))) : null;
+        const parcaliDestek = urlNesne.searchParams.get('parcaliDestek') === '1';
         const kodlamaIstek = String(
           urlNesne.searchParams.get('kodlama') ||
           request.headers.get('x-kasa-kodlama') ||
           request.headers.get('x-bulut-kodlama') ||
           ''
         ).trim().toLowerCase();
+
+        if (env && env.SINAV_DB) {
+          const sat = await env.SINAV_DB.prepare(
+            'SELECT kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms FROM bulut_kasalar WHERE kullanici_adi = ?1'
+          ).bind(kullaniciAdi).first();
+          if (!sat) {
+            return gonderJson(200, {
+              basarili: true,
+              bulundu: false,
+              depoTuru: 'd1',
+              kullaniciAdi,
+              revizyonNo: 0,
+              ozetBilgi: '',
+              guncellemeMs: 0,
+              veri: null,
+              veriPaketi: null
+            });
+          }
+          let dis = null;
+          try { dis = JSON.parse(sat.veri_json); } catch (_) { dis = null; }
+          if (dis && dis.__kodlama === 'parcali-v2') {
+            const temizMeta = Cekirdek.temizleYedekHassasAlanlar(dis.meta || {});
+            const hashler = Array.isArray(dis.soruParcaHashleri) ? dis.soruParcaHashleri : [];
+            const toplamSoruSayisi = Number(dis.toplamSoruSayisi) || 0;
+            if (parcaliDestek) {
+              return gonderJson(200, {
+                basarili: true,
+                bulundu: true,
+                depoTuru: 'd1',
+                kullaniciAdi,
+                revizyonNo: Number(sat.revizyon_no) || 0,
+                ozetBilgi: sat.ozet_bilgi || '',
+                guncellemeMs: Number(sat.guncelleme_ms) || 0,
+                kodlama: 'parcali-v2',
+                meta: temizMeta,
+                soruParcaHashleri: hashler,
+                toplamSoruSayisi
+              });
+            }
+            const tamVeri = await birlestirParcaliKasaSorulariD1VeyaBellek(env, kullaniciAdi, temizMeta, hashler);
+            if (kodlamaIstek === 'gzip-b64') {
+              const veriSikistirilmis = await paketleGzipB64Json(tamVeri);
+              return gonderJson(200, {
+                basarili: true,
+                bulundu: true,
+                depoTuru: 'd1',
+                kullaniciAdi,
+                revizyonNo: Number(sat.revizyon_no) || 0,
+                ozetBilgi: sat.ozet_bilgi || '',
+                guncellemeMs: Number(sat.guncelleme_ms) || 0,
+                kodlama: 'gzip-b64',
+                veriSikistirilmis
+              });
+            }
+            return gonderJson(200, {
+              basarili: true,
+              bulundu: true,
+              depoTuru: 'd1',
+              kullaniciAdi,
+              revizyonNo: Number(sat.revizyon_no) || 0,
+              ozetBilgi: sat.ozet_bilgi || '',
+              guncellemeMs: Number(sat.guncelleme_ms) || 0,
+              veri: tamVeri,
+              veriPaketi: tamVeri
+            });
+          }
+          if (dis && dis.__kodlama === 'gzip-b64' && typeof dis.veri === 'string' && kodlamaIstek === 'gzip-b64') {
+            return gonderJson(200, {
+              basarili: true,
+              bulundu: true,
+              depoTuru: 'd1',
+              kullaniciAdi,
+              revizyonNo: Number(sat.revizyon_no) || 0,
+              ozetBilgi: sat.ozet_bilgi || '',
+              guncellemeMs: Number(sat.guncelleme_ms) || 0,
+              kodlama: 'gzip-b64',
+              veriSikistirilmis: dis.veri
+            });
+          }
+        } else {
+          const bellek = sunucuDurumu.bulutKasalarBellek.get(kullaniciAdi) || null;
+          if (bellek && bellek.parcaliV2 && parcaliDestek) {
+            return gonderJson(200, {
+              basarili: true,
+              bulundu: true,
+              depoTuru: 'worker_bellek',
+              kullaniciAdi,
+              revizyonNo: bellek.revizyonNo,
+              ozetBilgi: bellek.ozetBilgi,
+              guncellemeMs: bellek.guncellemeMs,
+              kodlama: 'parcali-v2',
+              meta: Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(bellek.parcaliV2.meta || {}))),
+              soruParcaHashleri: bellek.parcaliV2.soruParcaHashleri || [],
+              toplamSoruSayisi: Number(bellek.parcaliV2.toplamSoruSayisi) || 0
+            });
+          }
+        }
+
+        const mevcut = await okuMevcutKasa();
+        const temizVeri = mevcut && mevcut.veri ? Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(mevcut.veri))) : null;
         if (kodlamaIstek === 'gzip-b64' && temizVeri) {
           const veriSikistirilmis = await paketleGzipB64Json(temizVeri);
           return gonderJson(200, {
@@ -2001,8 +2472,46 @@ export default {
       }
 
       if (yol === '/api/bulut-kasa' && (metot === 'PUT' || metot === 'POST')) {
+        const istekKodlama = String((govde && govde.kodlama) || '').trim().toLowerCase();
+        const parcaliIstemciMi = istekKodlama === 'parcali-v2' || Boolean(govde && govde.parcaliDestek === true);
         let gelenVeri = null;
-        if (govde && String(govde.kodlama || '').trim().toLowerCase() === 'gzip-b64') {
+        let parcaliIstek = null;
+
+        if (istekKodlama === 'parcali-v2') {
+          let metaNesne = null;
+          if (typeof (govde && govde.veriSikistirilmis) === 'string' && govde.veriSikistirilmis.trim()) {
+            try {
+              metaNesne = await cozGzipB64Json(govde.veriSikistirilmis);
+            } catch (err) {
+              return gonderJson(400, { hata: `parcali-v2 meta verisi açılamadı: ${err.message}` });
+            }
+          } else {
+            metaNesne = govde && (govde.meta || govde.veri || govde.veriPaketi);
+          }
+          if (!metaNesne || typeof metaNesne !== 'object' || Array.isArray(metaNesne)) {
+            return gonderJson(400, { hata: 'Kaydedilecek geçerli parcali-v2 meta nesnesi bulunamadı.' });
+          }
+          const hamHashler = Array.isArray(govde && govde.soruParcaHashleri) ? govde.soruParcaHashleri : [];
+          if (hamHashler.length > 1000) {
+            return gonderJson(400, { hata: 'soruParcaHashleri en fazla 1000 adet olabilir.' });
+          }
+          const soruParcaHashleri = hamHashler.map((h) => String(h || '').trim()).filter((h) => h && h.length <= 128);
+          const temizMeta = Cekirdek.temizleYedekHassasAlanlar(Cekirdek.derinTemizleNesne(metaNesne, 0));
+          temizMeta.sorular = [];
+          const { eksikHashler, toplamSoruSayisi } = await sorgulaSoruParcalariD1VeyaBellek(env, kullaniciAdi, soruParcaHashleri, false);
+          if (eksikHashler.length > 0) {
+            return gonderJson(409, {
+              hata: 'Eksik soru parçaları mevcut.',
+              eksikHashler
+            });
+          }
+          parcaliIstek = {
+            meta: temizMeta,
+            soruParcaHashleri,
+            toplamSoruSayisi
+          };
+          gelenVeri = temizMeta;
+        } else if (istekKodlama === 'gzip-b64') {
           const b64Yuk = govde.veriSikistirilmis || govde.veriB64 || govde.payload ||
             (typeof govde.veri === 'string' ? govde.veri : '') ||
             (typeof govde.veriPaketi === 'string' ? govde.veriPaketi : '');
@@ -2017,11 +2526,12 @@ export default {
         } else {
           gelenVeri = govde && (govde.veri || govde.veriPaketi);
         }
+
         if (!gelenVeri || typeof gelenVeri !== 'object' || Array.isArray(gelenVeri)) {
           return gonderJson(400, { hata: 'Kaydedilecek geçerli bulut kasa verisi (veri nesnesi) bulunamadı.' });
         }
         gelenVeri = Cekirdek.temizleYedekHassasAlanlar(gelenVeri);
-        const mevcut = await okuMevcutKasa();
+        const mevcut = await okuMevcutKasaHafif();
         const mevcutRev = mevcut ? (Number(mevcut.revizyonNo) || 0) : 0;
         const bazRev = (govde && govde.bazRevizyonNo !== undefined && govde.bazRevizyonNo !== null)
           ? Number(govde.bazRevizyonNo)
@@ -2030,7 +2540,11 @@ export default {
         const zorlaEz = Boolean(govde && govde.zorlaEz === true);
 
         const yeniOzet = hesaplaKasaOzeti(gelenVeri);
-        const eskiOzet = mevcut && mevcut.veri ? hesaplaKasaOzeti(mevcut.veri) : { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
+        if (parcaliIstek) {
+          yeniOzet.soru = parcaliIstek.toplamSoruSayisi;
+          yeniOzet.metin = `${yeniOzet.ders} ders · ${yeniOzet.soru} soru · ${yeniOzet.ogrenci} öğrenci · ${yeniOzet.sinav} sınav`;
+        }
+        const eskiOzet = (mevcut && mevcut.eskiOzet) ? mevcut.eskiOzet : { ders: 0, soru: 0, ogrenci: 0, sinav: 0, okuma: 0 };
 
         if (mevcut && mevcutRev > 0) {
           const eskiDoluMu = eskiOzet.ders > 0 || eskiOzet.soru > 0 || eskiOzet.ogrenci > 0;
@@ -2044,50 +2558,47 @@ export default {
 
           // 1) Tam boşaltma yasağı: Dolu bir kasa (bazRevizyonNo ne olursa olsun) boş nesne ({}) veya 0/0/0 durumla ASLA ezilemez!
           if (eskiDoluMu && yeniTamBosMu) {
-            return gonderJson(409, {
+            const karsiYuk = await hazirla409KarsiYuk(mevcut, parcaliIstemciMi);
+            return gonderJson(409, Object.assign({
               hata: 'Veri kaybı koruması: Dolu kasa boş veri ile sıfırlanamaz.',
               cakisma: true,
               veriKaybiKorumasi: true,
               bulutRevizyonNo: mevcutRev,
               revizyonNo: mevcutRev,
-              ozetBilgi: mevcut.ozetBilgi,
-              bulutVeri: mevcut.veri,
-              veriPaketi: mevcut.veri
-            });
+              ozetBilgi: mevcut.ozetBilgi
+            }, karsiYuk));
           }
 
           // 2) Sıkı iyimser eşzamanlılık kilidi: zorlaEz veya silmeOnayi açık olsa bile bazRevizyonNo === mevcutRev ZORUNLUDUR!
           if (bazRev === null || !Number.isFinite(bazRev) || bazRev !== mevcutRev) {
-            return gonderJson(409, {
+            const karsiYuk = await hazirla409KarsiYuk(mevcut, parcaliIstemciMi);
+            return gonderJson(409, Object.assign({
               hata: 'Bulut kasası revizyon uyuşmazlığı: Güncel revizyon numarası eşleşmiyor.',
               cakisma: true,
               veriKaybiKorumasi: veriKaybiEngellendiMi,
               bulutRevizyonNo: mevcutRev,
               revizyonNo: mevcutRev,
-              ozetBilgi: mevcut.ozetBilgi,
-              bulutVeri: mevcut.veri,
-              veriPaketi: mevcut.veri
-            });
+              ozetBilgi: mevcut.ozetBilgi
+            }, karsiYuk));
           }
 
           // 3) Kısmi veri silinmesi engeli: Açık silmeOnayi olmadan ders, soru, öğrenci veya kayıtlı sınav sayısı 1 adet bile azaltılamaz!
           if (azalmaVarMi && !silmeOnayi) {
-            return gonderJson(409, {
+            const karsiYuk = await hazirla409KarsiYuk(mevcut, parcaliIstemciMi);
+            return gonderJson(409, Object.assign({
               hata: 'Veri kaybı koruması: Açık silme onayı olmadan mevcut ders, soru, öğrenci veya sınav sayısı azaltılamaz.',
               cakisma: true,
               veriKaybiKorumasi: true,
               bulutRevizyonNo: mevcutRev,
               revizyonNo: mevcutRev,
-              ozetBilgi: mevcut.ozetBilgi,
-              bulutVeri: mevcut.veri,
-              veriPaketi: mevcut.veri
-            });
+              ozetBilgi: mevcut.ozetBilgi
+            }, karsiYuk));
           }
         }
 
         if (
           mevcut &&
-          mevcut.veriJson &&
+          (mevcut.veriJson || (mevcut.veriBoyut && mevcut.veriBoyut > 0)) &&
           (govde.anlikYedekAl === true ||
             silmeOnayi ||
             zorlaEz ||
@@ -2097,13 +2608,21 @@ export default {
             yeniOzet.sinav !== eskiOzet.sinav ||
             Date.now() - (mevcut.guncellemeMs || 0) > 180000)
         ) {
-          await ekleYedekGecmisi(mevcutRev, mevcut.veriJson, mevcut.ozetBilgi || 'Otomatik yedek');
+          await ekleYedekGecmisi(mevcutRev, mevcut.veriJson, mevcut.ozetBilgi || 'Otomatik yedek', mevcut.veriBoyut || 0);
         }
 
         const yeniRev = mevcutRev + 1;
         const simdi = Date.now();
         const ozetBilgi = String(govde.islemNotu || yeniOzet.metin).slice(0, 180);
-        const veriJson = (env && env.SINAV_DB) ? await paketleD1VeriJson(gelenVeri) : JSON.stringify(gelenVeri);
+        const veriJson = parcaliIstek
+          ? JSON.stringify({
+              __kodlama: 'parcali-v2',
+              ozet: yeniOzet,
+              meta: parcaliIstek.meta,
+              soruParcaHashleri: parcaliIstek.soruParcaHashleri,
+              toplamSoruSayisi: parcaliIstek.toplamSoruSayisi
+            })
+          : ((env && env.SINAV_DB) ? await paketleD1VeriJson(gelenVeri) : JSON.stringify(gelenVeri));
 
         if (env && env.SINAV_DB) {
           if (mevcut && mevcutRev > 0) {
@@ -2114,16 +2633,15 @@ export default {
             ).bind(yeniRev, veriJson, ozetBilgi, simdi, kullaniciAdi, mevcutRev).run();
             const degisen = guncelleSonuc && guncelleSonuc.meta ? Number(guncelleSonuc.meta.changes || 0) : 1;
             if (degisen === 0) {
-              const guncel = await okuMevcutKasa();
+              const guncel = await okuMevcutKasaHafif();
               const gRev = guncel ? (Number(guncel.revizyonNo) || mevcutRev) : mevcutRev;
-              return gonderJson(409, {
+              const karsiYuk = await hazirla409KarsiYuk(guncel, parcaliIstemciMi);
+              return gonderJson(409, Object.assign({
                 hata: 'Eşzamanlı yazma çakışması engellendi.',
                 cakisma: true,
                 bulutRevizyonNo: gRev,
-                revizyonNo: gRev,
-                bulutVeri: guncel ? guncel.veri : null,
-                veriPaketi: guncel ? guncel.veri : null
-              });
+                revizyonNo: gRev
+              }, karsiYuk));
             }
           } else {
             try {
@@ -2132,26 +2650,33 @@ export default {
                  VALUES (?1, ?2, ?3, ?4, ?5)`
               ).bind(kullaniciAdi, yeniRev, veriJson, ozetBilgi, simdi).run();
             } catch (_) {
-              const guncel = await okuMevcutKasa();
+              const guncel = await okuMevcutKasaHafif();
               const gRev = guncel ? (Number(guncel.revizyonNo) || 1) : 1;
-              return gonderJson(409, {
+              const karsiYuk = await hazirla409KarsiYuk(guncel, parcaliIstemciMi);
+              return gonderJson(409, Object.assign({
                 hata: 'Eşzamanlı ilk kayıt çakışması engellendi.',
                 cakisma: true,
                 bulutRevizyonNo: gRev,
-                revizyonNo: gRev,
-                bulutVeri: guncel ? guncel.veri : null,
-                veriPaketi: guncel ? guncel.veri : null
-              });
+                revizyonNo: gRev
+              }, karsiYuk));
             }
           }
         } else {
           sunucuDurumu.bulutKasalarBellek.set(kullaniciAdi, {
             kullaniciAdi,
             revizyonNo: yeniRev,
-            veri: gelenVeri,
+            veri: parcaliIstek ? null : gelenVeri,
             veriJson,
             ozetBilgi,
-            guncellemeMs: simdi
+            guncellemeMs: simdi,
+            parcaliV2: parcaliIstek
+              ? {
+                  meta: parcaliIstek.meta,
+                  soruParcaHashleri: parcaliIstek.soruParcaHashleri,
+                  toplamSoruSayisi: parcaliIstek.toplamSoruSayisi,
+                  ozet: yeniOzet
+                }
+              : null
           });
         }
 
@@ -2176,7 +2701,9 @@ export default {
           kullaniciAdi,
           revizyonNo: yeniRev,
           ozetBilgi,
-          guncellemeMs: simdi
+          guncellemeMs: simdi,
+          kodlama: parcaliIstek ? 'parcali-v2' : 'standart',
+          toplamSoruSayisi: parcaliIstek ? parcaliIstek.toplamSoruSayisi : yeniOzet.soru
         });
       }
 
@@ -2221,14 +2748,73 @@ export default {
         if (!hedefVeriJson) {
           return gonderJson(404, { hata: 'Belirtilen yedek kaydı bulunamadı.' });
         }
-        const mevcut = await okuMevcutKasa();
-        if (mevcut && mevcut.veriJson) {
-          await ekleYedekGecmisi(mevcut.revizyonNo, mevcut.veriJson, 'Geri yükleme öncesi otomatik yedek');
+        const mevcut = await okuMevcutKasaHafif();
+        if (mevcut && (mevcut.veriJson || (mevcut.veriBoyut && mevcut.veriBoyut > 0))) {
+          await ekleYedekGecmisi(mevcut.revizyonNo, mevcut.veriJson, 'Geri yükleme öncesi otomatik yedek', mevcut.veriBoyut || 0);
         }
-        const geriVeri = Cekirdek.temizleYedekHassasAlanlar(await acD1VeriJson(hedefVeriJson));
-        const geriVeriJson = (env && env.SINAV_DB) ? await paketleD1VeriJson(geriVeri) : JSON.stringify(geriVeri);
+        const parcaliDestek = Boolean(govde && govde.parcaliDestek === true);
+        let hedefDis = null;
+        try { hedefDis = JSON.parse(hedefVeriJson); } catch (_) { hedefDis = null; }
         const yeniRev = (mevcut ? mevcut.revizyonNo : 0) + 1;
         const simdi = Date.now();
+
+        if (hedefDis && hedefDis.__kodlama === 'parcali-v2') {
+          const temizMeta = Cekirdek.temizleYedekHassasAlanlar(hedefDis.meta || {});
+          const hashler = Array.isArray(hedefDis.soruParcaHashleri) ? hedefDis.soruParcaHashleri : [];
+          const toplamSoruSayisi = Number(hedefDis.toplamSoruSayisi) || 0;
+          const ozet = hedefDis.ozet || Object.assign(hesaplaKasaOzeti(temizMeta), { soru: toplamSoruSayisi });
+          const ozetBilgi = `Geri yüklendi (#${yedekId}) · ${ozet.ders} ders · ${toplamSoruSayisi} soru · ${ozet.ogrenci} öğrenci · ${ozet.sinav} sınav`;
+          if (env && env.SINAV_DB) {
+            await env.SINAV_DB.prepare(
+              `INSERT INTO bulut_kasalar (kullanici_adi, revizyon_no, veri_json, ozet_bilgi, guncelleme_ms)
+               VALUES (?1, ?2, ?3, ?4, ?5)
+               ON CONFLICT(kullanici_adi) DO UPDATE SET
+                 revizyon_no = excluded.revizyon_no,
+                 veri_json = excluded.veri_json,
+                 ozet_bilgi = excluded.ozet_bilgi,
+                 guncelleme_ms = excluded.guncelleme_ms`
+            ).bind(kullaniciAdi, yeniRev, hedefVeriJson, ozetBilgi, simdi).run();
+          } else {
+            sunucuDurumu.bulutKasalarBellek.set(kullaniciAdi, {
+              kullaniciAdi,
+              revizyonNo: yeniRev,
+              veri: null,
+              veriJson: hedefVeriJson,
+              ozetBilgi,
+              guncellemeMs: simdi,
+              parcaliV2: {
+                meta: temizMeta,
+                soruParcaHashleri: hashler,
+                toplamSoruSayisi,
+                ozet
+              }
+            });
+          }
+          if (parcaliDestek) {
+            return gonderJson(200, {
+              basarili: true,
+              geriYuklendi: true,
+              revizyonNo: yeniRev,
+              ozetBilgi,
+              kodlama: 'parcali-v2',
+              meta: temizMeta,
+              soruParcaHashleri: hashler,
+              toplamSoruSayisi
+            });
+          }
+          const tamVeri = await birlestirParcaliKasaSorulariD1VeyaBellek(env, kullaniciAdi, temizMeta, hashler);
+          return gonderJson(200, {
+            basarili: true,
+            geriYuklendi: true,
+            revizyonNo: yeniRev,
+            ozetBilgi,
+            veri: tamVeri,
+            veriPaketi: tamVeri
+          });
+        }
+
+        const geriVeri = Cekirdek.temizleYedekHassasAlanlar(await acD1VeriJson(hedefVeriJson));
+        const geriVeriJson = (env && env.SINAV_DB) ? await paketleD1VeriJson(geriVeri) : JSON.stringify(geriVeri);
         const ozetBilgi = `Geri yüklendi (#${yedekId}) · ${hesaplaKasaOzeti(geriVeri).metin}`;
         if (env && env.SINAV_DB) {
           await env.SINAV_DB.prepare(

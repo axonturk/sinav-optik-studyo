@@ -86,16 +86,21 @@
       return veri;
     }
     if (Array.isArray(veri)) {
-      return veri.map((oge) => derinTemizleNesne(oge, derinlik + 1));
+      const sonuc = new Array(veri.length);
+      for (let i = 0; i < veri.length; i++) {
+        sonuc[i] = derinTemizleNesne(veri[i], derinlik + 1);
+      }
+      return sonuc;
     }
-    const temiz = Object.create(null);
-    for (const anahtar of Object.keys(veri)) {
+    const temiz = {};
+    for (const anahtar in veri) {
+      if (!Object.prototype.hasOwnProperty.call(veri, anahtar)) continue;
       if (YASAKLI_ANAHTARLAR.has(anahtar)) {
         throw new Error(`Güvenlik ihlali: Yasaklı anahtar tespit edildi (${anahtar})`);
       }
       temiz[anahtar] = derinTemizleNesne(veri[anahtar], derinlik + 1);
     }
-    return Object.assign({}, temiz);
+    return temiz;
   }
 
   function semaDogrulaVeTemizle(hamVeri) {
@@ -10291,6 +10296,85 @@
     return Object.assign({}, temizGovde, { imzaAlg: 'SHA-256', imzaHash: beklenenImza });
   }
 
+  /* ------------------------------------------------------------------------
+     22. PARÇALI BULUT KASA V2 (parcali-v2) HASH & DİLİM YARDIMCILARI
+     ------------------------------------------------------------------------ */
+  function uretKasaParcaHash(metin) {
+    const s = String(metin || '');
+    let h1 = 0x811c9dc5;
+    let h2 = 0x9e3779b9;
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      h1 ^= c;
+      h1 = Math.imul(h1, 0x01000193);
+      h2 ^= ((c + (i & 255)) ^ (h1 >>> 16));
+      h2 = Math.imul(h2, 0x85ebca6b);
+    }
+    const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+    const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+    return `KP2_${s.length}_${hex1}_${hex2}`;
+  }
+
+  function bolSoruBankasiParcalara(sorular, maksSoruAdet = 350, maksJsonBoyut = 260000) {
+    const kaynak = Array.isArray(sorular) ? sorular : [];
+    const adetLimiti = Math.max(1, Math.min(2000, parseInt(maksSoruAdet, 10) || 350));
+    const boyutLimiti = Math.max(4096, Math.min(2000000, parseInt(maksJsonBoyut, 10) || 260000));
+    const parcalar = [];
+    let dilim = [];
+    let tahminiBoyut = 2;
+
+    const kapatDilim = () => {
+      if (!dilim.length) return;
+      const jsonMetin = JSON.stringify(dilim);
+      parcalar.push({
+        parcaHash: uretKasaParcaHash(jsonMetin),
+        soruSayisi: dilim.length,
+        jsonMetin,
+        sorular: dilim
+      });
+      dilim = [];
+      tahminiBoyut = 2;
+    };
+
+    for (let i = 0; i < kaynak.length; i++) {
+      const s = kaynak[i];
+      const ogeBoyut = JSON.stringify(s).length + 1;
+      if (dilim.length > 0 && (dilim.length >= adetLimiti || (tahminiBoyut + ogeBoyut) > boyutLimiti)) {
+        kapatDilim();
+      }
+      dilim.push(s);
+      tahminiBoyut += ogeBoyut;
+    }
+    kapatDilim();
+    return parcalar;
+  }
+
+  function cozKasaOzetBilgisi(ozetBilgi, ozetJson = '') {
+    if (typeof ozetJson === 'string' && ozetJson.trim()) {
+      try {
+        const o = JSON.parse(ozetJson);
+        if (o && typeof o === 'object') {
+          return {
+            ders: Number(o.ders) || 0,
+            soru: Number(o.soru) || 0,
+            ogrenci: Number(o.ogrenci) || 0,
+            sinav: Number(o.sinav) || 0,
+            okuma: Number(o.okuma) || 0
+          };
+        }
+      } catch (_) {}
+    }
+    const m = String(ozetBilgi || '').match(/(\d+)\s*ders\s*·\s*(\d+)\s*soru\s*·\s*(\d+)\s*öğrenci\s*·\s*(\d+)\s*sınav/i);
+    if (!m) return null;
+    return {
+      ders: Number(m[1]) || 0,
+      soru: Number(m[2]) || 0,
+      ogrenci: Number(m[3]) || 0,
+      sinav: Number(m[4]) || 0,
+      okuma: 0
+    };
+  }
+
   /* Dışa Aktarılan Evrensel API */
   const SinavOptikCekirdek = {
     cozHtmlEntities,
@@ -10421,6 +10505,9 @@
     cozBaglantiQrPaketi,
     uretBirlesikSinavPaketi,
     cozBirlesikSinavPaketi,
+    uretKasaParcaHash,
+    bolSoruBankasiParcalara,
+    cozKasaOzetBilgisi,
     hesaplaKumulatifOcPcVePukoRaporu,
     uretOzelObsNotCsv,
     uretMaddiHataItirazKanitRaporuTXT,

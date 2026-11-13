@@ -129,3 +129,16 @@ CREATE INDEX IF NOT EXISTS idx_omr_senkron_cursor
 
 CREATE INDEX IF NOT EXISTS idx_omr_senkron_sinav
   ON omr_senkron_olaylari(kullanici_adi, sinav_kodu, seq_no);
+
+-- V2 Parçalı Bulut Kasa Soru Parçaları (İçerik Adreslemeli Sıkıştırılmış Dilimler)
+CREATE TABLE IF NOT EXISTS bulut_kasa_soru_parcalari (
+  kullanici_adi TEXT NOT NULL,
+  parca_hash TEXT NOT NULL,
+  soru_sayisi INTEGER NOT NULL DEFAULT 0,
+  veri_gzip_b64 TEXT NOT NULL,
+  guncelleme_ms INTEGER NOT NULL,
+  PRIMARY KEY (kullanici_adi, parca_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bulut_kasa_parca_kullanici
+  ON bulut_kasa_soru_parcalari (kullanici_adi, guncelleme_ms DESC);

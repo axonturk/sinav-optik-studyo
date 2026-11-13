@@ -226,11 +226,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v15), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v16), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v15, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v15'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v16, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v16'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
@@ -1493,6 +1493,106 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
       anahtarOlayiYayinlandiMi &&
       masaV2Hatalar.length === 0,
       JSON.stringify({ puan: ikinciTabloVeV2.kayit55Puan, anahtarOlayiYayinlandiMi, masaV2Hatalar })
+    );
+
+    // [43] Parçalı Bulut Kasa V2 (parcali-v2): 6 Ders · 21.600 Soru Server + Worker Paritesi & HTTP 503 Önleme
+    const parcaliYetkisiz1 = await httpHamIstek(port, 'POST', '/api/bulut-kasa/parca-kontrol', { parcaHashleri: ['KP2_1_00000000_00000000'] });
+    const parcaliYetkisiz2 = await workerIstek(olusturSahteWorkerEnv(), 'POST', '/api/bulut-kasa/parca-oku', { parcaHashleri: ['KP2_1_00000000_00000000'] });
+    const yirmiBirBinSoru = Array.from({ length: 21600 }, (_, i) => ({
+      id: `S21K-${i + 1}`,
+      dersId: `ders-p-${(i % 6) + 1}`,
+      hafta: (i % 14) + 1,
+      tur: i % 3 === 0 ? 'dy' : (i % 3 === 1 ? 'test' : 'klasik'),
+      zorluk: i % 3 === 0 ? 'Kolay' : (i % 3 === 1 ? 'Orta' : 'Zor'),
+      metin: `Güvenlik duvarı trafik denetimi 21K ölçek sorusu #${i + 1}`,
+      secenekler: ['Seçenek A', 'Seçenek B', 'Seçenek C', 'Seçenek D', 'Seçenek E'],
+      dogruCevap: 'A',
+      ogrenimCiktisi: `ÖÇ-${(i % 4) + 1}`
+    }));
+    const altiDersMeta = {
+      aktifDersId: 'ders-p-1',
+      dersler: Array.from({ length: 6 }, (_, i) => ({
+        id: `ders-p-${i + 1}`,
+        kod: `DERS-${i + 1}`,
+        ad: `Ölçek Dersi ${i + 1}`,
+        ogrenciler: [{ ogrNo: String(25742001 + i), adSoyad: `Öğrenci ${i + 1}` }]
+      })),
+      ogrenciler: Array.from({ length: 6 }, (_, i) => ({ ogrNo: String(25742001 + i), adSoyad: `Öğrenci ${i + 1}` })),
+      sorular: []
+    };
+    const dilimler21K = Cekirdek.bolSoruBankasiParcalara(yirmiBirBinSoru, 350, 260000);
+    const hashler21K = dilimler21K.map((d) => d.parcaHash);
+    const parcaYukleVeKaydet = async (istekFn) => {
+      const k1 = await istekFn('POST', '/api/bulut-kasa/parca-kontrol', { parcaHashleri: hashler21K });
+      if (k1.status !== 200 || !Array.isArray(k1.body.eksikHashler) || k1.body.eksikHashler.length !== hashler21K.length) {
+        return { ok: false, asama: 'kontrol1', status: k1.status };
+      }
+      for (const d of dilimler21K) {
+        const gzB64 = zlib.gzipSync(Buffer.from(d.jsonMetin, 'utf8')).toString('base64');
+        const pRes = await istekFn('PUT', '/api/bulut-kasa/parca', {
+          parcaHash: d.parcaHash,
+          kodlama: 'gzip-b64',
+          veriSikistirilmis: gzB64
+        });
+        if (pRes.status !== 200) return { ok: false, asama: 'parca-put', status: pRes.status };
+      }
+      const k2 = await istekFn('POST', '/api/bulut-kasa/parca-kontrol', { parcaHashleri: hashler21K });
+      if (k2.status !== 200 || !Array.isArray(k2.body.eksikHashler) || k2.body.eksikHashler.length !== 0) {
+        return { ok: false, asama: 'kontrol2', status: k2.status, eksik: k2.body && k2.body.eksikHashler && k2.body.eksikHashler.length };
+      }
+      const onceGet = await istekFn('GET', '/api/bulut-kasa?parcaliDestek=1');
+      const bazRev = (onceGet.body && Number(onceGet.body.revizyonNo)) || undefined;
+      const metaGz = zlib.gzipSync(Buffer.from(JSON.stringify(altiDersMeta), 'utf8')).toString('base64');
+      const putAna = await istekFn('PUT', '/api/bulut-kasa', {
+        kodlama: 'parcali-v2',
+        veriSikistirilmis: metaGz,
+        soruParcaHashleri: hashler21K,
+        toplamSoruSayisi: 21600,
+        bazRevizyonNo: bazRev,
+        silmeOnayi: true,
+        zorlaEz: true,
+        islemNotu: '21.600 soru parcali-v2 testi'
+      });
+      if (putAna.status !== 200 || putAna.body.toplamSoruSayisi !== 21600) {
+        return { ok: false, asama: 'put-ana', status: putAna.status, body: putAna.body };
+      }
+      const sonGet = await istekFn('GET', '/api/bulut-kasa?parcaliDestek=1');
+      if (sonGet.status !== 200 || sonGet.body.kodlama !== 'parcali-v2' || sonGet.body.toplamSoruSayisi !== 21600) {
+        return { ok: false, asama: 'get-parcali', status: sonGet.status };
+      }
+      const mobilPkg = await istekFn('GET', '/api/mobil-ders-paketleri');
+      if (mobilPkg.status !== 200 || !Array.isArray(mobilPkg.body.dersler) || mobilPkg.body.dersler.length !== 6) {
+        return { ok: false, asama: 'mobil-pkg', status: mobilPkg.status, dersAdet: mobilPkg.body && mobilPkg.body.dersler && mobilPkg.body.dersler.length };
+      }
+      let okunanToplam = 0;
+      for (let i = 0; i < hashler21K.length; i += 16) {
+        const grup = hashler21K.slice(i, i + 16);
+        const rOku = await istekFn('POST', '/api/bulut-kasa/parca-oku', { parcaHashleri: grup });
+        if (rOku.status !== 200 || !Array.isArray(rOku.body.parcalar)) return { ok: false, asama: 'parca-oku', status: rOku.status };
+        for (const p of rOku.body.parcalar) {
+          const acik = JSON.parse(zlib.gunzipSync(Buffer.from(p.veriSikistirilmis, 'base64')).toString('utf8'));
+          okunanToplam += Array.isArray(acik) ? acik.length : 0;
+        }
+      }
+      return { ok: okunanToplam === 21600, okunanToplam, parcaAdet: hashler21K.length };
+    };
+
+    const srvParcaSonuc = await parcaYukleVeKaydet((m, u, b) =>
+      httpHamIstek(port, m, u, b, { Authorization: `Bearer ${v2Tok}` })
+    );
+    const wParcaEnv = olusturSahteWorkerEnv();
+    const wParcaGiris = await workerIstek(wParcaEnv, 'POST', '/api/hoca-giris', { kullaniciAdi: 'hoca', sifre: 'Demo!Hoca2026' });
+    const wParcaTok = wParcaGiris.body && wParcaGiris.body.token;
+    const wrkParcaSonuc = await parcaYukleVeKaydet((m, u, b) =>
+      workerIstek(wParcaEnv, m, u, b, { Authorization: `Bearer ${wParcaTok}` })
+    );
+    kontrol(
+      '[43] Parçalı Bulut Kasa V2 (parcali-v2): 6 ders · 21.600 soru hem server.js hem worker.js üzerinde 0 adet 503 ile kayıpsız aktarılır ve yetkisiz istekleri 401 reddeder',
+      parcaliYetkisiz1.status === 401 &&
+        parcaliYetkisiz2.status === 401 &&
+        srvParcaSonuc.ok &&
+        wrkParcaSonuc.ok,
+      JSON.stringify({ s: srvParcaSonuc, w: wrkParcaSonuc })
     );
 
     kontrol('Masaüstü oturumu boyunca sıfır sayfa JS hatası', sayfaHatalari.length === 0, sayfaHatalari.join(' | '));
