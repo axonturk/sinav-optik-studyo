@@ -1026,6 +1026,33 @@
         }
       }
 
+      function anahtarParmakIzi(yapi) {
+        const y = yapi || {};
+        try {
+          return JSON.stringify([y.dySayisi, y.testSayisi, y.klasikSayisi, y.cevapAnahtarlari || null]);
+        } catch (_) {
+          return '';
+        }
+      }
+
+      /* Kurulum QR'ı okutulmamış (anahtarı başka dersten/demodan kopyalanmış) derste okuma kapalıdır.
+         Anahtar herhangi bir yolla değişirse (kurulum QR'ı, elle düzenleme, CSV, kağıttan anahtar) kilit kendiliğinden kalkar. */
+      function kurulumEksikMi() {
+        const y = mobilDurum.sinavYapisi || {};
+        if (!y.kurulumBekliyor) return false;
+        if (y.kurulumBekliyorImza && anahtarParmakIzi(y) !== y.kurulumBekliyorImza) {
+          delete y.kurulumBekliyor;
+          delete y.kurulumBekliyorImza;
+          return false;
+        }
+        return true;
+      }
+
+      function kurulumKilidiniKaldir() {
+        delete mobilDurum.sinavYapisi.kurulumBekliyor;
+        delete mobilDurum.sinavYapisi.kurulumBekliyorImza;
+      }
+
       function guncelleMobilDersPaketKaydi() {
         const id = temizDersAnahtari(mobilDurum.dersId || 'varsayilan');
         mobilDurum.dersId = id;
@@ -1085,6 +1112,7 @@
           mobilDurum.okumaSonuclari = Array.isArray(hedefPaket.okumaSonuclari) ? hedefPaket.okumaSonuclari.slice() : [];
           if (hedefPaket.sinavYapisi && typeof hedefPaket.sinavYapisi === 'object') {
             delete mobilDurum.sinavYapisi.soruPuanlari;
+            kurulumKilidiniKaldir(); // Önceki dersin kilidi bu derse taşınmasın; hedef paketin kendi durumu aşağıda gelir
             Object.assign(mobilDurum.sinavYapisi, kopyalaMobilSinavYapisi(hedefPaket.sinavYapisi));
           } else if (hedefPaket.ad) {
             mobilDurum.sinavYapisi.dersAd = hedefPaket.ad;
@@ -1134,6 +1162,10 @@
           const bazYapi = kopyalaMobilSinavYapisi(mobilDurum.sinavYapisi);
           if (gelenAd) bazYapi.dersAd = gelenAd;
           if (gelenKod) bazYapi.sinavKodu = gelenKod + '-SINAV';
+          // Liste QR'ı yalnız öğrencileri getirir; cevap anahtarı başka dersten/demodan kopyalanmış olur.
+          // Kurulum QR'ı okutulana ya da anahtar elle değiştirilene kadar bu derste kağıt okunmaz.
+          bazYapi.kurulumBekliyor = true;
+          bazYapi.kurulumBekliyorImza = anahtarParmakIzi(bazYapi);
           mobilDurum.dersPaketleriHaritasi[hedefId] = {
             id: hedefId,
             kod: gelenKod,
@@ -1210,6 +1242,8 @@
             yapi.dersAd = d.ad || d.dersAdi || d.kod || yapi.dersAd;
             if (gelenYapi && typeof gelenYapi === 'object' && (baglanModuMu || (!aktifMi && !eski.sinavYapisi))) {
               Object.assign(yapi, kopyalaMobilSinavYapisi(gelenYapi));
+              delete yapi.kurulumBekliyor;
+              delete yapi.kurulumBekliyorImza;
               yapi.dersAd = d.ad || d.dersAdi || yapi.dersAd;
               if (d.cevapAnahtarlari && typeof d.cevapAnahtarlari === 'object') {
                 yapi.cevapAnahtarlari = JSON.parse(JSON.stringify(d.cevapAnahtarlari));
@@ -1553,6 +1587,7 @@
           }
           delete mobilDurum.sinavYapisi.soruPuanlari;
           Object.assign(mobilDurum.sinavYapisi, onCozulmusSetup);
+          kurulumKilidiniKaldir();
           if (Array.isArray(onCozulmusSetup.ogrenciler) && onCozulmusSetup.ogrenciler.length > 0) {
             mobilDurum.ogrenciler = onCozulmusSetup.ogrenciler;
           }
@@ -1672,7 +1707,7 @@
         }
       }
 
-      function uygulaKagitSifreliQrSonuca(sonuc, qrMetin) {
+      function uygulaKagitSifreliQrSonuca(sonuc, qrMetin, secenek = {}) {
         if (!sonuc || !qrMetin || typeof C.cozSifreliOptikKagitQrPaketi !== 'function') return false;
         const temizQr = String(qrMetin).trim();
         if (!temizQr.startsWith('OQV2:')) return false;
@@ -1681,6 +1716,10 @@
           if (cozulen && cozulen.hata) mobilUyariGoster('⚠️ ' + cozulen.hata);
           return false;
         }
+        // Kağıt QR'ı kimlikte esastır (öğrenci numarasını yanlış kodlamış olabilir). Ancak ayrı okutulmuş (bekleyen) QR,
+        // kağıtta kodlanan numarayla uyuşmuyorsa başka bir kağıdın QR'ı da olabilir: QR uygulanır ama öğretmen incelemesine düşer.
+        const kodlanan = String(sonuc.okunanNoKod || '');
+        const qrUyusmazlik = Boolean(secenek.bekleyenden && cozulen.ogrNo && /^\d{2,}$/.test(kodlanan) && !String(cozulen.ogrNo).endsWith(kodlanan));
         if (cozulen.grup) sonuc.grup = cozulen.grup;
         if (cozulen.ogrNo) {
           const kayitliOgr = mobilDurum.ogrenciler.find((o) => String(o.ogrNo) === String(cozulen.ogrNo));
@@ -1711,6 +1750,16 @@
           if (yeniden) Object.assign(sonuc, yeniden);
           sonuc.ozelKagitQrCozuldu = true;
         }
+        if (qrUyusmazlik) {
+          sonuc.qrNumaraUyusmazligi = true;
+          sonuc.supheliMi = true;
+          if (!Array.isArray(sonuc.incelemeKuyrugu)) sonuc.incelemeKuyrugu = [];
+          sonuc.incelemeKuyrugu.push({
+            alan: 'Öğrenci Kimliği',
+            detay: `Kağıtta kodlanan numara (${kodlanan}) kağıt QR'ındaki numarayla (${cozulen.ogrNo}) uyuşmuyor — QR esas alındı; QR'ın bu kağıda ait olduğunu kontrol edin`
+          });
+          mobilUyariGoster(`⚠️ Kodlanan numara (${kodlanan}) ile kağıt QR'ı (${cozulen.ogrNo}) uyuşmuyor. QR esas alındı — QR bu kağıdın mı, kontrol edin.`);
+        }
         return true;
       }
 
@@ -1737,9 +1786,20 @@
         const metin = String(hamMetin || '').trim();
         if (!metin) return false;
         if (metin.startsWith('OQV2:')) {
-          if (mobilDurum.okumaSonuclari.length > 0 && uygulaKagitSifreliQrSonuca(mobilDurum.okumaSonuclari[0], metin)) {
-            isleMobilOkumaSonucu(mobilDurum.okumaSonuclari[0], { modalAcma: true });
-            mobilUyariGoster(`🔐 ${kaynakEtiket}: Kişiye özel şifreli kağıt QR kodu çözüldü ve puanlandı!`);
+          // Veri koruma: Ayrı okutulan kağıt QR'ı ASLA daha önce okunmuş bir kayda uygulanmaz
+          // (eskiden en son okunan öğrencinin kaydına yazılıp o öğrencinin notunu siliyordu).
+          // QR yalnız bundan sonra okutulacak kağıt için bekletilir; kağıttaki numarayla uyuşmazsa öğretmen incelemesine düşer.
+          if (typeof C.cozSifreliOptikKagitQrPaketi === 'function') {
+            const on = C.cozSifreliOptikKagitQrPaketi(metin, mobilDurum.sinavYapisi.sinavGizliAnahtar || '');
+            if (!on || !on.gecerli) {
+              mobilUyariGoster(on && on.anahtarEksik
+                ? '⚠️ Bu kağıt QR\'ını çözmek için önce cevap anahtarı sayfasındaki kurulum QR\'ını okutun.'
+                : `⚠️ ${(on && on.hata) || 'Kağıt QR kodu çözülemedi.'}`);
+              return false;
+            }
+            bekleyenKagitOqv2 = metin;
+            const ogrAd = on.ogrNo ? ((mobilDurum.ogrenciler.find((o) => String(o.ogrNo) === String(on.ogrNo)) || {}).adSoyad || on.ogrNo) : '';
+            mobilUyariGoster(`🔐 ${kaynakEtiket}: ${ogrAd ? ogrAd + ' için ' : ''}kağıt QR'ı alındı; şimdi bu kağıdın optik alanını okutun.`, 'basari');
             return true;
           }
           bekleyenKagitOqv2 = metin;
@@ -1778,6 +1838,7 @@
             }
             delete mobilDurum.sinavYapisi.soruPuanlari;
             Object.assign(mobilDurum.sinavYapisi, cozulmusSetup);
+            kurulumKilidiniKaldir();
             if (Array.isArray(cozulmusSetup.ogrenciler) && cozulmusSetup.ogrenciler.length > 0) {
               mobilDurum.ogrenciler = cozulmusSetup.ogrenciler;
             }
@@ -2658,7 +2719,7 @@
         if (modal) modal.style.display = 'block';
       }
 
-      function ataOgrenciKayda(kayitId, ogrNoGirdi, adSoyadGirdi) {
+      function ataOgrenciKayda(kayitId, ogrNoGirdi, adSoyadGirdi, secenek = {}) {
         const temizNo = String(ogrNoGirdi || '').trim();
         if (!temizNo) return false;
         const kayit = mobilDurum.okumaSonuclari.find((s) => s.id === kayitId);
@@ -2667,15 +2728,52 @@
         const kesinNo = listedeki ? String(listedeki.ogrNo) : temizNo;
         const kesinAd = String(adSoyadGirdi || '').trim() || (listedeki ? listedeki.adSoyad : `Öğrenci (${kesinNo})`);
 
+        // Veri koruma: Seçilen öğrencinin zaten yerleşik bir kaydı varsa, öğretmen açıkça onaylamadan silinmez
+        const digerKayit = mobilDurum.okumaSonuclari.find(
+          (s) => s.id !== kayit.id && String(s.ogrNo) === kesinNo && !s.numaraEslesmediMi && !s.kimlikEslesmeBekliyor
+        );
+        if (digerKayit && !secenek.ustuneYazOnayli) {
+          const buImza = kayit.cevapImza || imzaHesaplaMobilKagit(kayit);
+          const digerImza = digerKayit.cevapImza || imzaHesaplaMobilKagit(digerKayit);
+          if (buImza === digerImza && String(kayit.grup) === String(digerKayit.grup)) {
+            // Aynı kağıt iki kez okunmuş: fazlalığı kaldır, eski kayıt aynen kalır
+            mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.filter((s) => s.id !== kayit.id);
+            kapatOgrenciEslestirModal();
+            kaydetYerelDepoya();
+            document.getElementById('mobil-alt-sayac').textContent = String(mobilDurum.okumaSonuclari.length);
+            guncelleMobilSonucListesi();
+            mobilUyariGoster(`ℹ️ ${kesinAd} zaten okunmuştu (aynı kağıt) — tekrar kaydedilmedi.`, 'basari');
+            return true;
+          }
+          kayit.mukerrerEskiId = digerKayit.id;
+          kayit.mukerrerOgrNo = kesinNo;
+          kayit.mukerrerAdSoyad = kesinAd;
+          kayit.kimlikEslesmeBekliyor = true;
+          kayit.numaraEslesmediMi = false;
+          kayit.cakisanAdaylar = listedeki ? [listedeki] : [];
+          kayit.ogrNo = `BEKLEYEN-MUKERRER-${kesinNo.slice(-4)}-${String(kayit.id).slice(-4)}`;
+          kayit.adSoyad = `${kesinAd} (ikinci kağıt — karar bekliyor)`;
+          kapatOgrenciEslestirModal();
+          isleMobilOkumaSonucu(kayit, { modalAcma: true });
+          mobilUyariGoster(`⚠️ ${kesinAd} zaten okundu (${digerKayit.toplamPuan} puan). Bu kağıt ${kayit.toplamPuan} puan — hangisinin geçerli olduğunu seçin.`);
+          return true;
+        }
+
         kayit.ogrNo = kesinNo;
         kayit.adSoyad = kesinAd;
         kayit.numaraEslesmediMi = false;
         kayit.kimlikEslesmeBekliyor = false;
+        kayit.kimlikOgretmenSecti = true;
         kayit.cakisanAdaylar = listedeki ? [listedeki] : [];
         kayit.supheliMi = false;
+        delete kayit.mukerrerEskiId;
+        delete kayit.mukerrerOgrNo;
+        delete kayit.mukerrerAdSoyad;
 
-        // Aynı öğrenciye ait başka eski satır varsa tekilleştir
-        mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.filter((s) => s.id === kayit.id || String(s.ogrNo) !== kesinNo || s.numaraEslesmediMi);
+        // Öğretmen "yenisi geçerli" dediyse aynı öğrenciye ait diğer yerleşik satırlar kaldırılır
+        if (secenek.ustuneYazOnayli) {
+          mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.filter((s) => s.id === kayit.id || String(s.ogrNo) !== kesinNo || s.numaraEslesmediMi);
+        }
 
         // Kişiye özel anahtar haritası varsa bu öğrenci için yeniden puanla
         if (mobilDurum.sinavYapisi.ogrenciOzelAnahtarlar && mobilDurum.sinavYapisi.ogrenciOzelAnahtarlar[kesinNo] && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
@@ -2707,7 +2805,15 @@
         if (!sonuc || sonuc.formBulundu === false) return;
         if (!sonuc.id) sonuc.id = 'MOB-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
 
-        const belirsiz = kagitKimlikBelirsizMi(sonuc);
+        const cakismaVar = Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1;
+        // Veri koruma: Son 2/3 hanesi birden fazla öğrenciye uyan kağıt, öğretmen seçene kadar HİÇBİR öğrenciye yazılmaz.
+        // (Eskiden ilk aday geçici olarak seçiliyor ve o öğrencinin önceki kaydının üzerine yazılıyordu.)
+        if (cakismaVar && !sonuc.kimlikOgretmenSecti) {
+          sonuc.kimlikEslesmeBekliyor = true;
+          sonuc.ogrNo = `BEKLEYEN-${String(sonuc.okunanNoKod || '00').replace(/[^0-9A-Za-z]/g, 'X')}-${sonuc.id.slice(-4)}`;
+          sonuc.adSoyad = `Seçim bekliyor (${sonuc.cakisanAdaylar.length} aday)`;
+        }
+        let belirsiz = kagitKimlikBelirsizMi(sonuc);
         if (sonuc.numaraEslesmediMi) {
           sonuc.kimlikEslesmeBekliyor = true;
           if (!sonuc.ogrNo || sonuc.ogrNo === '00' || String(sonuc.ogrNo).includes('?')) {
@@ -2723,8 +2829,38 @@
         }
 
         let idx = -1;
-        if (!sonuc.numaraEslesmediMi) {
-          idx = mobilDurum.okumaSonuclari.findIndex((s) => s.id === sonuc.id || (String(s.ogrNo) === String(sonuc.ogrNo) && !s.numaraEslesmediMi));
+        let mukerrerUyari = '';
+        if (!belirsiz) {
+          idx = mobilDurum.okumaSonuclari.findIndex((s) => s.id === sonuc.id);
+          {
+            const eskiIdx = mobilDurum.okumaSonuclari.findIndex(
+              (s) => s.id !== sonuc.id && String(s.ogrNo) === String(sonuc.ogrNo) && !s.numaraEslesmediMi && !s.kimlikEslesmeBekliyor
+            );
+            if (eskiIdx >= 0) {
+              const eski = mobilDurum.okumaSonuclari[eskiIdx];
+              const eskiImza = eski.cevapImza || imzaHesaplaMobilKagit(eski);
+              if (secenekler.mukerrerUstuneYaz || (eskiImza === cevapImza && String(eski.grup) === String(sonuc.grup))) {
+                // Aynı kağıdın tekrar okutulması (birebir aynı cevaplar) veya öğretmenin açık "yenisi geçerli" kararı
+                if (idx >= 0) {
+                  // Bu kayıt zaten listede ayrı satır: eski satırı kaldır, tek satır kalsın
+                  mobilDurum.okumaSonuclari.splice(eskiIdx, 1);
+                  idx = mobilDurum.okumaSonuclari.findIndex((s) => s.id === sonuc.id);
+                } else {
+                  idx = eskiIdx;
+                }
+                if (!secenekler.mukerrerUstuneYaz) mukerrerUyari = `ℹ️ ${sonuc.adSoyad} zaten okunmuştu (aynı kağıt) — tekrar kaydedilmedi.`;
+              } else {
+                // Aynı öğrenciye FARKLI ikinci kağıt: eski not korunur, yenisi karar bekler
+                sonuc.mukerrerEskiId = eski.id;
+                sonuc.mukerrerOgrNo = String(sonuc.ogrNo);
+                sonuc.mukerrerAdSoyad = String(sonuc.adSoyad);
+                sonuc.kimlikEslesmeBekliyor = true;
+                sonuc.ogrNo = `BEKLEYEN-MUKERRER-${String(sonuc.mukerrerOgrNo).slice(-4)}-${sonuc.id.slice(-4)}`;
+                sonuc.adSoyad = `${sonuc.mukerrerAdSoyad} (ikinci kağıt — karar bekliyor)`;
+                mukerrerUyari = `⚠️ ${sonuc.mukerrerAdSoyad} zaten okundu (${eski.toplamPuan} puan). Bu kağıt ${sonuc.toplamPuan} puan — hangisinin geçerli olduğunu seçin.`;
+              }
+            }
+          }
         } else {
           idx = mobilDurum.okumaSonuclari.findIndex((s) => s.id === sonuc.id);
           // Mükerrer ?0 / 00 Koruması: Yalnız hem okunanNoKod hem cevap dizilimi birebir aynı olan eşleşmemiş kağıdı günceller (?0 ile 80 asla birleşmez!)
@@ -2750,6 +2886,8 @@
         if (!secenekler.senkronAtla) {
           kuyrugaAlMobilSenkronOlayi('OKUDU_GUNCELLE', hafifletMobilKayit(sonuc));
         }
+        belirsiz = kagitKimlikBelirsizMi(sonuc);
+        if (mukerrerUyari) mobilUyariGoster(mukerrerUyari, sonuc.mukerrerEskiId ? 'uyari' : 'basari');
         cizMobilRontgen(sonuc);
         guncelleVizorCanliHud(sonuc);
         bipCal(!sonuc.supheliMi && !belirsiz);
@@ -2768,13 +2906,34 @@
 
         // Sonu aynı numara olan veya numarası okunamayan öğrenciler için Dokunmatik Seçici
         let cakismaHTML = '';
-        if (Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1) {
+        if (sonuc.mukerrerEskiId && sonuc.kimlikEslesmeBekliyor) {
+          const eski = mobilDurum.okumaSonuclari.find((s) => s.id === sonuc.mukerrerEskiId);
+          cakismaHTML = `
+            <div style="margin-top:0.5rem; padding:0.5rem; background:var(--uyari-acik); color:var(--uyari); border-radius:6px;">
+              <div style="font-weight:800; font-size:0.78rem; margin-bottom:0.3rem;">
+                ${C.kacisHTML(sonuc.mukerrerAdSoyad || '')} zaten okundu${eski ? ` (${C.kacisHTML(eski.toplamPuan)} puan)` : ''}. Bu kağıt ${C.kacisHTML(sonuc.toplamPuan)} puan. Hangisi geçerli?
+              </div>
+              <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
+                <button type="button" class="btn btn-birincil btn-kucuk" data-m-mukerrer-karar="yeni" data-m-mukerrer-id="${C.kacisHTML(sonuc.id)}">Yeni kağıt geçerli</button>
+                <button type="button" class="btn btn-kucuk" data-m-mukerrer-karar="eski" data-m-mukerrer-id="${C.kacisHTML(sonuc.id)}">Eskisi kalsın</button>
+                <button type="button" class="btn btn-kucuk" data-m-eslestir-ac="${C.kacisHTML(sonuc.id)}">Başka öğrenci</button>
+              </div>
+            </div>
+          `;
+        } else if (Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1) {
+          const okunmusNolar = new Set(
+            mobilDurum.okumaSonuclari
+              .filter((s) => s && s.id !== sonuc.id && !s.numaraEslesmediMi && !s.kimlikEslesmeBekliyor)
+              .map((s) => String(s.ogrNo))
+          );
           const adayBtnler = sonuc.cakisanAdaylar
+            .slice()
+            .sort((a, b) => Number(okunmusNolar.has(String(a.ogrNo))) - Number(okunmusNolar.has(String(b.ogrNo))))
             .map((aday) => {
-              const secili = sonuc.ogrNo === aday.ogrNo;
+              const okundu = okunmusNolar.has(String(aday.ogrNo));
               return `
-                <button type="button" class="btn ${secili ? 'btn-birincil' : ''} btn-kucuk" data-m-cakisma-id="${C.kacisHTML(sonuc.id)}" data-m-ogrno="${C.kacisHTML(aday.ogrNo)}" data-m-ad="${C.kacisHTML(aday.adSoyad)}">
-                  👤 ${C.kacisHTML(aday.adSoyad)} (${C.kacisHTML(aday.ogrNo)})
+                <button type="button" class="btn ${okundu ? '' : 'btn-birincil'} btn-kucuk" data-m-cakisma-id="${C.kacisHTML(sonuc.id)}" data-m-ogrno="${C.kacisHTML(aday.ogrNo)}" data-m-ad="${C.kacisHTML(aday.adSoyad)}">
+                  👤 ${C.kacisHTML(aday.adSoyad)} (${C.kacisHTML(aday.ogrNo)})${okundu ? ' · zaten okundu' : ''}
                 </button>
               `;
             })
@@ -2942,6 +3101,21 @@
           } catch (_) {}
         }
 
+        // Kurulum QR'ı okutulmamış derste kağıt puanlanmaz (cevap anahtarı başka dersten/demodan kopyalanmış olur).
+        // QR yakalama yine çalışır: kameraya kurulum QR'ı tutulursa ders hazır hâle gelir.
+        if (!standartFormMu() && !masterAnahtarModu && kurulumEksikMi()) {
+          if (tespitSozu) {
+            tespitSozu.then((kodlar) => {
+              (kodlar || []).forEach((k) => { if (k && k.rawValue) uygulaPwaQrMetni(k.rawValue, 'Kamera QR'); });
+            });
+          }
+          if (!seri) {
+            mobilUyariGoster(`⚠️ "${mobilDurum.sinavYapisi.dersAd || 'Bu ders'}" için cevap anahtarı yok. Bilgisayardaki cevap anahtarı sayfasında bulunan kurulum QR'ını okutun; sonra kağıtları okuyun.`);
+            bipCal(false);
+          }
+          return null;
+        }
+
         const imgData = ctx.getImageData(0, 0, vizorCanvas.width, vizorCanvas.height);
         let standart = standartFormMu();
         // Kullanıcı yanlışlıkla "Standart / hazır baskı" seçmiş olsa bile karede stüdyonun 4 köşe kareli (▣) optik kutusu varsa otomatik stüdyo modunda oku!
@@ -2997,7 +3171,7 @@
           cizDokunmatikAnahtarEditoru();
         }
         if (!standart && bekleyenKagitOqv2) {
-          uygulaKagitSifreliQrSonuca(sonuc, bekleyenKagitOqv2);
+          uygulaKagitSifreliQrSonuca(sonuc, bekleyenKagitOqv2, { bekleyenden: true });
           bekleyenKagitOqv2 = '';
         }
         if (masterAnahtarModu) {
@@ -4027,6 +4201,30 @@
           const btnEsAc = e.target.closest('[data-m-eslestir-ac]');
           if (btnEsAc) {
             acOgrenciEslestirModal(btnEsAc.getAttribute('data-m-eslestir-ac'));
+            return;
+          }
+          const btnMuk = e.target.closest('[data-m-mukerrer-karar]');
+          if (btnMuk) {
+            const mukId = btnMuk.getAttribute('data-m-mukerrer-id');
+            const karar = btnMuk.getAttribute('data-m-mukerrer-karar');
+            const yeniKayit = mobilDurum.okumaSonuclari.find((s) => s.id === mukId);
+            if (!yeniKayit || !yeniKayit.mukerrerEskiId) return;
+            kaydetMobilSilmeYedegi(karar === 'yeni' ? 'Eski kağıt yenisiyle değiştirildi' : 'İkinci kağıt silindi');
+            if (karar === 'yeni') {
+              const eskiId = yeniKayit.mukerrerEskiId;
+              silinenMobilKayitIdleri.add(String(eskiId));
+              mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.filter((s) => s.id !== eskiId);
+              ataOgrenciKayda(mukId, yeniKayit.mukerrerOgrNo, yeniKayit.mukerrerAdSoyad, { ustuneYazOnayli: true });
+              mobilUyariGoster(`✅ ${yeniKayit.adSoyad}: yeni kağıt geçerli sayıldı (eski kağıt "Geri Al" ile geri getirilebilir).`, 'basari');
+            } else {
+              silinenMobilKayitIdleri.add(String(mukId));
+              mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.filter((s) => s.id !== mukId);
+              kaydetYerelDepoya();
+              document.getElementById('mobil-alt-sayac').textContent = String(mobilDurum.okumaSonuclari.length);
+              guncelleMobilSonucListesi();
+              document.getElementById('mobil-sonuc-icerik').innerHTML = '<div style="font-size:0.8rem;">İkinci kağıt silindi; önceki not korundu.</div>';
+              mobilUyariGoster('✅ Önceki kağıt geçerli kaldı.', 'basari');
+            }
             return;
           }
           const btn = e.target.closest('[data-m-cakisma-id]');

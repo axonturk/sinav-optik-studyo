@@ -6492,6 +6492,27 @@
     };
   }
 
+  function onlineDersSoruSayisi(sinavTanimi) {
+    const yapi = okuAktifSinavYapisi();
+    const hedefDersId = (sinavTanimi && sinavTanimi.dersId) || (yapi && yapi.ders && yapi.ders.id) || durum.aktifDersId;
+    const dersSorulari = (durum.sorular || []).filter((s) => s && !s.arsivde && (s.dersId === hedefDersId || s.dersId === 'genel'));
+    if (dersSorulari.length > 0) return dersSorulari.length;
+    return yapi && Array.isArray(yapi.tumSeciliSorular) ? yapi.tumSeciliSorular.length : 0;
+  }
+
+  function gosterOnlineSoruYokUyarisi() {
+    const bilgi = document.getElementById('etiket-online-tanim-bilgi');
+    if (bilgi) {
+      bilgi.textContent = 'Bu dersin soru bankası boş. Online sınav yayınlanmadı — önce Soru Bankası\'na soru ekleyin.';
+      bilgi.style.color = 'var(--tehlike)';
+    }
+    const rozet = document.getElementById('rozet-online-durum');
+    if (rozet) {
+      rozet.textContent = 'Soru yok';
+      rozet.className = 'rozet rozet-kirmizi';
+    }
+  }
+
   async function senkronizeEtOnlineSinavSunucu(sinavTanimi) {
     if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
     try {
@@ -6508,7 +6529,12 @@
       const dyAdet = sinavTanimi.dySayisi !== undefined ? Number(sinavTanimi.dySayisi) : (yapi ? yapi.dySayisi : 10);
       const testAdet = sinavTanimi.testSayisi !== undefined ? Number(sinavTanimi.testSayisi) : (yapi ? yapi.testSayisi : 10);
       const klasikAdet = sinavTanimi.klasikSayisi !== undefined ? Number(sinavTanimi.klasikSayisi) : 0;
-      const havuzSorulari = dersSorulari.length > 0 ? dersSorulari : (C.VARSAYILAN_SORULAR || []);
+      // Derste soru yoksa sınav ASLA demo sorularla yayınlanmaz (öğrenciler habersizce örnek soruları cevaplıyordu)
+      if (dersSorulari.length === 0) {
+        gosterOnlineSoruYokUyarisi();
+        return false;
+      }
+      const havuzSorulari = dersSorulari;
       const seciliSorular = C.uretKisiyeOzelOnlineSinav(
         havuzSorulari,
         dyAdet,
@@ -11498,6 +11524,10 @@
 
     document.getElementById('btn-online-baslat').addEventListener('click', async () => {
       const form = okuOnlineSinavFormunu();
+      if (onlineDersSoruSayisi(form) === 0) {
+        gosterOnlineSoruYokUyarisi();
+        return;
+      }
       const simdiMs = Date.now();
       if (!form.baslangic || Date.parse(form.baslangic) > simdiMs) {
         form.baslangic = guncelSimdiTarihSaatFormatla(simdiMs - 60000);

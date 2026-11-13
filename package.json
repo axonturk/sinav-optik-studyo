@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test-suite.js && node e2e-test.js && node dogru-sik-test.js && node omr-gercek-form-test.js && node pwa-test.js && node online-liste-test.js && node hoca-onay-test.js && node faz2-ve-kabul-test.js && node mimari-100-test.js && node tasarim-master-test.js && node olcek-ve-guvenlik-test.js",
+    "test": "node test-suite.js && node e2e-test.js && node dogru-sik-test.js && node omr-gercek-form-test.js && node pwa-test.js && node online-liste-test.js && node hoca-onay-test.js && node faz2-ve-kabul-test.js && node mimari-100-test.js && node tasarim-master-test.js && node olcek-ve-guvenlik-test.js && node pwa-veri-koruma-test.js && node okuma-basari-testi.js",
     "test:birim": "node test-suite.js",
     "test:e2e": "node e2e-test.js",
     "test:dogru-sik": "node dogru-sik-test.js",
@@ -15,7 +15,9 @@
     "test:hoca-onay": "node hoca-onay-test.js",
     "test:tasarim": "node tasarim-master-test.js",
     "deploy": "wrangler deploy",
-    "preview": "wrangler dev"
+    "preview": "wrangler dev",
+    "test:veri-koruma": "node pwa-veri-koruma-test.js",
+    "test:okuma-basari": "node okuma-basari-testi.js"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -2105,6 +2105,15 @@
   }
 
   /* Satır Karar Motoru: Boş / Tek İşaret / Silinti / Çift İşaretleme Ayrımı */
+  /* İnceleme kuyruğu açıklaması: kararın gerçek türüne göre (eskiden her şüpheli satır "Silinti şüphesi" yazıyordu) */
+  function kuyrukDetayMetni(karar) {
+    if (!karar) return '';
+    if (karar.durum === 'CIFT') return 'Çift şık işaretlenmiş';
+    if (karar.durum === 'SILINTI_SUPHELI') return `Silinti şüphesi (${karar.secilen} / ${karar.alternatif || ''})`;
+    if (karar.soluk) return `Soluk iz (${karar.solukEtiket || '?'}) — boş sayıldı, kağıdı kontrol edin`;
+    return `Zayıf işaret (${karar.secilen || '?'}) — kağıdı kontrol edin`;
+  }
+
   function degerlendirBalonSatiri(kanonikGri, kanonikIkili, balonListesi, secenekEtiketAlan = 'secenek') {
     const olcumler = balonListesi.map((b) => ({
       ...b,
@@ -2122,15 +2131,20 @@
     const medyanDoluluk = sirali[medyanIdx] ? sirali[medyanIdx].doluluk : 0;
     const kontrastOrani = enKoyu ? enKoyu.doluluk / Math.max(0.04, ikinciKoyu.doluluk) : 0;
 
-    if (
-      !enKoyu ||
-      enKoyu.doluluk < BOS_ESIK ||
-      (enKoyu.doluluk < 0.34 && (kontrastOrani < 1.32 || (enKoyu.doluluk - medyanDoluluk) < 0.10))
-    ) {
+    // Soluk iz üst sınırı: Sınıf ölçeğinde okuma testinde (36 kağıt, 1.392 satır; eğik/ters/gölgeli/bulanık/uzak çekim, JPEG)
+    // gerçek kalem işaretleri en az %72 dolu (açık bastırılmış kurşun kalem dahil), boş balonlar ve silinti izleri en çok %26 çıktı.
+    // %34 altındaki tek iz cevap SAYILMAZ (eskiden kontrastı yüksekse işaret sayılıyor, silinmiş cevabı puanlıyordu);
+    // belirgin bir soluk iz varsa boş sayılır ama öğretmen incelemesine düşer.
+    const SOLUK_UST_ESIK = 0.34;
+    if (!enKoyu || enKoyu.doluluk < SOLUK_UST_ESIK) {
+      const soluk = Boolean(enKoyu && enKoyu.doluluk >= BOS_ESIK && (enKoyu.doluluk - medyanDoluluk) >= 0.09);
       return {
         durum: 'BOS',
         secilen: null,
-        guven: 0.96,
+        guven: soluk ? 0.7 : 0.96,
+        supheli: soluk,
+        soluk,
+        solukEtiket: soluk ? enKoyu.etiket : '',
         enKoyuDoluluk: enKoyu ? enKoyu.doluluk : 0,
         ikinciDoluluk: ikinciKoyu.doluluk,
         olcumler
@@ -2469,7 +2483,7 @@
       if (karar.supheli) {
         incelemeKuyrugu.push({
           alan: `D/Y Soru ${i + 1}`,
-          detay: `${karar.durum === 'CIFT' ? 'Çift şık işaretlenmiş' : `Silinti şüphesi (${karar.secilen} / ${karar.alternatif || ''})`}`
+          detay: kuyrukDetayMetni(karar)
         });
       }
 
@@ -2518,7 +2532,7 @@
       if (karar.supheli) {
         incelemeKuyrugu.push({
           alan: `Test Soru ${i + 1}`,
-          detay: `${karar.durum === 'CIFT' ? 'Çift şık işaretlenmiş' : `Silinti şüphesi (${karar.secilen} / ${karar.alternatif || ''})`}`
+          detay: kuyrukDetayMetni(karar)
         });
       }
 
