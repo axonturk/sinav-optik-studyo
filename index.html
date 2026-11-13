@@ -1039,6 +1039,9 @@
                     <a href="optik-mobil.html" target="_blank" class="btn btn-birincil btn-kucuk" id="link-qr-dogrudan-ac">
                       Kurulumlu Mobil Okuyucuyu Aç
                     </a>
+                    <a href="optik-mobil.html#baglan=1" target="_blank" class="btn btn-basari btn-kucuk" id="link-baglanti-qr-ac" title="Hafif ~140 karakter Tek Bağlantı QR / Canlı Senkron">
+                      🔗 Tek Bağlantı QR ile Aç (V2 Canlı)
+                    </a>
                     <button type="button" class="btn btn-kucuk" id="btn-setup-kod-kopyala">
                       Kurulum Bağlantısını Kopyala
                     </button>
@@ -1564,6 +1567,21 @@
             <!-- Son Okunan Kağıdın Detaylı Sonuç Fişi -->
             <div id="kutu-son-okunan-detay" style="padding:0.85rem; background:var(--bg-ikincil); border-radius:var(--radius-kucuk); border:1px solid var(--kenar);">
               Henüz bir sınav kağıdı okutulmadı. Soldaki <strong>"▶ Optik Görüntü Üret ve Tara"</strong> veya <strong>"Tüm Sınıfı Hızlı Tara"</strong> düğmesine tıklayarak 7 adımlı OMR motorunu hemen deneyebilirsiniz.
+            </div>
+          </div>
+
+          <!-- V2 Kayıpsız Mobil <-> Masaüstü Canlı Senkron & Çevrimdışı Paket Çubuğu -->
+          <div class="kart" id="cubuk-omr-canli-senkron" style="margin-bottom:0.85rem; padding:0.75rem 0.9rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <strong style="font-size:0.86rem;">🔄 Canlı Mobil ↔ Masaüstü Senkron (V2)</strong>
+                <span class="rozet rozet-mavi" id="rozet-omr-v2-durum">Beklemede</span>
+              </div>
+              <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+                <button type="button" class="btn btn-birincil btn-kucuk" id="btn-omr-v2-simdi-esitle">🔄 Şimdi Eşitle</button>
+                <button type="button" class="btn btn-kucuk" id="btn-omr-sinavpaket-indir" title="SHA-256 Mühürlü Çevrimdışı Tam Sınav Paketi">💾 Sınav Paketi (.sinavpaket.json)</button>
+                <label class="btn btn-kucuk" style="cursor:pointer; margin:0;" title="Telefondan indirilen .sinavpaket.json dosyasını yükle">📥 Paket Yükle <input type="file" id="input-omr-sinavpaket-yukle" accept=".json,.sinavpaket.json,application/json" style="display:none;" /></label>
+              </div>
             </div>
           </div>
 

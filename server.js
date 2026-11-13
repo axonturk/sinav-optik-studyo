@@ -61,6 +61,10 @@ const sunucuDurumu = {
   aktifTokenlar: new Map(), // token -> { ogrNo, adSoyad, kurtarmaAnahtariHash, bitisMs, cevaplar, bitti }
   kioskDelilLoglari: [],
   omrSonuclari: [],
+  mobilSinavPaketleri: new Map(), // `${kullaniciAdi}::${sinavKodu}` -> paket
+  omrSenkronOlaylari: [],
+  omrSenkronEventIdSet: new Set(),
+  omrSenkronSeqSayac: 0,
   bulutKasalar: new Map(),
   bulutYedekGecmisi: new Map()
 };
@@ -248,7 +252,7 @@ function b64UrlDecode(str) {
 function uretOmrEslesmeToken(oturum, oturumKodu = 'GENEL', sureDk = 15) {
   const tid = crypto.randomBytes(12).toString('hex');
   const iat = Date.now();
-  const gecerlilikSn = Math.max(300, Math.min(7200, (parseInt(sureDk, 10) || 15) * 60));
+  const gecerlilikSn = Math.max(300, Math.min(43200, (parseInt(sureDk, 10) || 15) * 60));
   const bitisMs = iat + gecerlilikSn * 1000;
   const kod = String(oturumKodu || 'GENEL').trim().toUpperCase() || 'GENEL';
   const payload = { tid, k: oturum.kullaniciAdi, o: kod, iat, exp: bitisMs };
@@ -591,12 +595,188 @@ function istekIsleyici(req, res) {
     const mevcut = sunucuDurumu.bulutKasalar.get(kullaniciAdi) || null;
     const temizVeri = mevcut && mevcut.veri ? Cekirdek.temizleYedekHassasAlanlar(JSON.parse(JSON.stringify(mevcut.veri))) : {};
     const dersler = Cekirdek.uretMobilDersPaketleriOzeti(temizVeri);
+    const kasaGuncellemeMs = Number(mevcut && mevcut.guncellemeMs) || 0;
+    const birlesikHarita = new Map();
+    dersler.forEach((d, idx) => {
+      const k = String(d.dersId || d.id || d.sinavKodu || `D_${idx}`).trim();
+      birlesikHarita.set(k, Object.assign({}, d));
+    });
+    for (const [anahtar, pkg] of sunucuDurumu.mobilSinavPaketleri.entries()) {
+      if (!anahtar.startsWith(`${kullaniciAdi}::`)) continue;
+      if (kasaGuncellemeMs > 0 && (Number(pkg && pkg.guncellemeMs) || 0) <= kasaGuncellemeMs) continue;
+      const paketId = String(pkg.dersId || pkg.id || '').trim();
+      const paketKod = String(pkg.sinavKodu || '').trim();
+      let eslesenAnahtar = paketId && birlesikHarita.has(paketId) ? paketId : '';
+      if (!eslesenAnahtar && paketKod) {
+        for (const [mk, md] of birlesikHarita.entries()) {
+          if (String(md.sinavKodu || '').trim() === paketKod) {
+            eslesenAnahtar = mk;
+            break;
+          }
+        }
+      }
+      const k = eslesenAnahtar || paketId || paketKod || anahtar;
+      const onceki = birlesikHarita.get(k) || {};
+      birlesikHarita.set(k, Object.assign({}, onceki, pkg, {
+        ogrenciler: (Array.isArray(pkg.ogrenciler) && pkg.ogrenciler.length) ? pkg.ogrenciler : (onceki.ogrenciler || [])
+      }));
+    }
+    const kullaniciOlaylari = sunucuDurumu.omrSenkronOlaylari.filter((o) => o.kullaniciAdi === kullaniciAdi);
+    const sonSeqNo = kullaniciOlaylari.length ? kullaniciOlaylari[kullaniciOlaylari.length - 1].seqNo : 0;
     return gonderJson(res, 200, {
       basarili: true,
       kullaniciAdi,
       revizyonNo: mevcut ? (mevcut.revizyonNo || 0) : 0,
       guncellemeMs: mevcut ? (mevcut.guncellemeMs || 0) : 0,
-      dersler
+      sonSeqNo,
+      dersler: Array.from(birlesikHarita.values())
+    });
+  }
+
+  // 0a-1e. V2 Sınav Paketi Yayınlama (Hafif QR sonrası Mobil Cihazın Çekeceği Ders/Öğrenci/Yapı Paketi)
+  if (req.method === 'POST' && yol === '/api/v2/sinav-paket-yayinla') {
+    okuJsonGovde(req, 2097152)
+      .then((govde) => {
+        const token = cozHocaTokenIstekten(req, govde, urlNesne);
+        const yetki = dogrulaOmrVeyaHocaToken(token, '');
+        if (!yetki) {
+          return gonderJson(res, 401, { hata: 'Sınav paketi yayınlamak için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+        }
+        const kullaniciAdi = String((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca';
+        const temiz = Cekirdek.derinTemizleNesne(govde || {}, 0);
+        const sinavKodu = String(temiz.sinavKodu || (temiz.sinavYapisi && temiz.sinavYapisi.sinavKodu) || 'GENEL').trim().slice(0, 80) || 'GENEL';
+        const dersId = String(temiz.dersId || (temiz.sinavYapisi && temiz.sinavYapisi.dersId) || '').trim().slice(0, 80);
+        const dersAdi = String(temiz.dersAdi || (temiz.sinavYapisi && temiz.sinavYapisi.dersAdi) || '').trim().slice(0, 100);
+        const baslik = String(temiz.baslik || (temiz.sinavYapisi && temiz.sinavYapisi.baslik) || dersAdi || sinavKodu).trim().slice(0, 140);
+        const ogrenciler = (Array.isArray(temiz.ogrenciler) ? temiz.ogrenciler : [])
+          .filter((o) => o && typeof o === 'object' && (o.ogrNo || o.no))
+          .slice(0, 2000)
+          .map((o) => ({
+            ogrNo: String(o.ogrNo || o.no || '').trim().slice(0, 40),
+            adSoyad: String(o.adSoyad || o.ad || '').trim().slice(0, 100),
+            sinifSube: String(o.sinifSube || o.sube || '').trim().slice(0, 40),
+            salonAdi: String(o.salonAdi || o.salon || '').trim().slice(0, 40)
+          }));
+        const guncellemeMs = Date.now();
+        const paket = {
+          id: dersId || sinavKodu,
+          dersId,
+          dersAdi,
+          sinavKodu,
+          baslik,
+          sinavYapisi: temiz.sinavYapisi || {},
+          cevapAnahtarlari: temiz.cevapAnahtarlari || (temiz.sinavYapisi && temiz.sinavYapisi.cevapAnahtarlari) || {},
+          ogrenciler,
+          guncellemeMs
+        };
+        const paketHash = Cekirdek.uretDelilLogHash(JSON.stringify(paket), 'V2_PAKET');
+        paket.paketHash = paketHash;
+        sunucuDurumu.mobilSinavPaketleri.set(`${kullaniciAdi}::${sinavKodu}`, paket);
+        return gonderJson(res, 200, {
+          basarili: true,
+          kullaniciAdi,
+          sinavKodu,
+          paketHash,
+          guncellemeMs,
+          ogrenciSayisi: ogrenciler.length
+        });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  // 0a-1f. V2 Kayıpsız Delta Senkron Push (İdempotent & Non-Destructive)
+  if (req.method === 'POST' && yol === '/api/v2/sinav-senkron') {
+    okuJsonGovde(req, 2097152)
+      .then((govde) => {
+        const token = cozHocaTokenIstekten(req, govde, urlNesne);
+        const yetki = dogrulaOmrVeyaHocaToken(token, (govde && govde.oturumKodu) || '');
+        if (!yetki) {
+          return gonderJson(res, 401, { hata: 'Senkron olayı göndermek için doğrulanmış öğretmen veya OMR eşleşme tokenı gereklidir (401 Unauthorized).' });
+        }
+        const kullaniciAdi = String((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca';
+        const hamOlaylar = Array.isArray(govde && govde.olaylar)
+          ? govde.olaylar
+          : (govde && govde.olay ? [govde.olay] : []);
+        if (!hamOlaylar.length) {
+          return gonderJson(res, 400, { hata: 'En az 1 geçerli senkron olayı (olaylar[]) gönderilmelidir.' });
+        }
+        if (hamOlaylar.length > 200) {
+          return gonderJson(res, 400, { hata: 'Tek istekte en fazla 200 senkron olayı gönderilebilir.' });
+        }
+        const yazilanlar = [];
+        let atlananSayisi = 0;
+        for (const hamOlay of hamOlaylar) {
+          const temizOlay = Cekirdek.dogrulaVeTemizleSenkronOlayi(hamOlay, kullaniciAdi);
+          const idempotencyAnahtar = `${kullaniciAdi}::${temizOlay.eventId}`;
+          if (sunucuDurumu.omrSenkronEventIdSet.has(idempotencyAnahtar)) {
+            atlananSayisi++;
+            continue;
+          }
+          sunucuDurumu.omrSenkronEventIdSet.add(idempotencyAnahtar);
+          const seqNo = ++sunucuDurumu.omrSenkronSeqSayac;
+          const kayit = Object.assign({ seqNo, sunucuZamanMs: Date.now() }, temizOlay);
+          sunucuDurumu.omrSenkronOlaylari.push(kayit);
+          if (sunucuDurumu.omrSenkronOlaylari.length > 10000) {
+            const silinen = sunucuDurumu.omrSenkronOlaylari.shift();
+            if (silinen) sunucuDurumu.omrSenkronEventIdSet.delete(`${silinen.kullaniciAdi}::${silinen.eventId}`);
+          }
+          if (kayit.tur === 'ANAHTAR_GUNCELLE') {
+            const pkgAnahtar = `${kullaniciAdi}::${kayit.sinavKodu}`;
+            const mevcutPkg = sunucuDurumu.mobilSinavPaketleri.get(pkgAnahtar);
+            if (mevcutPkg) {
+              const g = String((kayit.veri && kayit.veri.grup) || 'A').toUpperCase();
+              const yeniCevapAnahtari = Object.assign({}, mevcutPkg.cevapAnahtarlari || {});
+              if (kayit.veri && kayit.veri.kitapciklar) {
+                Object.assign(yeniCevapAnahtari, kayit.veri.kitapciklar);
+              } else if (kayit.veri && kayit.veri.anahtar) {
+                yeniCevapAnahtari[g] = kayit.veri.anahtar;
+              }
+              mevcutPkg.cevapAnahtarlari = yeniCevapAnahtari;
+              if (mevcutPkg.sinavYapisi && typeof mevcutPkg.sinavYapisi === 'object') {
+                mevcutPkg.sinavYapisi.cevapAnahtarlari = yeniCevapAnahtari;
+              }
+              mevcutPkg.guncellemeMs = Date.now();
+            }
+          }
+          yazilanlar.push({ eventId: kayit.eventId, seqNo: kayit.seqNo, tur: kayit.tur, sinavKodu: kayit.sinavKodu });
+        }
+        const kullaniciOlaylari = sunucuDurumu.omrSenkronOlaylari.filter((o) => o.kullaniciAdi === kullaniciAdi);
+        const sonSeqNo = kullaniciOlaylari.length ? kullaniciOlaylari[kullaniciOlaylari.length - 1].seqNo : sunucuDurumu.omrSenkronSeqSayac;
+        return gonderJson(res, 200, {
+          basarili: true,
+          kullaniciAdi,
+          yazilanSayisi: yazilanlar.length,
+          atlananSayisi,
+          sonSeqNo,
+          yazilanlar
+        });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  // 0a-1g. V2 Kayıpsız Delta Senkron Pull (Non-Destructive Cursor Okuma)
+  if (req.method === 'GET' && yol === '/api/v2/sinav-senkron') {
+    const token = cozHocaTokenIstekten(req, null, urlNesne);
+    const yetki = dogrulaOmrVeyaHocaToken(token, '');
+    if (!yetki) {
+      return gonderJson(res, 401, { hata: 'Senkron olaylarını okumak için doğrulanmış öğretmen veya OMR eşleşme tokenı gereklidir (401 Unauthorized).' });
+    }
+    const kullaniciAdi = String((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca';
+    const sinceSeq = Math.max(0, parseInt(urlNesne.searchParams.get('sinceSeq') || '0', 10) || 0);
+    const sinavKoduFiltre = String(urlNesne.searchParams.get('sinavKodu') || '').trim();
+    const tumKullaniciOlaylari = sunucuDurumu.omrSenkronOlaylari.filter((o) => o.kullaniciAdi === kullaniciAdi);
+    const sonSeqNo = tumKullaniciOlaylari.length ? tumKullaniciOlaylari[tumKullaniciOlaylari.length - 1].seqNo : 0;
+    const olaylar = tumKullaniciOlaylari
+      .filter((o) => o.seqNo > sinceSeq && (!sinavKoduFiltre || sinavKoduFiltre === 'TUMU' || o.sinavKodu === sinavKoduFiltre))
+      .slice(0, 500);
+    return gonderJson(res, 200, {
+      basarili: true,
+      kullaniciAdi,
+      sinceSeq,
+      sonSeqNo,
+      olaylar
     });
   }
 
@@ -1573,6 +1753,13 @@ function istekIsleyici(req, res) {
           ozetBilgi,
           guncellemeMs: simdi
         });
+        if (zorlaEz) {
+          for (const anahtar of Array.from(sunucuDurumu.mobilSinavPaketleri.keys())) {
+            if (anahtar.startsWith(`${kullaniciAdi}::`)) {
+              sunucuDurumu.mobilSinavPaketleri.delete(anahtar);
+            }
+          }
+        }
         kaydetYerelDiskKasasi();
         return gonderJson(res, 200, {
           basarili: true,

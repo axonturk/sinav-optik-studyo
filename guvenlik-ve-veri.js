@@ -9502,14 +9502,19 @@
         || (sinavYapisi.cevapAnahtarlari && sinavYapisi.cevapAnahtarlari.A)
         || { dy: [], test: [] };
 
+      const hamDy = (ogr.hamCevaplar && Array.isArray(ogr.hamCevaplar.dy)) ? ogr.hamCevaplar.dy : null;
+      const kaynakDy = (Array.isArray(ogr.dyDetay) && ogr.dyDetay.length)
+        ? ogr.dyDetay
+        : (hamDy ? hamDy.map((verilen, idx) => ({ soruNo: idx + 1, verilen: String(verilen || '-').toUpperCase(), dogruCevap: '' })) : []);
+
       let dyDogru = 0;
       let dyYanlis = 0;
-      const yeniDyDetay = (Array.isArray(ogr.dyDetay) ? ogr.dyDetay : []).map((d, idx) => {
+      const yeniDyDetay = kaynakDy.map((d, idx) => {
         const soruKod = kanonikKodBul(grup, 'dy', idx);
         const iptalMi = iptalSet.has(soruKod);
         const beklenen = gAnahtar.dy && gAnahtar.dy[idx] ? gAnahtar.dy[idx] : d.dogruCevap;
         const esnek = esnekKurallar[soruKod] || null;
-        const v = String(d.verilen || '').toUpperCase();
+        const v = String((hamDy && hamDy[idx] !== undefined ? hamDy[idx] : d.verilen) || '').toUpperCase();
         let sonuc = 'BOS';
         if (iptalMi) {
           sonuc = 'DOGRU';
@@ -9526,17 +9531,22 @@
           sonuc = 'YANLIS';
           dyYanlis++;
         }
-        return { ...d, dogruCevap: beklenen || d.dogruCevap, sonuc, iptalMi };
+        return { ...d, soruNo: d.soruNo || (idx + 1), verilen: v || '-', dogruCevap: beklenen || d.dogruCevap, sonuc, iptalMi };
       });
+
+      const hamTest = (ogr.hamCevaplar && Array.isArray(ogr.hamCevaplar.test)) ? ogr.hamCevaplar.test : null;
+      const kaynakTest = (Array.isArray(ogr.testDetay) && ogr.testDetay.length)
+        ? ogr.testDetay
+        : (hamTest ? hamTest.map((verilen, idx) => ({ soruNo: idx + 1, verilen: String(verilen || '-').toUpperCase(), dogruCevap: '' })) : []);
 
       let testDogru = 0;
       let testYanlis = 0;
-      const yeniTestDetay = (Array.isArray(ogr.testDetay) ? ogr.testDetay : []).map((d, idx) => {
+      const yeniTestDetay = kaynakTest.map((d, idx) => {
         const soruKod = kanonikKodBul(grup, 'test', idx);
         const iptalMi = iptalSet.has(soruKod);
         const beklenen = gAnahtar.test && gAnahtar.test[idx] ? gAnahtar.test[idx] : d.dogruCevap;
         const esnek = esnekKurallar[soruKod] || null;
-        const v = String(d.verilen || '').toUpperCase();
+        const v = String((hamTest && hamTest[idx] !== undefined ? hamTest[idx] : d.verilen) || '').toUpperCase();
         let sonuc = 'BOS';
         if (iptalMi) {
           sonuc = 'DOGRU';
@@ -9553,8 +9563,14 @@
           sonuc = 'YANLIS';
           testYanlis++;
         }
-        return { ...d, dogruCevap: beklenen || d.dogruCevap, sonuc, iptalMi };
+        return { ...d, soruNo: d.soruNo || (idx + 1), verilen: v || '-', dogruCevap: beklenen || d.dogruCevap, sonuc, iptalMi };
       });
+
+      const hamCevaplar = {
+        dy: yeniDyDetay.map((d) => String(d.verilen || '-').toUpperCase()),
+        test: yeniTestDetay.map((d) => String(d.verilen || '-').toUpperCase()),
+        klasikToplamPuan: Number(ogr.klasikToplamPuan || 0)
+      };
 
       const dyNet = Math.max(0, dyDogru - (dyGoturme > 0 ? dyYanlis / dyGoturme : 0));
       const testNet = Math.max(0, testDogru - (testGoturme > 0 ? testYanlis / testGoturme : 0));
@@ -9563,6 +9579,7 @@
 
       return {
         ...ogr,
+        hamCevaplar,
         dyDogru,
         dyYanlis,
         dyNet: Number(dyNet.toFixed(2)),
@@ -10062,6 +10079,218 @@
     return sabitSureliEsitMi(uretilen, kayit);
   }
 
+  /* --- V2 Kayıpsız PWA <-> Masaüstü Delta Senkron, Tek Bağlantı QR ve Birleşik Sınav Paketi --- */
+
+  function ayiklaHamOmrBalonCevaplari(sonuc) {
+    const kaynak = sonuc && typeof sonuc === 'object' ? sonuc : {};
+    const mevcutHam = kaynak.hamCevaplar && typeof kaynak.hamCevaplar === 'object' ? kaynak.hamCevaplar : null;
+    const dy = Array.isArray(mevcutHam && mevcutHam.dy)
+      ? mevcutHam.dy.slice(0, 120).map((x) => String(x || '-').trim().toUpperCase() || '-')
+      : (Array.isArray(kaynak.dyDetay)
+        ? kaynak.dyDetay.slice(0, 120).map((d) => String((d && d.verilen) || '-').trim().toUpperCase() || '-')
+        : []);
+    const test = Array.isArray(mevcutHam && mevcutHam.test)
+      ? mevcutHam.test.slice(0, 120).map((x) => String(x || '-').trim().toUpperCase() || '-')
+      : (Array.isArray(kaynak.testDetay)
+        ? kaynak.testDetay.slice(0, 120).map((d) => String((d && d.verilen) || '-').trim().toUpperCase() || '-')
+        : []);
+    return {
+      dy,
+      test,
+      klasikToplamPuan: Number((mevcutHam && mevcutHam.klasikToplamPuan) ?? kaynak.klasikToplamPuan ?? 0) || 0
+    };
+  }
+
+  function dogrulaVeTemizleSenkronOlayi(hamOlay, kullaniciAdi = 'hoca') {
+    if (!hamOlay || typeof hamOlay !== 'object') {
+      throw new Error('Senkron olayı geçerli bir nesne olmalıdır.');
+    }
+    const temiz = derinTemizleNesne(hamOlay, 0);
+    const izinliTurler = ['OKUDU_GUNCELLE', 'ANAHTAR_GUNCELLE', 'OGRENCI_EKLE', 'OKUDU_SIL'];
+    const tur = String(temiz.tur || '').trim().toUpperCase();
+    if (!izinliTurler.includes(tur)) {
+      throw new Error(`Desteklenmeyen senkron olay türü: ${tur || 'BOŞ'}`);
+    }
+    const eventId = String(temiz.eventId || temiz.olayId || '').trim().slice(0, 120);
+    if (!eventId) {
+      throw new Error('Senkron olayı eventId alanı içermelidir.');
+    }
+    const sinavKodu = String(temiz.sinavKodu || 'GENEL').trim().slice(0, 80) || 'GENEL';
+    const kaynakCihaz = String(temiz.kaynakCihaz || 'mobil').trim().slice(0, 40) || 'mobil';
+    const zamanMs = Number(temiz.zamanMs || Date.now()) || Date.now();
+    const veriHam = temiz.veri && typeof temiz.veri === 'object' ? temiz.veri : {};
+    let veri = {};
+
+    if (tur === 'OKUDU_GUNCELLE') {
+      const hamCevaplar = ayiklaHamOmrBalonCevaplari(veriHam);
+      veri = Object.assign({}, veriHam, {
+        ogrNo: String(veriHam.ogrNo || veriHam.ogrenciNo || veriHam.id || '').trim().slice(0, 40),
+        adSoyad: String(veriHam.adSoyad || veriHam.ogrenciAdi || '').trim().slice(0, 100),
+        sinifSube: String(veriHam.sinifSube || '').trim().slice(0, 40),
+        grup: String(veriHam.grup || 'A').trim().toUpperCase().slice(0, 4) || 'A',
+        okumaId: String(veriHam.okumaId || veriHam.ogrNo || veriHam.ogrenciNo || eventId).trim().slice(0, 80),
+        hamCevaplar,
+        dyDetay: Array.isArray(veriHam.dyDetay) ? veriHam.dyDetay.slice(0, 120) : [],
+        testDetay: Array.isArray(veriHam.testDetay) ? veriHam.testDetay.slice(0, 120) : []
+      });
+    } else if (tur === 'ANAHTAR_GUNCELLE') {
+      const grup = String(veriHam.grup || 'A').trim().toUpperCase().slice(0, 4) || 'A';
+      const anahtarKaynak = veriHam.anahtar && typeof veriHam.anahtar === 'object' ? veriHam.anahtar : veriHam;
+      const kitapciklar = veriHam.kitapciklar && typeof veriHam.kitapciklar === 'object' ? veriHam.kitapciklar : null;
+      const temizAnahtar = {
+        dy: Array.isArray(anahtarKaynak.dy) ? anahtarKaynak.dy.slice(0, 120).map((x) => String(x || '').trim().toUpperCase()) : [],
+        test: Array.isArray(anahtarKaynak.test) ? anahtarKaynak.test.slice(0, 120).map((x) => String(x || '').trim().toUpperCase()) : []
+      };
+      veri = {
+        grup,
+        anahtar: temizAnahtar,
+        kitapciklar: kitapciklar || { [grup]: temizAnahtar },
+        kaynak: String(veriHam.kaynak || 'pwa').trim().slice(0, 40)
+      };
+    } else if (tur === 'OGRENCI_EKLE') {
+      const ogrList = Array.isArray(veriHam.ogrenciler) ? veriHam.ogrenciler : [veriHam];
+      veri = {
+        ogrenciler: ogrList
+          .filter((o) => o && typeof o === 'object' && (o.ogrNo || o.no))
+          .slice(0, 500)
+          .map((o) => ({
+            ogrNo: String(o.ogrNo || o.no || '').trim().slice(0, 40),
+            adSoyad: String(o.adSoyad || o.ad || '').trim().slice(0, 100),
+            sinifSube: String(o.sinifSube || o.sube || '').trim().slice(0, 40),
+            salonAdi: String(o.salonAdi || o.salon || '').trim().slice(0, 40)
+          }))
+      };
+    } else if (tur === 'OKUDU_SIL') {
+      veri = {
+        ogrNo: String(veriHam.ogrNo || veriHam.ogrenciNo || '').trim().slice(0, 40),
+        okumaId: String(veriHam.okumaId || '').trim().slice(0, 80)
+      };
+    }
+
+    return {
+      eventId,
+      kullaniciAdi: String(kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca',
+      sinavKodu,
+      tur,
+      kaynakCihaz,
+      zamanMs,
+      veri
+    };
+  }
+
+  function uretBaglantiQrPaketi(tabanUrl = '', secenekler = {}) {
+    const temizTaban = String(tabanUrl || '').trim().replace(/\/+$/, '');
+    const dersId = String(secenekler.dersId || '').trim().slice(0, 80);
+    const dersAdi = String(secenekler.dersAdi || '').trim().slice(0, 100);
+    const sinavKodu = String(secenekler.sinavKodu || 'GENEL').trim().slice(0, 80) || 'GENEL';
+    const baslik = String(secenekler.baslik || '').trim().slice(0, 120);
+    const omrToken = String(secenekler.omrToken || '').trim();
+    const oturumKodu = String(secenekler.oturumKodu || '').trim().slice(0, 40);
+    const parametreler = ['baglan=1'];
+    if (sinavKodu) parametreler.push(`sinavKodu=${encodeURIComponent(sinavKodu)}`);
+    if (dersId) parametreler.push(`dersId=${encodeURIComponent(dersId)}`);
+    if (dersAdi) parametreler.push(`dersAdi=${encodeURIComponent(dersAdi)}`);
+    if (baslik) parametreler.push(`baslik=${encodeURIComponent(baslik)}`);
+    if (oturumKodu) parametreler.push(`oturum=${encodeURIComponent(oturumKodu)}`);
+    if (omrToken) parametreler.push(`omrToken=${encodeURIComponent(omrToken)}`);
+    const hash = `#${parametreler.join('&')}`;
+    const bagilHref = `optik-mobil.html${hash}`;
+    const url = temizTaban ? `${temizTaban}/${bagilHref}` : bagilHref;
+    return {
+      aktif: true,
+      hash,
+      bagilHref,
+      url,
+      karakterSayisi: url.length,
+      sinavKodu,
+      dersId,
+      dersAdi
+    };
+  }
+
+  function cozBaglantiQrPaketi(metin = '') {
+    const ham = String(metin || '').trim();
+    if (!ham) return null;
+    let tabanUrl = '';
+    let sorguKismi = ham;
+    const hashIdx = ham.indexOf('#');
+    if (hashIdx >= 0) {
+      const onKisim = ham.slice(0, hashIdx);
+      tabanUrl = onKisim.replace(/\/optik-mobil\.html.*$/i, '').replace(/\/+$/, '');
+      sorguKismi = ham.slice(hashIdx + 1);
+    } else if (ham.includes('?')) {
+      const qIdx = ham.indexOf('?');
+      tabanUrl = ham.slice(0, qIdx).replace(/\/optik-mobil\.html.*$/i, '').replace(/\/+$/, '');
+      sorguKismi = ham.slice(qIdx + 1);
+    }
+    const params = new URLSearchParams(sorguKismi);
+    if (params.get('baglan') !== '1' && !params.get('omrToken')) {
+      return null;
+    }
+    return {
+      aktif: true,
+      tabanUrl,
+      sinavKodu: String(params.get('sinavKodu') || 'GENEL').trim().slice(0, 80) || 'GENEL',
+      dersId: String(params.get('dersId') || '').trim().slice(0, 80),
+      dersAdi: String(params.get('dersAdi') || '').trim().slice(0, 100),
+      baslik: String(params.get('baslik') || '').trim().slice(0, 120),
+      oturumKodu: String(params.get('oturum') || params.get('oturumKodu') || '').trim().slice(0, 40),
+      omrToken: String(params.get('omrToken') || '').trim()
+    };
+  }
+
+  function kanonikSiraliJson(deger) {
+    if (deger === null || typeof deger !== 'object') return JSON.stringify(deger);
+    if (Array.isArray(deger)) return `[${deger.map((x) => kanonikSiraliJson(x)).join(',')}]`;
+    const anahtarlar = Object.keys(deger).sort();
+    return `{${anahtarlar.map((k) => `${JSON.stringify(k)}:${kanonikSiraliJson(deger[k])}`).join(',')}}`;
+  }
+
+  function uretBirlesikSinavPaketi(girdi = {}) {
+    const kaynak = girdi && typeof girdi === 'object' ? girdi : {};
+    const temizGovde = derinTemizleNesne({
+      tur: 'SINAV_OPTIK_BIRLESIK_PAKET_V2',
+      surum: 2,
+      olusturmaMs: Number(kaynak.olusturmaMs || Date.now()) || Date.now(),
+      sinavKodu: String(kaynak.sinavKodu || (kaynak.sinavYapisi && kaynak.sinavYapisi.sinavKodu) || 'GENEL').trim().slice(0, 80) || 'GENEL',
+      dersId: String(kaynak.dersId || '').trim().slice(0, 80),
+      dersAdi: String(kaynak.dersAdi || '').trim().slice(0, 100),
+      sinavYapisi: kaynak.sinavYapisi || {},
+      cevapAnahtarlari: kaynak.cevapAnahtarlari || (kaynak.sinavYapisi && kaynak.sinavYapisi.cevapAnahtarlari) || {},
+      ogrenciler: Array.isArray(kaynak.ogrenciler) ? kaynak.ogrenciler.slice(0, 2000) : [],
+      okumaSonuclari: (Array.isArray(kaynak.okumaSonuclari) ? kaynak.okumaSonuclari.slice(0, 2000) : [])
+        .map((s) => Object.assign({}, s, { hamCevaplar: ayiklaHamOmrBalonCevaplari(s) }))
+    }, 0);
+    const kanonik = kanonikSiraliJson(temizGovde);
+    const imzaHash = uretDelilLogHash(kanonik, 'SINAVPAKET_V2');
+    return Object.assign({}, temizGovde, {
+      imzaAlg: 'SHA-256',
+      imzaHash
+    });
+  }
+
+  function cozBirlesikSinavPaketi(jsonMetinVeyaNesne) {
+    const hamNesne = typeof jsonMetinVeyaNesne === 'string'
+      ? JSON.parse(jsonMetinVeyaNesne)
+      : jsonMetinVeyaNesne;
+    if (!hamNesne || typeof hamNesne !== 'object' || hamNesne.tur !== 'SINAV_OPTIK_BIRLESIK_PAKET_V2') {
+      throw new Error('Geçersiz .sinavpaket.json formatı (V2 başlığı bulunamadı).');
+    }
+    const gelenImza = String(hamNesne.imzaHash || '').trim();
+    if (!gelenImza) {
+      throw new Error('Birleşik sınav paketi bütünlük mührü (imzaHash) eksik.');
+    }
+    const kopya = Object.assign({}, hamNesne);
+    delete kopya.imzaAlg;
+    delete kopya.imzaHash;
+    const temizGovde = derinTemizleNesne(kopya, 0);
+    const beklenenImza = uretDelilLogHash(kanonikSiraliJson(temizGovde), 'SINAVPAKET_V2');
+    if (!sabitSureliEsitMi(beklenenImza, gelenImza)) {
+      throw new Error('Birleşik sınav paketi SHA-256 bütünlük doğrulaması başarısız (dosya değiştirilmiş).');
+    }
+    return Object.assign({}, temizGovde, { imzaAlg: 'SHA-256', imzaHash: beklenenImza });
+  }
+
   /* Dışa Aktarılan Evrensel API */
   const SinavOptikCekirdek = {
     cozHtmlEntities,
@@ -10186,6 +10415,12 @@
     etiketleSorularOtomatikOcBloom,
     hesaplaBaskiOncesiOcBloomDengesi,
     yenidenPuanlaOkumaSonuclari,
+    ayiklaHamOmrBalonCevaplari,
+    dogrulaVeTemizleSenkronOlayi,
+    uretBaglantiQrPaketi,
+    cozBaglantiQrPaketi,
+    uretBirlesikSinavPaketi,
+    cozBirlesikSinavPaketi,
     hesaplaKumulatifOcPcVePukoRaporu,
     uretOzelObsNotCsv,
     uretMaddiHataItirazKanitRaporuTXT,

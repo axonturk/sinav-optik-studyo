@@ -226,11 +226,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v14), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v15), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v14, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v14'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v15, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v15'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
@@ -1268,6 +1268,231 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
         masaMasterSonuc.testVal.startsWith('CCCCCCCCCC') &&
         masaMasterHatalar.length === 0,
       JSON.stringify({ masaMasterSonuc, masaMasterHatalar })
+    );
+
+    // -------------------------------------------------------------------------
+    // V2 KAYIPSIZ PWA <-> MASAÜSTÜ SENKRON KABUL KONTROLLERİ ([38]–[42])
+    // -------------------------------------------------------------------------
+    console.log('10) V2 Kayıpsız PWA <-> Masaüstü Delta Senkron & .sinavpaket.json Kontrolleri');
+
+    // [38] Zero-Trust V2 Yetki Kalkanı (server.js + worker.js)
+    const v2Giris = await httpHamIstek(port, 'POST', '/api/hoca-giris', { kullaniciAdi: 'hoca', sifre: 'Demo!Hoca2026' });
+    const v2Tok = v2Giris.body && v2Giris.body.token;
+    const v2OmrRes = await httpHamIstek(port, 'POST', '/api/omr-eslesme-token', { oturumKodu: 'V2KOD', sureDk: 60 }, { Authorization: `Bearer ${v2Tok}` });
+    const v2OmrTok = v2OmrRes.body && v2OmrRes.body.omrToken;
+
+    const u401A = await httpHamIstek(port, 'POST', '/api/v2/sinav-paket-yayinla', { sinavKodu: 'TEST' });
+    const u401B = await httpHamIstek(port, 'POST', '/api/v2/sinav-senkron', { olaylar: [{ eventId: 'E0', tur: 'OKUDU_GUNCELLE', sinavKodu: 'TEST', veri: {} }] });
+    const u401C = await httpHamIstek(port, 'GET', '/api/v2/sinav-senkron?sinceSeq=0');
+
+    const wV2Env = olusturSahteWorkerEnv();
+    const wu401A = await workerIstek(wV2Env, 'POST', '/api/v2/sinav-paket-yayinla', { sinavKodu: 'TEST' });
+    const wu401B = await workerIstek(wV2Env, 'POST', '/api/v2/sinav-senkron', { olaylar: [{ eventId: 'E0', tur: 'OKUDU_GUNCELLE', sinavKodu: 'TEST', veri: {} }] });
+    const wu401C = await workerIstek(wV2Env, 'GET', '/api/v2/sinav-senkron?sinceSeq=0');
+    kontrol(
+      '[38] Zero-Trust V2 Yetki Kalkanı: Tokensız tüm /api/v2/* çağrıları hem server.js hem worker.js üzerinde 401 reddedilir',
+      u401A.status === 401 && u401B.status === 401 && u401C.status === 401 &&
+      wu401A.status === 401 && wu401B.status === 401 && wu401C.status === 401,
+      JSON.stringify({ u: [u401A.status, u401B.status, u401C.status], w: [wu401A.status, wu401B.status, wu401C.status] })
+    );
+
+    // [39] İdempotent Push + Yıkıcı Olmayan (Non-Destructive) Cursor Pull + Worker Paritesi
+    const demoOlay = {
+      eventId: 'EVT-IDEM-001',
+      sinavKodu: 'V2-TEST-101',
+      tur: 'OKUDU_GUNCELLE',
+      kaynakCihaz: 'mobil',
+      zamanMs: Date.now(),
+      veri: {
+        ogrNo: '2026000001',
+        adSoyad: 'Test Öğrencisi',
+        grup: 'A',
+        hamCevaplar: { dy: ['D', 'Y'], test: ['A', 'B'] }
+      }
+    };
+    const pushIlk = await httpHamIstek(port, 'POST', '/api/v2/sinav-senkron', { olaylar: [demoOlay] }, { Authorization: `Bearer ${v2OmrTok}` });
+    const pushIkinci = await httpHamIstek(port, 'POST', '/api/v2/sinav-senkron', { olaylar: [demoOlay] }, { Authorization: `Bearer ${v2OmrTok}` });
+    const pullIstemci1 = await httpHamIstek(port, 'GET', '/api/v2/sinav-senkron?sinceSeq=0&sinavKodu=V2-TEST-101', null, { Authorization: `Bearer ${v2Tok}` });
+    const pullIstemci2 = await httpHamIstek(port, 'GET', '/api/v2/sinav-senkron?sinceSeq=0&sinavKodu=V2-TEST-101', null, { Authorization: `Bearer ${v2OmrTok}` });
+
+    const wV2Giris = await workerIstek(wV2Env, 'POST', '/api/hoca-giris', { kullaniciAdi: 'hoca', sifre: 'Demo!Hoca2026' });
+    const wV2Tok = wV2Giris.body && wV2Giris.body.token;
+    const wPush1 = await workerIstek(wV2Env, 'POST', '/api/v2/sinav-senkron', { olaylar: [demoOlay] }, { Authorization: `Bearer ${wV2Tok}` });
+    const wPush2 = await workerIstek(wV2Env, 'POST', '/api/v2/sinav-senkron', { olaylar: [demoOlay] }, { Authorization: `Bearer ${wV2Tok}` });
+    const wPull1 = await workerIstek(wV2Env, 'GET', '/api/v2/sinav-senkron?sinceSeq=0&sinavKodu=V2-TEST-101', null, { Authorization: `Bearer ${wV2Tok}` });
+    const wPull2 = await workerIstek(wV2Env, 'GET', '/api/v2/sinav-senkron?sinceSeq=0&sinavKodu=V2-TEST-101', null, { Authorization: `Bearer ${wV2Tok}` });
+
+    kontrol(
+      '[39] V2 Idempotent Push & Non-Destructive Cursor Pull hem server.js hem worker.js üzerinde eşlenik çalışır',
+      pushIlk.status === 200 && pushIlk.body.yazilanSayisi === 1 &&
+      pushIkinci.status === 200 && pushIkinci.body.yazilanSayisi === 0 && pushIkinci.body.atlananSayisi === 1 &&
+      pullIstemci1.body.olaylar.length === 1 && pullIstemci2.body.olaylar.length === 1 &&
+      wPush1.status === 200 && wPush1.body.yazilanSayisi === 1 &&
+      wPush2.status === 200 && wPush2.body.atlananSayisi === 1 &&
+      wPull1.body.olaylar.length === 1 && wPull2.body.olaylar.length === 1
+    );
+
+    // [40] .sinavpaket.json SHA-256 Bütünlük Mührü Doğrulaması
+    const temizPaket = Cekirdek.uretBirlesikSinavPaketi({
+      sinavKodu: 'V2-PAKET-01',
+      dersId: 'ders-1',
+      dersAdi: 'Algoritmalar',
+      sinavYapisi: { dySayisi: 2, testSayisi: 2, cevapAnahtarlari: { A: { dy: ['D', 'D'], test: ['A', 'B'] } } },
+      ogrenciler: [{ ogrNo: '2026000010', adSoyad: 'Ayşe Yılmaz' }],
+      okumaSonuclari: [{ id: 'R1', ogrNo: '2026000010', toplamPuan: 85, dyDetay: [{ soruNo: 1, verilen: 'D' }], testDetay: [{ soruNo: 1, verilen: 'A' }] }]
+    });
+    const cozulmusPaket = Cekirdek.cozBirlesikSinavPaketi(JSON.stringify(temizPaket));
+    let bozukPaketReddedildi = false;
+    try {
+      const bozuk = JSON.parse(JSON.stringify(temizPaket));
+      bozuk.okumaSonuclari[0].toplamPuan = 100;
+      Cekirdek.cozBirlesikSinavPaketi(bozuk);
+    } catch (_) {
+      bozukPaketReddedildi = true;
+    }
+    kontrol(
+      '[40] .sinavpaket.json SHA-256 bütünlük mührü geçerli paketi çözer ve kurcalanan paketi reddeder',
+      cozulmusPaket.sinavKodu === 'V2-PAKET-01' &&
+      cozulmusPaket.okumaSonuclari[0].hamCevaplar.dy[0] === 'D' &&
+      bozukPaketReddedildi === true
+    );
+
+    // [41] Çevrimdışı Mobil Outbox -> #baglan=1 ile Otomatik Gönderim (Puppeteer 390x844)
+    const baglanQr = Cekirdek.uretBaglantiQrPaketi(taban, {
+      sinavKodu: 'V2-CANLI-2026',
+      dersId: 'ders-v2',
+      dersAdi: 'Yazılım Mühendisliği',
+      omrToken: v2OmrTok
+    });
+    const v2MobilSayfa = await tarayici.newPage();
+    const v2MobilHatalar = [];
+    v2MobilSayfa.on('pageerror', (e) => v2MobilHatalar.push(e.message));
+    await v2MobilSayfa.setViewport({ width: 390, height: 844 });
+    await v2MobilSayfa.goto(`${taban}/optik-mobil.html`, { waitUntil: 'networkidle0' });
+    const kagitV2DataUrl = await v2MobilSayfa.evaluate(() => {
+      const C = window.SinavOptikCekirdek;
+      const d = window.__mobilDurumOku();
+      const tmp = document.createElement('canvas');
+      C.cizSentetikOptikFormCanvas(tmp, d.sinavYapisi, {
+        grup: 'A',
+        ogrNoKod: '55',
+        dyCevaplar: Array(d.sinavYapisi.dySayisi).fill('D'),
+        testCevaplar: Array(d.sinavYapisi.testSayisi).fill('A'),
+        klasikPuanlar: []
+      });
+      return tmp.toDataURL('image/png');
+    });
+    const geciciV2KagitPng = path.join(KOK, '.gecici-v2-kagit.png');
+    fs.writeFileSync(geciciV2KagitPng, Buffer.from(kagitV2DataUrl.split(',')[1], 'base64'));
+    const mobilFotoInp = await v2MobilSayfa.$('#input-mobil-foto');
+    await mobilFotoInp.uploadFile(geciciV2KagitPng);
+    await bekle(450);
+    try { fs.unlinkSync(geciciV2KagitPng); } catch (_) {}
+    const mobilCevrimdisiDurum = await v2MobilSayfa.evaluate(() => {
+      const ob = window.__mobilV2OutboxOku();
+      const rozet = document.getElementById('rozet-mobil-bekleyen');
+      return {
+        bekleyenSayi: ob.bekleyenSayi,
+        okumaSayisi: window.__mobilDurumOku().okumaSayisi,
+        rozetMetin: rozet ? rozet.textContent : '',
+        rozetGorunur: Boolean(rozet && !rozet.hidden),
+        tasmaYok: document.documentElement.scrollWidth <= window.innerWidth
+      };
+    });
+    // Şimdi #baglan=1 QR açılınca outbox otomatik gönderilmeli
+    await v2MobilSayfa.goto(baglanQr.url, { waitUntil: 'networkidle0' });
+    await v2MobilSayfa.evaluate(() => window.__mobilV2SenkronTetikle({ sessiz: true }));
+    await bekle(350);
+    const baglantiSonrasiOb = await v2MobilSayfa.evaluate(() => ({
+      outbox: window.__mobilV2OutboxOku(),
+      rozet: (document.getElementById('rozet-mobil-bekleyen') || {}).textContent || ''
+    }));
+    await v2MobilSayfa.close();
+    kontrol(
+      '[41] Çevrimdışı mobil okuma Outbox kuyruğuna düşer (0 yatay taşma) ve #baglan=1 ile sunucuya otomatik aktarılır',
+      mobilCevrimdisiDurum.bekleyenSayi >= 1 &&
+      mobilCevrimdisiDurum.okumaSayisi >= 1 &&
+      mobilCevrimdisiDurum.rozetGorunur &&
+      mobilCevrimdisiDurum.tasmaYok &&
+      baglantiSonrasiOb.outbox.bekleyenSayi === 0 &&
+      v2MobilHatalar.length === 0,
+      JSON.stringify({ mobilCevrimdisiDurum, baglantiSonrasiOb, v2MobilHatalar })
+    );
+
+    // [42] Modal Kapalıyken Canlı Masaüstü Birleşimi + "Kağıttan Anahtar Oku" Çift Yönlü Yeniden Puanlama
+    const masaV2Sayfa = await tarayici.newPage();
+    const masaV2Hatalar = [];
+    masaV2Sayfa.on('pageerror', (e) => masaV2Hatalar.push(e.message));
+    await masaV2Sayfa.setViewport({ width: 1280, height: 840 });
+    await masaV2Sayfa.goto(`${taban}/index.html`, { waitUntil: 'networkidle0' });
+    await masaV2Sayfa.evaluate(() => {
+      document.getElementById('hoca-giris-kullanici').value = 'hoca';
+      document.getElementById('hoca-giris-sifre').value = 'Demo!Hoca2026';
+      document.getElementById('btn-hoca-giris-yap').click();
+    });
+    await bekle(650);
+    await masaV2Sayfa.evaluate(() => {
+      const kapat = document.getElementById('btn-modal-hoca-kapat');
+      const m = document.getElementById('modal-hoca-giris');
+      if (kapat && m && getComputedStyle(m).display !== 'none') kapat.click();
+    });
+    // Telefondan ham balonları tamamı Y / C olan bir okuma olayı gönder (modal KAPALI!)
+    await httpHamIstek(port, 'POST', '/api/v2/sinav-senkron', {
+      olaylar: [{
+        eventId: 'EVT-MASA-LIVE-55',
+        sinavKodu: 'GENEL',
+        tur: 'OKUDU_GUNCELLE',
+        kaynakCihaz: 'mobil',
+        zamanMs: Date.now(),
+        veri: {
+          id: 'MOB-LIVE-55',
+          ogrNo: '2026000055',
+          adSoyad: 'Canlı Senkron Öğrencisi',
+          grup: 'A',
+          dySayisi: 10,
+          testSayisi: 10,
+          hamCevaplar: { dy: Array(10).fill('Y'), test: Array(10).fill('C'), klasikToplamPuan: 0 },
+          dyDetay: Array.from({ length: 10 }, (_, i) => ({ soruNo: i + 1, verilen: 'Y', dogruCevap: 'D', sonuc: 'YANLIS' })),
+          testDetay: Array.from({ length: 10 }, (_, i) => ({ soruNo: i + 1, verilen: 'C', dogruCevap: 'A', sonuc: 'YANLIS' })),
+          toplamPuan: 0
+        }
+      }]
+    }, { Authorization: `Bearer ${v2OmrTok}` });
+
+    await masaV2Sayfa.evaluate(() => window.__masaustuV2SenkronSimdi());
+    await bekle(250);
+    await masaV2Sayfa.click('[data-sekme="sekme-omr"]');
+    await bekle(200);
+    const ilkTablo = await masaV2Sayfa.evaluate(() => document.getElementById('tablo-omr-okunanlar').textContent || '');
+
+    // Masaüstünde "Kağıttan Anahtar Oku" ile A Grubu anahtarını tüm Y + C yap -> hamCevaplar üzerinden 100 puana çıkmalı!
+    const geciciV2Png = path.join(KOK, '.gecici-v2-anahtar.png');
+    fs.writeFileSync(geciciV2Png, Buffer.from(masterPngDataUrl.split(',')[1], 'base64'));
+    const inpV2 = await masaV2Sayfa.$('#input-omr-ogretmen-kagit-foto');
+    await inpV2.uploadFile(geciciV2Png);
+    await bekle(550);
+    try { fs.unlinkSync(geciciV2Png); } catch (_) {}
+
+    const ikinciTabloVeV2 = await masaV2Sayfa.evaluate(() => {
+      const depo = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+      const kayit55 = (depo.okumaSonuclari || []).find((x) => x.ogrNo === '2026000055');
+      return {
+        tabloMetin: document.getElementById('tablo-omr-okunanlar').textContent || '',
+        kayit55Puan: kayit55 ? Number(kayit55.toplamPuan) : -1
+      };
+    });
+    const sunucuSonOlaylar = await httpHamIstek(port, 'GET', '/api/v2/sinav-senkron?sinceSeq=0', null, { Authorization: `Bearer ${v2Tok}` });
+    const anahtarOlayiYayinlandiMi = Array.isArray(sunucuSonOlaylar.body && sunucuSonOlaylar.body.olaylar) &&
+      sunucuSonOlaylar.body.olaylar.some((o) => o.tur === 'ANAHTAR_GUNCELLE' && o.kaynakCihaz === 'masaustu');
+    await masaV2Sayfa.close();
+
+    kontrol(
+      '[42] #modal-ogrenci-qr kapalıyken V2 canlı senkron masaüstüne birleşir ve "Kağıttan Anahtar Oku" sonrası puanlama + V2 yayın çalışır',
+      ilkTablo.includes('2026000055') &&
+      ikinciTabloVeV2.kayit55Puan >= 99 &&
+      anahtarOlayiYayinlandiMi &&
+      masaV2Hatalar.length === 0,
+      JSON.stringify({ puan: ikinciTabloVeV2.kayit55Puan, anahtarOlayiYayinlandiMi, masaV2Hatalar })
     );
 
     kontrol('Masaüstü oturumu boyunca sıfır sayfa JS hatası', sayfaHatalari.length === 0, sayfaHatalari.join(' | '));

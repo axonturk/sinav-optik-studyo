@@ -792,6 +792,8 @@
             <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-obs-csv">OBS Resmi (.csv)</button>
             <button type="button" class="btn btn-basari btn-kucuk" id="btn-mobil-csv-indir">Okunanlar (.csv)</button>
             <button type="button" class="btn btn-kucuk" id="btn-mobil-sonuc-json-indir" title="Stüdyo Madde Analizi ve ÖÇ Karnesi için soru bazlı detaylı sonuç paketi">Stüdyo Paketi (.json)</button>
+            <button type="button" class="btn btn-kucuk" id="btn-mobil-sinavpaket-indir" title="Çevrimdışı SHA-256 Mühürlü Tam Sınav Paketi (.sinavpaket.json)">💾 Sınav Paketi</button>
+            <label class="btn btn-kucuk" style="cursor:pointer;" title="Bilgisayardan .sinavpaket.json yükle">📥 Paket Yükle <input type="file" id="input-mobil-sinavpaket-yukle" accept=".json,.sinavpaket.json,application/json" style="display:none;" /></label>
             <button type="button" class="btn btn-kucuk" id="btn-mobil-geri-al" hidden>Geri Al</button>
             <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-mobil-temizle">Sıfırla</button>
           </div>
@@ -1196,30 +1198,41 @@
             location.hash && (location.hash.includes('setup=') || location.hash.includes('ogr='))
           );
           veri.dersler.forEach((d) => {
-            const id = temizDersAnahtari(d.id);
+            const id = temizDersAnahtari(d.id || d.dersId || d.sinavKodu);
             if (!ilkDersId) ilkDersId = id;
             const eski = mobilDurum.dersPaketleriHaritasi[id] || {};
+            const baglanModuMu = Boolean(location.hash && location.hash.includes('baglan=1'));
             const aktifMi = id === aktifDersIdSimdi;
-            const yapi = aktifMi
+            const gelenYapi = d.aktifSinavYapisi || d.sinavYapisi || null;
+            const yapi = (aktifMi && !baglanModuMu)
               ? kopyalaMobilSinavYapisi(mobilDurum.sinavYapisi)
-              : kopyalaMobilSinavYapisi(eski.sinavYapisi || d.aktifSinavYapisi || mobilDurum.sinavYapisi);
-            yapi.dersAd = d.ad || d.kod || yapi.dersAd;
-            if (!aktifMi && !eski.sinavYapisi && d.aktifSinavYapisi && typeof d.aktifSinavYapisi === 'object') {
-              Object.assign(yapi, kopyalaMobilSinavYapisi(d.aktifSinavYapisi));
-              yapi.dersAd = d.ad || yapi.dersAd;
+              : kopyalaMobilSinavYapisi(gelenYapi || eski.sinavYapisi || mobilDurum.sinavYapisi);
+            yapi.dersAd = d.ad || d.dersAdi || d.kod || yapi.dersAd;
+            if (gelenYapi && typeof gelenYapi === 'object' && (baglanModuMu || (!aktifMi && !eski.sinavYapisi))) {
+              Object.assign(yapi, kopyalaMobilSinavYapisi(gelenYapi));
+              yapi.dersAd = d.ad || d.dersAdi || yapi.dersAd;
+              if (d.cevapAnahtarlari && typeof d.cevapAnahtarlari === 'object') {
+                yapi.cevapAnahtarlari = JSON.parse(JSON.stringify(d.cevapAnahtarlari));
+              }
             }
             const mevcutOkumalar = aktifMi
               ? (Array.isArray(mobilDurum.okumaSonuclari) ? mobilDurum.okumaSonuclari.slice() : [])
               : (Array.isArray(eski.okumaSonuclari) ? eski.okumaSonuclari.slice() : []);
             mobilDurum.dersPaketleriHaritasi[id] = {
               id,
-              kod: d.kod || eski.kod || '',
-              ad: d.ad || eski.ad || id,
+              kod: d.kod || d.sinavKodu || eski.kod || '',
+              ad: d.ad || d.dersAdi || d.baslik || eski.ad || id,
               ogrenciler: Array.isArray(d.ogrenciler) ? d.ogrenciler.slice() : (eski.ogrenciler || []),
               sinavYapisi: yapi,
               okumaSonuclari: mevcutOkumalar,
               guncellemeMs: Date.now()
             };
+            if (baglanModuMu && aktifMi) {
+              Object.assign(mobilDurum.sinavYapisi, yapi);
+              if (Array.isArray(d.ogrenciler) && d.ogrenciler.length > 0) {
+                mobilDurum.ogrenciler = d.ogrenciler.slice();
+              }
+            }
           });
           if (ilkDersId) {
             const telefonTamamenBos =
@@ -1584,6 +1597,25 @@
           );
         }
 
+        const baglanBilgi = typeof C.cozBaglantiQrPaketi === 'function' ? C.cozBaglantiQrPaketi(location.hash || location.search) : null;
+        if (baglanBilgi && baglanBilgi.aktif) {
+          if (baglanBilgi.omrToken) kaydetMobilHocaToken(baglanBilgi.omrToken);
+          if (baglanBilgi.dersId) mobilDurum.dersId = temizDersAnahtari(baglanBilgi.dersId);
+          if (baglanBilgi.sinavKodu) mobilDurum.sinavYapisi.sinavKodu = baglanBilgi.sinavKodu;
+          if (baglanBilgi.dersAdi) {
+            mobilDurum.sinavYapisi.dersAd = baglanBilgi.dersAdi;
+            mobilDurum.sinavYapisi.dersAdi = baglanBilgi.dersAdi;
+          }
+          if (baglanBilgi.baslik) mobilDurum.sinavYapisi.baslik = baglanBilgi.baslik;
+          if (baglanBilgi.oturumKodu) {
+            const kodInput = document.getElementById('mobil-pc-oturum-kodu');
+            if (kodInput) kodInput.value = baglanBilgi.oturumKodu;
+            const sonucKodInp = document.getElementById('mobil-sonuc-pc-kodu');
+            if (sonucKodInp) sonucKodInp.value = baglanBilgi.oturumKodu;
+          }
+          kaydetYerelDepoya();
+        }
+
         if (location.hash && location.hash.startsWith('#pc-aktar=')) {
           const kod = ayiklaHashParametresi(location.hash, 'pc-aktar');
           const kodInput = document.getElementById('mobil-pc-oturum-kodu');
@@ -1769,6 +1801,29 @@
             }
             return true;
           }
+        }
+        const baglanPaket = typeof C.cozBaglantiQrPaketi === 'function' ? C.cozBaglantiQrPaketi(metin) : null;
+        if (baglanPaket && baglanPaket.aktif) {
+          if (baglanPaket.omrToken) kaydetMobilHocaToken(baglanPaket.omrToken);
+          if (baglanPaket.dersId) mobilDurum.dersId = temizDersAnahtari(baglanPaket.dersId);
+          if (baglanPaket.sinavKodu) mobilDurum.sinavYapisi.sinavKodu = baglanPaket.sinavKodu;
+          if (baglanPaket.dersAdi) {
+            mobilDurum.sinavYapisi.dersAd = baglanPaket.dersAdi;
+            mobilDurum.sinavYapisi.dersAdi = baglanPaket.dersAdi;
+          }
+          if (baglanPaket.baslik) mobilDurum.sinavYapisi.baslik = baglanPaket.baslik;
+          guncelleMobilDersPaketKaydi();
+          kaydetYerelDepoya();
+          guncelleUstOzet();
+          bipCal(true);
+          mobilUyariGoster(`🔗 ${kaynakEtiket}: "${mobilDurum.sinavYapisi.dersAd || mobilDurum.sinavYapisi.sinavKodu}" sınavına bağlanıldı. Liste ve anahtarlar senkronize ediliyor...`, 'basari');
+          if (alAktifMobilHocaToken() && navigator.onLine !== false && location.protocol.startsWith('http')) {
+            Promise.resolve()
+              .then(() => senkronizeEtBulutMobilDersler({ sessiz: true }))
+              .then(() => senkronizeEtMobilV2Olaylar({ sessiz: true }))
+              .catch(() => {});
+          }
+          return true;
         }
         const cozulmusOgr = C.cozOgrenciQrPaketi(metin);
         if (cozulmusOgr && cozulmusOgr.gecerli && cozulmusOgr.ogrenciler.length > 0) {
@@ -2240,16 +2295,234 @@
 
       let hudSolmaZamanlayici = null;
       let sonSenkronOnayliSayi = -1;
+      const MOBIL_V2_OUTBOX_KEY = 'MOBIL_V2_OUTBOX_V2';
+      const MOBIL_V2_META_KEY = 'MOBIL_V2_META_V2';
+      let mobilV2EsitlendiMi = false;
+      let mobilV2SenkronSuruyor = false;
+      let mobilV2DebouncedTimer = null;
+
+      function v2IdbAc() {
+        return new Promise((resolve) => {
+          if (typeof indexedDB === 'undefined') {
+            resolve(null);
+            return;
+          }
+          try {
+            const ac = indexedDB.open('SinavOptikMobilV2', 1);
+            ac.onupgradeneeded = (ev) => {
+              const db = ev.target.result;
+              if (!db.objectStoreNames.contains('durum_yedek')) db.createObjectStore('durum_yedek', { keyPath: 'anahtar' });
+              if (!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox', { keyPath: 'eventId' });
+              if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'anahtar' });
+            };
+            ac.onsuccess = () => resolve(ac.result);
+            ac.onerror = () => resolve(null);
+          } catch (_) {
+            resolve(null);
+          }
+        });
+      }
+
+      function okuMobilV2OutboxSenkron() {
+        try {
+          const ham = localStorage.getItem(MOBIL_V2_OUTBOX_KEY);
+          const arr = ham ? JSON.parse(ham) : [];
+          return Array.isArray(arr) ? arr : [];
+        } catch (_) {
+          return [];
+        }
+      }
+
+      function yazMobilV2OutboxSenkron(liste) {
+        try {
+          localStorage.setItem(MOBIL_V2_OUTBOX_KEY, JSON.stringify(Array.isArray(liste) ? liste.slice(-500) : []));
+        } catch (_) {}
+        v2IdbAc().then((db) => {
+          if (!db) return;
+          try {
+            const tx = db.transaction(['outbox', 'durum_yedek'], 'readwrite');
+            const obStore = tx.objectStore('outbox');
+            obStore.clear();
+            (Array.isArray(liste) ? liste : []).forEach((o) => { if (o && o.eventId) obStore.put(o); });
+            tx.objectStore('durum_yedek').put({
+              anahtar: etkinMobilSinavAnahtari(),
+              sinavYapisi: mobilDurum.sinavYapisi,
+              ogrenciler: mobilDurum.ogrenciler,
+              okumaSonuclari: (mobilDurum.okumaSonuclari || []).map((x) => hafifletMobilKayit(x)),
+              guncellemeMs: Date.now()
+            });
+          } catch (_) {}
+        }).catch(() => {});
+      }
+
+      function okuMobilV2Meta() {
+        try {
+          const ham = localStorage.getItem(MOBIL_V2_META_KEY);
+          const m = ham ? JSON.parse(ham) : {};
+          return (m && typeof m === 'object') ? m : {};
+        } catch (_) {
+          return {};
+        }
+      }
+
+      function yazMobilV2Meta(guncelleme = {}) {
+        const mevcut = okuMobilV2Meta();
+        const yeni = Object.assign({}, mevcut, guncelleme);
+        try {
+          localStorage.setItem(MOBIL_V2_META_KEY, JSON.stringify(yeni));
+        } catch (_) {}
+        v2IdbAc().then((db) => {
+          if (!db) return;
+          try {
+            const tx = db.transaction('meta', 'readwrite');
+            tx.objectStore('meta').put({ anahtar: 'senkron_durum', ...yeni });
+          } catch (_) {}
+        }).catch(() => {});
+        return yeni;
+      }
+
+      function kuyrugaAlMobilSenkronOlayi(tur, veri, sinavKoduOzel = '') {
+        const sinavKodu = String(sinavKoduOzel || (mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.sinavKodu) || 'GENEL').trim() || 'GENEL';
+        const olay = {
+          eventId: `MOB-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          sinavKodu,
+          tur,
+          kaynakCihaz: 'mobil',
+          zamanMs: Date.now(),
+          veri: veri || {}
+        };
+        const liste = okuMobilV2OutboxSenkron();
+        liste.push(olay);
+        yazMobilV2OutboxSenkron(liste);
+        mobilV2EsitlendiMi = false;
+        guncelleMobilSenkronRozetUI(false);
+        clearTimeout(mobilV2DebouncedTimer);
+        mobilV2DebouncedTimer = setTimeout(() => {
+          senkronizeEtMobilV2Olaylar({ sessiz: true }).catch(() => {});
+        }, 350);
+        return olay;
+      }
+
+      async function senkronizeEtMobilV2Olaylar(secenek = {}) {
+        const token = alAktifMobilHocaToken();
+        if (!token || (typeof navigator !== 'undefined' && navigator.onLine === false) || !location.protocol.startsWith('http')) {
+          guncelleMobilSenkronRozetUI(false);
+          return { ok: false, sebep: 'cevrimdisi_veya_tokensiz' };
+        }
+        if (mobilV2SenkronSuruyor) return { ok: false, sebep: 'suruyor' };
+        mobilV2SenkronSuruyor = true;
+        try {
+          const basliklar = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+          const bekleyenler = okuMobilV2OutboxSenkron();
+          let sonSeqNo = Number(okuMobilV2Meta().sonSeqNo) || 0;
+
+          if (bekleyenler.length > 0) {
+            const pushYanit = await fetch('/api/v2/sinav-senkron', {
+              method: 'POST',
+              headers: basliklar,
+              body: JSON.stringify({ olaylar: bekleyenler.slice(0, 150) })
+            });
+            if (pushYanit.status === 401 || pushYanit.status === 403) {
+              await pushYanit.text().catch(() => '');
+              return { ok: false, sebep: 'yetkisiz' };
+            }
+            if (pushYanit.ok) {
+              const pv = await pushYanit.json();
+              const gonderilenIdSet = new Set(bekleyenler.slice(0, 150).map((o) => o.eventId));
+              const kalan = okuMobilV2OutboxSenkron().filter((o) => !gonderilenIdSet.has(o.eventId));
+              yazMobilV2OutboxSenkron(kalan);
+              if (Number(pv && pv.sonSeqNo) > sonSeqNo) sonSeqNo = Number(pv.sonSeqNo);
+            } else {
+              await pushYanit.text().catch(() => '');
+            }
+          }
+
+          const etkinKod = String((mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.sinavKodu) || 'GENEL').trim() || 'GENEL';
+          const pullYanit = await fetch(`/api/v2/sinav-senkron?sinceSeq=${sonSeqNo}&sinavKodu=${encodeURIComponent(etkinKod)}`, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store'
+          });
+          if (pullYanit.ok) {
+            const lv = await pullYanit.json();
+            const gelenOlaylar = Array.isArray(lv && lv.olaylar) ? lv.olaylar : [];
+            let anahtarGuncellendiMi = false;
+            let ogrenciGuncellendiMi = false;
+            gelenOlaylar.forEach((olay) => {
+              if (!olay) return;
+              if (olay.tur === 'ANAHTAR_GUNCELLE' && olay.kaynakCihaz !== 'mobil' && olay.veri) {
+                const kitapciklar = olay.veri.kitapciklar && typeof olay.veri.kitapciklar === 'object' ? olay.veri.kitapciklar : null;
+                if (kitapciklar) {
+                  Object.assign(mobilDurum.sinavYapisi.cevapAnahtarlari, kitapciklar);
+                } else if (olay.veri.anahtar) {
+                  const g = String(olay.veri.grup || 'A').toUpperCase();
+                  mobilDurum.sinavYapisi.cevapAnahtarlari[g] = olay.veri.anahtar;
+                }
+                anahtarGuncellendiMi = true;
+              } else if (olay.tur === 'OGRENCI_EKLE' && olay.kaynakCihaz !== 'mobil' && olay.veri && Array.isArray(olay.veri.ogrenciler)) {
+                olay.veri.ogrenciler.forEach((o) => {
+                  if (!o || !o.ogrNo) return;
+                  if (!mobilDurum.ogrenciler.some((x) => String(x.ogrNo) === String(o.ogrNo))) {
+                    mobilDurum.ogrenciler.push(o);
+                    ogrenciGuncellendiMi = true;
+                  }
+                });
+              }
+            });
+            if (anahtarGuncellendiMi) {
+              uygulaMobil100PuanNormalizasyon(null, true);
+              cizDokunmatikAnahtarEditoru();
+            }
+            if (anahtarGuncellendiMi || ogrenciGuncellendiMi) {
+              guncelleMobilDersPaketKaydi();
+              kaydetYerelDepoya();
+              guncelleUstOzet();
+              guncelleMobilSonucListesi();
+            }
+            const yeniSeq = Number(lv && lv.sonSeqNo) || sonSeqNo;
+            yazMobilV2Meta({ sonSeqNo: Math.max(sonSeqNo, yeniSeq), sonBasariliMs: Date.now() });
+          } else {
+            await pullYanit.text().catch(() => '');
+          }
+
+          mobilV2EsitlendiMi = okuMobilV2OutboxSenkron().length === 0;
+          guncelleMobilSenkronRozetUI(mobilV2EsitlendiMi);
+          if (!secenek.sessiz && typeof mobilUyariGoster === 'function' && mobilV2EsitlendiMi) {
+            mobilUyariGoster('✅ Tüm mobil okumalar ve anahtarlar bulut ile kayıpsız eşitlendi.', 'basari');
+          }
+          return { ok: true, sonSeqNo };
+        } catch (_) {
+          guncelleMobilSenkronRozetUI(false);
+          return { ok: false, sebep: 'ag_hatasi' };
+        } finally {
+          mobilV2SenkronSuruyor = false;
+        }
+      }
+
+      window.__mobilV2OutboxOku = () => ({
+        bekleyenSayi: okuMobilV2OutboxSenkron().length,
+        bekleyenOlaylar: okuMobilV2OutboxSenkron(),
+        meta: okuMobilV2Meta()
+      });
+      window.__mobilV2SenkronTetikle = (sec = {}) => senkronizeEtMobilV2Olaylar(sec);
 
       function guncelleMobilSenkronRozetUI(senkronOnaylandi = false) {
         const rozet = document.getElementById('rozet-mobil-bekleyen');
         if (!rozet) return;
         const toplam = Array.isArray(mobilDurum.okumaSonuclari) ? mobilDurum.okumaSonuclari.length : 0;
+        const bekleyenSayi = okuMobilV2OutboxSenkron().length;
         const cevrimdisi = typeof navigator !== 'undefined' && navigator.onLine === false;
-        if (senkronOnaylandi && toplam > 0) {
+        if (senkronOnaylandi && toplam > 0 && bekleyenSayi === 0) {
           sonSenkronOnayliSayi = toplam;
-        } else if (toplam !== sonSenkronOnayliSayi) {
+          mobilV2EsitlendiMi = true;
+        } else if (bekleyenSayi > 0 || toplam !== sonSenkronOnayliSayi) {
           sonSenkronOnayliSayi = -1;
+        }
+        if (bekleyenSayi > 0) {
+          rozet.hidden = false;
+          rozet.className = 'rozet rozet-sari';
+          rozet.textContent = cevrimdisi ? `Çevrimdışı Bekleyen: ${bekleyenSayi}` : `Bekleyen: ${bekleyenSayi}`;
+          return;
         }
         if (toplam === 0) {
           if (cevrimdisi) {
@@ -2265,9 +2538,9 @@
         if (cevrimdisi) {
           rozet.className = 'rozet rozet-sari';
           rozet.textContent = `Kuyruk (Çevrimdışı): ${toplam}`;
-        } else if (sonSenkronOnayliSayi === toplam) {
+        } else if (sonSenkronOnayliSayi === toplam || mobilV2EsitlendiMi) {
           rozet.className = 'rozet rozet-yesil';
-          rozet.textContent = `Gönderildi (${toplam})`;
+          rozet.textContent = `Eşitlendi (${toplam})`;
         } else {
           rozet.className = 'rozet rozet-mavi';
           rozet.textContent = `Yerel: ${toplam}`;
@@ -2445,6 +2718,9 @@
         const cevapImza = imzaHesaplaMobilKagit(sonuc);
         const gercekCevapVarMi = ((sonuc.dyDetay || []).some((d) => d.verilen) || (sonuc.testDetay || []).some((t) => t.verilen));
         sonuc.cevapImza = cevapImza;
+        if (typeof C.ayiklaHamOmrBalonCevaplari === 'function') {
+          sonuc.hamCevaplar = C.ayiklaHamOmrBalonCevaplari(sonuc);
+        }
 
         let idx = -1;
         if (!sonuc.numaraEslesmediMi) {
@@ -2471,6 +2747,9 @@
         }
 
         kaydetYerelDepoya();
+        if (!secenekler.senkronAtla) {
+          kuyrugaAlMobilSenkronOlayi('OKUDU_GUNCELLE', hafifletMobilKayit(sonuc));
+        }
         cizMobilRontgen(sonuc);
         guncelleVizorCanliHud(sonuc);
         bipCal(!sonuc.supheliMi && !belirsiz);
@@ -2787,6 +3066,13 @@
           if (stdSoruInp && okuma.sorular && okuma.sorular.length > 0) stdSoruInp.value = String(okuma.sorular.length);
           mobilDurum.sinavYapisi.cevapAnahtarlari.A.test = (okuma.sorular || []).slice(0, 35).map((s) => s.verilen || 'A');
           kaydetYerelDepoya();
+          const aktifGrpAnahtar = document.getElementById('m-ayar-grup-sec').value || 'A';
+          kuyrugaAlMobilSenkronOlayi('ANAHTAR_GUNCELLE', {
+            grup: aktifGrpAnahtar,
+            anahtar: mobilDurum.sinavYapisi.cevapAnahtarlari[aktifGrpAnahtar],
+            kitapciklar: mobilDurum.sinavYapisi.cevapAnahtarlari,
+            kaynak: 'pwa-dokunmatik-anahtar'
+          });
           guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
           bipCal(true);
@@ -2835,7 +3121,13 @@
         if (anahtarBtn && document.body.getAttribute('data-aktif-msekme') !== 'm-panel-anahtar') {
           anahtarBtn.click();
         }
-        const msg = `✅ ${grup} Kitapçığı Cevap Anahtarı kağıttan okundu, 100 tam puana dengelendi ve kaydedildi (${okuma.dyDetay.length} D/Y + ${okuma.testDetay.length} Test)!`;
+          const msg = `✅ ${grup} Kitapçığı Cevap Anahtarı kağıttan okundu, 100 tam puana dengelendi ve kaydedildi (${okuma.dyDetay.length} D/Y + ${okuma.testDetay.length} Test)!`;
+          kuyrugaAlMobilSenkronOlayi('ANAHTAR_GUNCELLE', {
+            grup,
+            anahtar: mobilDurum.sinavYapisi.cevapAnahtarlari[grup],
+            kitapciklar: mobilDurum.sinavYapisi.cevapAnahtarlari,
+            kaynak: 'pwa-kagit-anahtar'
+          });
         const onayKutu = document.getElementById('mobil-anahtar-kayit-onay');
         if (onayKutu) { onayKutu.textContent = msg; onayKutu.hidden = false; }
         mobilUyariGoster(msg, 'basari');
@@ -3502,6 +3794,13 @@
 
           uygulaMobil100PuanNormalizasyon(ozelPuan, true);
           kaydetYerelDepoya();
+          const aktifGrpAnahtar = document.getElementById('m-ayar-grup-sec').value || 'A';
+          kuyrugaAlMobilSenkronOlayi('ANAHTAR_GUNCELLE', {
+            grup: aktifGrpAnahtar,
+            anahtar: mobilDurum.sinavYapisi.cevapAnahtarlari[aktifGrpAnahtar],
+            kitapciklar: mobilDurum.sinavYapisi.cevapAnahtarlari,
+            kaynak: 'pwa-dokunmatik-anahtar'
+          });
           guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
           guncelleMobilSonucListesi();
@@ -3553,6 +3852,13 @@
             klasikToplamPuan: mobilDurum.sinavYapisi.klasikToplamPuan
           }, true);
           kaydetYerelDepoya();
+          const aktifGrpAnahtar = document.getElementById('m-ayar-grup-sec').value || 'A';
+          kuyrugaAlMobilSenkronOlayi('ANAHTAR_GUNCELLE', {
+            grup: aktifGrpAnahtar,
+            anahtar: mobilDurum.sinavYapisi.cevapAnahtarlari[aktifGrpAnahtar],
+            kitapciklar: mobilDurum.sinavYapisi.cevapAnahtarlari,
+            kaynak: 'pwa-dokunmatik-anahtar'
+          });
           guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
           guncelleMobilSonucListesi();
@@ -3900,21 +4206,28 @@
           btnMobilSonucPcGonder.addEventListener('click', async () => {
             const bilgi = document.getElementById('etiket-mobil-sonuc-aktar-bilgi');
             const kodInp = document.getElementById('mobil-sonuc-pc-kodu');
-            const oturumKodu = ((kodInp && kodInp.value) || 'VARSAYILAN').trim().toUpperCase();
+            const oturumKodu = ((kodInp && kodInp.value) || '').trim().toUpperCase();
             if (!mobilDurum.okumaSonuclari.length) {
+              const v2S = await senkronizeEtMobilV2Olaylar({ sessiz: false });
+              if (v2S && v2S.ok) {
+                if (bilgi) bilgi.textContent = '✅ Bulut V2 olay kanalı senkronize edildi.';
+                return;
+              }
               if (bilgi) bilgi.textContent = '⚠️ Henüz okunan kağıt yok.';
               return;
             }
             const paket = C.uretOmrSonucPaketi(mobilDurum.okumaSonuclari, mobilDurum.sinavYapisi);
             try {
+              const v2Sonuc = await senkronizeEtMobilV2Olaylar({ sessiz: true });
               const hocaToken = alAktifMobilHocaToken();
               const basliklar = { 'Content-Type': 'application/json' };
               if (hocaToken) basliklar.Authorization = `Bearer ${hocaToken}`;
+              const hedefKod = oturumKodu || 'VARSAYILAN';
               const y = await fetch('/api/omr-sonuc-senkron', {
                 method: 'POST',
                 headers: basliklar,
                 body: JSON.stringify({
-                  oturumKodu,
+                  oturumKodu: hedefKod,
                   paket: paket.paketKodu,
                   okumaSonuclari: paket.okumaSonuclari,
                   sinavKodu: paket.sinavKodu,
@@ -3925,18 +4238,93 @@
               const v = await y.json();
               if (y.ok && v && v.basarili) {
                 guncelleMobilSenkronRozetUI(true);
-                if (bilgi) bilgi.textContent = `✅ ${v.adet || v.aktarilanSayi || paket.kayitSayisi} kağıtlık detaylı sonuç (${oturumKodu}) bilgisayar stüdyosuna gönderildi!`;
+                if (bilgi) bilgi.textContent = `✅ ${v.adet || v.aktarilanSayi || paket.kayitSayisi} kağıtlık detaylı sonuç bilgisayar stüdyosuna (V2 + ${hedefKod}) gönderildi!`;
+                bipCal(true);
+                return;
+              }
+              if (v2Sonuc && v2Sonuc.ok) {
+                guncelleMobilSenkronRozetUI(true);
+                if (bilgi) bilgi.textContent = `✅ ${paket.kayitSayisi} kağıt V2 kayıpsız bulut kanalına aktarıldı!`;
                 bipCal(true);
                 return;
               }
               if (y.status === 401) {
-                if (bilgi) bilgi.textContent = '🔒 Yetkili öğretmen oturumu gerekiyor (401): Bilgisayar stüdyosundan kurulum QR kodunu okutun veya "📋 Paketi Kopyala" / "📦 Stüdyo Paketi (.json)" kullanın.';
+                if (bilgi) bilgi.textContent = '🔒 Yetkili öğretmen oturumu gerekiyor (401): Bilgisayar stüdyosundan kurulum QR kodunu okutun veya "💾 Sınav Paketi" indirin.';
                 return;
               }
-              if (bilgi) bilgi.textContent = `⚠️ Sunucu yanıtı: ${(v && v.hata) || y.status}. "📦 Stüdyo Paketi (.json)" veya "📋 Paketi Kopyala" kullanabilirsiniz.`;
+              if (bilgi) bilgi.textContent = `⚠️ Sunucu yanıtı: ${(v && v.hata) || y.status}. "💾 Sınav Paketi (.sinavpaket.json)" kullanabilirsiniz.`;
             } catch (_) {
-              if (bilgi) bilgi.textContent = 'ℹ️ Çevrimdışı mod: "📦 Stüdyo Paketi (.json)" indirip bilgisayara aktarabilir veya "📋 Paketi Kopyala" kullanabilirsiniz.';
+              if (bilgi) bilgi.textContent = 'ℹ️ Çevrimdışı mod: Okumalar IndexedDB kuyruğunda güvende; internet gelince otomatik gönderilir veya "💾 Sınav Paketi" ile aktarabilirsiniz.';
             }
+          });
+        }
+
+        const btnMobilSinavPaketIndir = document.getElementById('btn-mobil-sinavpaket-indir');
+        if (btnMobilSinavPaketIndir) {
+          btnMobilSinavPaketIndir.addEventListener('click', () => {
+            if (typeof C.uretBirlesikSinavPaketi !== 'function') return;
+            const paketNesne = C.uretBirlesikSinavPaketi({
+              sinavKodu: mobilDurum.sinavYapisi.sinavKodu || 'GENEL',
+              dersId: mobilDurum.dersId || '',
+              dersAdi: mobilDurum.sinavYapisi.dersAd || mobilDurum.sinavYapisi.dersAdi || '',
+              sinavYapisi: mobilDurum.sinavYapisi,
+              cevapAnahtarlari: mobilDurum.sinavYapisi.cevapAnahtarlari,
+              ogrenciler: mobilDurum.ogrenciler,
+              okumaSonuclari: (mobilDurum.okumaSonuclari || []).map((x) => hafifletMobilKayit(x))
+            });
+            const blob = new Blob([JSON.stringify(paketNesne, null, 2)], { type: 'application/json;charset=utf-8' });
+            const url = C.olusturGuvenliBlobUrl(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${(mobilDurum.sinavYapisi.sinavKodu || 'sinav').replace(/[^a-zA-Z0-9_-]/g, '_')}.sinavpaket.json`;
+            a.click();
+            if (typeof C.serbestBirakGuvenliBlobUrl === 'function') setTimeout(() => C.serbestBirakGuvenliBlobUrl(url), 1000);
+            const bilgi = document.getElementById('etiket-mobil-sonuc-aktar-bilgi');
+            if (bilgi) bilgi.textContent = `💾 SHA-256 mühürlü .sinavpaket.json indirildi (${mobilDurum.okumaSonuclari.length} kağıt, ${mobilDurum.ogrenciler.length} öğrenci).`;
+          });
+        }
+
+        const inpMobilSinavPaketYukle = document.getElementById('input-mobil-sinavpaket-yukle');
+        if (inpMobilSinavPaketYukle) {
+          inpMobilSinavPaketYukle.addEventListener('change', (ev) => {
+            const dosya = ev.target.files && ev.target.files[0];
+            if (!dosya) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              try {
+                const paket = C.cozBirlesikSinavPaketi(String(reader.result || ''));
+                if (paket.sinavYapisi && typeof paket.sinavYapisi === 'object') {
+                  Object.assign(mobilDurum.sinavYapisi, paket.sinavYapisi);
+                }
+                if (paket.cevapAnahtarlari && typeof paket.cevapAnahtarlari === 'object') {
+                  mobilDurum.sinavYapisi.cevapAnahtarlari = paket.cevapAnahtarlari;
+                }
+                if (Array.isArray(paket.ogrenciler) && paket.ogrenciler.length > 0) {
+                  mobilDurum.ogrenciler = paket.ogrenciler;
+                }
+                if (Array.isArray(paket.okumaSonuclari) && paket.okumaSonuclari.length > 0) {
+                  mobilDurum.okumaSonuclari = birlestirMobilOkumaListeleri(
+                    paket.okumaSonuclari,
+                    mobilDurum.okumaSonuclari,
+                    silinenMobilKayitIdleri
+                  );
+                }
+                uygulaMobil100PuanNormalizasyon(null, true);
+                guncelleMobilDersPaketKaydi();
+                kaydetYerelDepoya();
+                guncelleUstOzet();
+                cizDokunmatikAnahtarEditoru();
+                guncelleMobilSonucListesi();
+                bipCal(true);
+                mobilUyariGoster(`✅ SHA-256 doğrulandı: ${paket.ogrenciler.length} öğrenci ve ${paket.okumaSonuclari.length} okuma yüklendi.`, 'basari');
+              } catch (err) {
+                mobilUyariGoster(`⚠️ Paket yüklenemedi: ${(err && err.message) || err}`);
+                bipCal(false);
+              } finally {
+                inpMobilSinavPaketYukle.value = '';
+              }
+            };
+            reader.readAsText(dosya, 'utf-8');
           });
         }
 
@@ -3954,9 +4342,24 @@
           };
         }
 
-        window.addEventListener('online', () => guncelleMobilSenkronRozetUI(false));
+        window.addEventListener('online', () => {
+          guncelleMobilSenkronRozetUI(false);
+          if (alAktifMobilHocaToken() && location.protocol.startsWith('http')) {
+            senkronizeEtMobilV2Olaylar({ sessiz: true }).catch(() => {});
+          }
+        });
         window.addEventListener('offline', () => guncelleMobilSenkronRozetUI(false));
         guncelleMobilSenkronRozetUI(false);
+        if (alAktifMobilHocaToken() && navigator.onLine !== false && location.protocol.startsWith('http')) {
+          senkronizeEtMobilV2Olaylar({ sessiz: true }).catch(() => {});
+        }
+        if (typeof C.kurGuvenliInterval === 'function') {
+          C.kurGuvenliInterval('mobil-v2-senkron', () => {
+            if (alAktifMobilHocaToken() && navigator.onLine !== false && location.protocol.startsWith('http')) {
+              senkronizeEtMobilV2Olaylar({ sessiz: true }).catch(() => {});
+            }
+          }, 5000);
+        }
 
         window.addEventListener('hashchange', () => {
           yukleBaslangicVerisi();

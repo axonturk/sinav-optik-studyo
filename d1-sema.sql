@@ -94,3 +94,38 @@ CREATE TABLE IF NOT EXISTS omr_eslesme_tokenlari (
 
 CREATE INDEX IF NOT EXISTS idx_omr_eslesme_bitis
   ON omr_eslesme_tokenlari(bitis_ms, iptal);
+
+-- V2 Hafif Mobil Ders / Sınav Paketleri (Tek Bağlantı QR sonrası buluttan çekilir)
+CREATE TABLE IF NOT EXISTS mobil_sinav_paketleri (
+  paket_anahtari TEXT PRIMARY KEY,
+  kullanici_adi TEXT NOT NULL,
+  sinav_kodu TEXT NOT NULL,
+  ders_id TEXT NOT NULL DEFAULT '',
+  ders_adi TEXT NOT NULL DEFAULT '',
+  baslik TEXT NOT NULL DEFAULT '',
+  paket_json TEXT NOT NULL,
+  paket_hash TEXT NOT NULL DEFAULT '',
+  guncelleme_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_mobil_paket_kullanici
+  ON mobil_sinav_paketleri(kullanici_adi, guncelleme_ms DESC);
+
+-- V2 Kayıpsız Delta Senkron Olay Günlüğü (Idempotent & Non-Destructive)
+CREATE TABLE IF NOT EXISTS omr_senkron_olaylari (
+  seq_no INTEGER PRIMARY KEY AUTOINCREMENT,
+  kullanici_adi TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  sinav_kodu TEXT NOT NULL,
+  olay_turu TEXT NOT NULL,
+  kaynak_cihaz TEXT NOT NULL DEFAULT 'mobil',
+  veri_json TEXT NOT NULL,
+  zaman_ms INTEGER NOT NULL,
+  UNIQUE(kullanici_adi, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_omr_senkron_cursor
+  ON omr_senkron_olaylari(kullanici_adi, seq_no);
+
+CREATE INDEX IF NOT EXISTS idx_omr_senkron_sinav
+  ON omr_senkron_olaylari(kullanici_adi, sinav_kodu, seq_no);

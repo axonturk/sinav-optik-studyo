@@ -54,6 +54,11 @@ const sunucuDurumu = {
   omrSonucKuyrugu: new Map(),
   kioskDelilLoglari: [],
   omrSonuclari: [],
+  mobilSinavPaketleri: new Map(),
+  omrSenkronOlaylari: [],
+  omrSenkronEventIdSet: new Set(),
+  omrSenkronSeqSayac: 0,
+  v2TablolarHazir: false,
   bulutKasalarBellek: new Map(),
   bulutGecmisBellek: new Map()
 };
@@ -290,7 +295,7 @@ async function hmacSha256Imzala(sifre, mesaj) {
 async function uretOmrEslesmeToken(env, oturum, oturumKodu = 'GENEL', sureDk = 15) {
   const tid = uretRastgeleToken(12);
   const iat = Date.now();
-  const gecerlilikSn = Math.max(300, Math.min(7200, (parseInt(sureDk, 10) || 15) * 60));
+  const gecerlilikSn = Math.max(300, Math.min(43200, (parseInt(sureDk, 10) || 15) * 60));
   const bitisMs = iat + gecerlilikSn * 1000;
   const kod = String(oturumKodu || 'GENEL').trim().toUpperCase() || 'GENEL';
   const payload = { tid, k: oturum.kullaniciAdi, o: kod, iat, exp: bitisMs };
@@ -459,6 +464,222 @@ async function acD1VeriJson(veriJsonStr) {
     return await cozGzipB64Json(parsed.veri);
   }
   return parsed;
+}
+
+async function hazirlaV2D1Tablolar(env) {
+  if (sunucuDurumu.v2TablolarHazir || !env || !env.SINAV_DB) return;
+  try {
+    await env.SINAV_DB.batch([
+      env.SINAV_DB.prepare(
+        'CREATE TABLE IF NOT EXISTS mobil_sinav_paketleri (paket_anahtari TEXT PRIMARY KEY, kullanici_adi TEXT NOT NULL, sinav_kodu TEXT NOT NULL, ders_id TEXT NOT NULL DEFAULT \'\', ders_adi TEXT NOT NULL DEFAULT \'\', baslik TEXT NOT NULL DEFAULT \'\', paket_json TEXT NOT NULL, paket_hash TEXT NOT NULL DEFAULT \'\', guncelleme_ms INTEGER NOT NULL)'
+      ),
+      env.SINAV_DB.prepare(
+        'CREATE TABLE IF NOT EXISTS omr_senkron_olaylari (seq_no INTEGER PRIMARY KEY AUTOINCREMENT, kullanici_adi TEXT NOT NULL, event_id TEXT NOT NULL, sinav_kodu TEXT NOT NULL, olay_turu TEXT NOT NULL, kaynak_cihaz TEXT NOT NULL DEFAULT \'mobil\', veri_json TEXT NOT NULL, zaman_ms INTEGER NOT NULL, UNIQUE(kullanici_adi, event_id))'
+      )
+    ]);
+    sunucuDurumu.v2TablolarHazir = true;
+  } catch (_) {}
+}
+
+async function listeleMobilSinavPaketleriD1VeyaBellek(env, kullaniciAdi) {
+  let paketler = [];
+  let sonSeqNo = 0;
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    try {
+      const { results } = await env.SINAV_DB.prepare(
+        'SELECT paket_json FROM mobil_sinav_paketleri WHERE kullanici_adi = ?1 ORDER BY guncelleme_ms DESC LIMIT 100'
+      ).bind(kullaniciAdi).all();
+      paketler = (results || []).map((r) => {
+        try { return JSON.parse(r.paket_json); } catch (_) { return null; }
+      }).filter(Boolean);
+    } catch (_) { paketler = []; }
+    try {
+      const seqSat = await env.SINAV_DB.prepare(
+        'SELECT COALESCE(MAX(seq_no), 0) AS sonSeqNo FROM omr_senkron_olaylari WHERE kullanici_adi = ?1'
+      ).bind(kullaniciAdi).first();
+      sonSeqNo = Number(seqSat && seqSat.sonSeqNo) || 0;
+    } catch (_) { sonSeqNo = 0; }
+  } else {
+    for (const [anahtar, pkg] of sunucuDurumu.mobilSinavPaketleri.entries()) {
+      if (anahtar.startsWith(`${kullaniciAdi}::`)) paketler.push(pkg);
+    }
+    const kulOlaylar = sunucuDurumu.omrSenkronOlaylari.filter((o) => o.kullaniciAdi === kullaniciAdi);
+    sonSeqNo = kulOlaylar.length ? kulOlaylar[kulOlaylar.length - 1].seqNo : 0;
+  }
+  return { paketler, sonSeqNo };
+}
+
+async function yayinlaMobilSinavPaketiD1VeyaBellek(env, kullaniciAdi, govde) {
+  const temiz = Cekirdek.derinTemizleNesne(govde || {}, 0);
+  const sinavKodu = String(temiz.sinavKodu || (temiz.sinavYapisi && temiz.sinavYapisi.sinavKodu) || 'GENEL').trim().slice(0, 80) || 'GENEL';
+  const dersId = String(temiz.dersId || (temiz.sinavYapisi && temiz.sinavYapisi.dersId) || '').trim().slice(0, 80);
+  const dersAdi = String(temiz.dersAdi || (temiz.sinavYapisi && temiz.sinavYapisi.dersAdi) || '').trim().slice(0, 100);
+  const baslik = String(temiz.baslik || (temiz.sinavYapisi && temiz.sinavYapisi.baslik) || dersAdi || sinavKodu).trim().slice(0, 140);
+  const ogrenciler = (Array.isArray(temiz.ogrenciler) ? temiz.ogrenciler : [])
+    .filter((o) => o && typeof o === 'object' && (o.ogrNo || o.no))
+    .slice(0, 2000)
+    .map((o) => ({
+      ogrNo: String(o.ogrNo || o.no || '').trim().slice(0, 40),
+      adSoyad: String(o.adSoyad || o.ad || '').trim().slice(0, 100),
+      sinifSube: String(o.sinifSube || o.sube || '').trim().slice(0, 40),
+      salonAdi: String(o.salonAdi || o.salon || '').trim().slice(0, 40)
+    }));
+  const guncellemeMs = Date.now();
+  const paket = {
+    id: dersId || sinavKodu,
+    dersId,
+    dersAdi,
+    sinavKodu,
+    baslik,
+    sinavYapisi: temiz.sinavYapisi || {},
+    cevapAnahtarlari: temiz.cevapAnahtarlari || (temiz.sinavYapisi && temiz.sinavYapisi.cevapAnahtarlari) || {},
+    ogrenciler,
+    guncellemeMs
+  };
+  const paketHash = Cekirdek.uretDelilLogHash(JSON.stringify(paket), 'V2_PAKET');
+  paket.paketHash = paketHash;
+  const paketAnahtari = `${kullaniciAdi}::${sinavKodu}`;
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    await env.SINAV_DB.prepare(
+      'INSERT OR REPLACE INTO mobil_sinav_paketleri (paket_anahtari, kullanici_adi, sinav_kodu, ders_id, ders_adi, baslik, paket_json, paket_hash, guncelleme_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)'
+    ).bind(paketAnahtari, kullaniciAdi, sinavKodu, dersId, dersAdi, baslik, JSON.stringify(paket), paketHash, guncellemeMs).run();
+  } else {
+    sunucuDurumu.mobilSinavPaketleri.set(paketAnahtari, paket);
+  }
+  return { sinavKodu, paketHash, guncellemeMs, ogrenciSayisi: ogrenciler.length };
+}
+
+async function yazOmrSenkronOlaylariV2D1VeyaBellek(env, kullaniciAdi, hamOlaylar) {
+  const yazilanlar = [];
+  let atlananSayisi = 0;
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    for (const hamOlay of hamOlaylar) {
+      const temizOlay = Cekirdek.dogrulaVeTemizleSenkronOlayi(hamOlay, kullaniciAdi);
+      const resInsert = await env.SINAV_DB.prepare(
+        'INSERT OR IGNORE INTO omr_senkron_olaylari (kullanici_adi, event_id, sinav_kodu, olay_turu, kaynak_cihaz, veri_json, zaman_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)'
+      ).bind(
+        kullaniciAdi,
+        temizOlay.eventId,
+        temizOlay.sinavKodu,
+        temizOlay.tur,
+        temizOlay.kaynakCihaz,
+        JSON.stringify(temizOlay.veri),
+        temizOlay.zamanMs
+      ).run();
+      const degisen = Number(resInsert && resInsert.meta && resInsert.meta.changes) || 0;
+      if (degisen === 0) {
+        atlananSayisi++;
+        continue;
+      }
+      const seqNo = Number(resInsert && resInsert.meta && resInsert.meta.last_row_id) || 0;
+      if (temizOlay.tur === 'ANAHTAR_GUNCELLE') {
+        const paketAnahtari = `${kullaniciAdi}::${temizOlay.sinavKodu}`;
+        const mevcutSat = await env.SINAV_DB.prepare(
+          'SELECT paket_json FROM mobil_sinav_paketleri WHERE paket_anahtari = ?1'
+        ).bind(paketAnahtari).first();
+        if (mevcutSat && mevcutSat.paket_json) {
+          try {
+            const mevcutPkg = JSON.parse(mevcutSat.paket_json);
+            const g = String((temizOlay.veri && temizOlay.veri.grup) || 'A').toUpperCase();
+            const yeniAnahtar = Object.assign({}, mevcutPkg.cevapAnahtarlari || {});
+            if (temizOlay.veri && temizOlay.veri.kitapciklar) Object.assign(yeniAnahtar, temizOlay.veri.kitapciklar);
+            else if (temizOlay.veri && temizOlay.veri.anahtar) yeniAnahtar[g] = temizOlay.veri.anahtar;
+            mevcutPkg.cevapAnahtarlari = yeniAnahtar;
+            if (mevcutPkg.sinavYapisi && typeof mevcutPkg.sinavYapisi === 'object') {
+              mevcutPkg.sinavYapisi.cevapAnahtarlari = yeniAnahtar;
+            }
+            mevcutPkg.guncellemeMs = Date.now();
+            await env.SINAV_DB.prepare(
+              'UPDATE mobil_sinav_paketleri SET paket_json = ?1, guncelleme_ms = ?2 WHERE paket_anahtari = ?3'
+            ).bind(JSON.stringify(mevcutPkg), mevcutPkg.guncellemeMs, paketAnahtari).run();
+          } catch (_) {}
+        }
+      }
+      yazilanlar.push({ eventId: temizOlay.eventId, seqNo, tur: temizOlay.tur, sinavKodu: temizOlay.sinavKodu });
+    }
+    const seqSat = await env.SINAV_DB.prepare(
+      'SELECT COALESCE(MAX(seq_no), 0) AS sonSeqNo FROM omr_senkron_olaylari WHERE kullanici_adi = ?1'
+    ).bind(kullaniciAdi).first();
+    const sonSeqNo = Number(seqSat && seqSat.sonSeqNo) || 0;
+    return { yazilanlar, atlananSayisi, sonSeqNo };
+  }
+
+  for (const hamOlay of hamOlaylar) {
+    const temizOlay = Cekirdek.dogrulaVeTemizleSenkronOlayi(hamOlay, kullaniciAdi);
+    const idempotencyAnahtar = `${kullaniciAdi}::${temizOlay.eventId}`;
+    if (sunucuDurumu.omrSenkronEventIdSet.has(idempotencyAnahtar)) {
+      atlananSayisi++;
+      continue;
+    }
+    sunucuDurumu.omrSenkronEventIdSet.add(idempotencyAnahtar);
+    const seqNo = ++sunucuDurumu.omrSenkronSeqSayac;
+    const kayit = Object.assign({ seqNo, sunucuZamanMs: Date.now() }, temizOlay);
+    sunucuDurumu.omrSenkronOlaylari.push(kayit);
+    if (sunucuDurumu.omrSenkronOlaylari.length > 10000) {
+      const silinen = sunucuDurumu.omrSenkronOlaylari.shift();
+      if (silinen) sunucuDurumu.omrSenkronEventIdSet.delete(`${silinen.kullaniciAdi}::${silinen.eventId}`);
+    }
+    if (kayit.tur === 'ANAHTAR_GUNCELLE') {
+      const mevcutPkg = sunucuDurumu.mobilSinavPaketleri.get(`${kullaniciAdi}::${kayit.sinavKodu}`);
+      if (mevcutPkg) {
+        const g = String((kayit.veri && kayit.veri.grup) || 'A').toUpperCase();
+        const yeniAnahtar = Object.assign({}, mevcutPkg.cevapAnahtarlari || {});
+        if (kayit.veri && kayit.veri.kitapciklar) Object.assign(yeniAnahtar, kayit.veri.kitapciklar);
+        else if (kayit.veri && kayit.veri.anahtar) yeniAnahtar[g] = kayit.veri.anahtar;
+        mevcutPkg.cevapAnahtarlari = yeniAnahtar;
+        if (mevcutPkg.sinavYapisi && typeof mevcutPkg.sinavYapisi === 'object') {
+          mevcutPkg.sinavYapisi.cevapAnahtarlari = yeniAnahtar;
+        }
+        mevcutPkg.guncellemeMs = Date.now();
+      }
+    }
+    yazilanlar.push({ eventId: kayit.eventId, seqNo: kayit.seqNo, tur: kayit.tur, sinavKodu: kayit.sinavKodu });
+  }
+  const kulOlaylar = sunucuDurumu.omrSenkronOlaylari.filter((o) => o.kullaniciAdi === kullaniciAdi);
+  const sonSeqNo = kulOlaylar.length ? kulOlaylar[kulOlaylar.length - 1].seqNo : sunucuDurumu.omrSenkronSeqSayac;
+  return { yazilanlar, atlananSayisi, sonSeqNo };
+}
+
+async function okuOmrSenkronOlaylariV2D1VeyaBellek(env, kullaniciAdi, sinavKoduFiltre, sinceSeq) {
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    const seqSat = await env.SINAV_DB.prepare(
+      'SELECT COALESCE(MAX(seq_no), 0) AS sonSeqNo FROM omr_senkron_olaylari WHERE kullanici_adi = ?1'
+    ).bind(kullaniciAdi).first();
+    const sonSeqNo = Number(seqSat && seqSat.sonSeqNo) || 0;
+    const stmt = (sinavKoduFiltre && sinavKoduFiltre !== 'TUMU')
+      ? env.SINAV_DB.prepare(
+          'SELECT seq_no, kullanici_adi, event_id, sinav_kodu, olay_turu, kaynak_cihaz, veri_json, zaman_ms FROM omr_senkron_olaylari WHERE kullanici_adi = ?1 AND seq_no > ?2 AND sinav_kodu = ?3 ORDER BY seq_no ASC LIMIT 500'
+        ).bind(kullaniciAdi, sinceSeq, sinavKoduFiltre)
+      : env.SINAV_DB.prepare(
+          'SELECT seq_no, kullanici_adi, event_id, sinav_kodu, olay_turu, kaynak_cihaz, veri_json, zaman_ms FROM omr_senkron_olaylari WHERE kullanici_adi = ?1 AND seq_no > ?2 ORDER BY seq_no ASC LIMIT 500'
+        ).bind(kullaniciAdi, sinceSeq);
+    const { results } = await stmt.all();
+    const olaylar = (results || []).map((r) => {
+      let veri = {};
+      try { veri = JSON.parse(r.veri_json || '{}'); } catch (_) { veri = {}; }
+      return {
+        seqNo: Number(r.seq_no) || 0,
+        kullaniciAdi: r.kullanici_adi,
+        eventId: r.event_id,
+        sinavKodu: r.sinav_kodu,
+        tur: r.olay_turu,
+        kaynakCihaz: r.kaynak_cihaz,
+        zamanMs: Number(r.zaman_ms) || 0,
+        veri
+      };
+    });
+    return { sonSeqNo, olaylar };
+  }
+  const tum = sunucuDurumu.omrSenkronOlaylari.filter((o) => o.kullaniciAdi === kullaniciAdi);
+  const sonSeqNo = tum.length ? tum[tum.length - 1].seqNo : 0;
+  const olaylar = tum
+    .filter((o) => o.seqNo > sinceSeq && (!sinavKoduFiltre || sinavKoduFiltre === 'TUMU' || o.sinavKodu === sinavKoduFiltre))
+    .slice(0, 500);
+  return { sonSeqNo, olaylar };
 }
 
 export default {
@@ -753,12 +974,111 @@ export default {
           }
         }
         const dersler = Cekirdek.uretMobilDersPaketleriOzeti((mevcut && mevcut.veri) || {});
+        const kasaGuncellemeMs = Number(mevcut && mevcut.guncellemeMs) || 0;
+        const v2Bilgi = await listeleMobilSinavPaketleriD1VeyaBellek(env, kullaniciAdi);
+        const birlesikHarita = new Map();
+        dersler.forEach((d, idx) => {
+          const k = String(d.dersId || d.id || d.sinavKodu || `D_${idx}`).trim();
+          birlesikHarita.set(k, Object.assign({}, d));
+        });
+        v2Bilgi.paketler.forEach((pkg) => {
+          if (kasaGuncellemeMs > 0 && (Number(pkg && pkg.guncellemeMs) || 0) <= kasaGuncellemeMs) return;
+          const paketId = String(pkg.dersId || pkg.id || '').trim();
+          const paketKod = String(pkg.sinavKodu || '').trim();
+          let eslesenAnahtar = paketId && birlesikHarita.has(paketId) ? paketId : '';
+          if (!eslesenAnahtar && paketKod) {
+            for (const [mk, md] of birlesikHarita.entries()) {
+              if (String(md.sinavKodu || '').trim() === paketKod) {
+                eslesenAnahtar = mk;
+                break;
+              }
+            }
+          }
+          const k = eslesenAnahtar || paketId || paketKod;
+          if (!k) return;
+          const onceki = birlesikHarita.get(k) || {};
+          birlesikHarita.set(k, Object.assign({}, onceki, pkg, {
+            ogrenciler: (Array.isArray(pkg.ogrenciler) && pkg.ogrenciler.length) ? pkg.ogrenciler : (onceki.ogrenciler || [])
+          }));
+        });
         return gonderJson(200, {
           basarili: true,
           kullaniciAdi,
           revizyonNo: mevcut ? mevcut.revizyonNo : 0,
           guncellemeMs: mevcut ? mevcut.guncellemeMs : 0,
-          dersler
+          sonSeqNo: v2Bilgi.sonSeqNo,
+          dersler: Array.from(birlesikHarita.values())
+        });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
+    if (metot === 'POST' && yol === '/api/v2/sinav-paket-yayinla') {
+      try {
+        const govde = await okuJsonGovde(request, 2097152);
+        const token = cozHocaTokenIstekten(request, govde, urlNesne);
+        const yetki = await dogrulaOmrVeyaHocaToken(env, token, '');
+        if (!yetki) {
+          return gonderJson(401, { hata: 'Sınav paketi yayınlamak için doğrulanmış öğretmen oturumu gereklidir (401 Unauthorized).' });
+        }
+        const kullaniciAdi = String((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca';
+        const sonuc = await yayinlaMobilSinavPaketiD1VeyaBellek(env, kullaniciAdi, govde);
+        return gonderJson(200, Object.assign({ basarili: true, kullaniciAdi }, sonuc));
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
+    if (metot === 'POST' && yol === '/api/v2/sinav-senkron') {
+      try {
+        const govde = await okuJsonGovde(request, 2097152);
+        const token = cozHocaTokenIstekten(request, govde, urlNesne);
+        const yetki = await dogrulaOmrVeyaHocaToken(env, token, (govde && govde.oturumKodu) || '');
+        if (!yetki) {
+          return gonderJson(401, { hata: 'Senkron olayı göndermek için doğrulanmış öğretmen veya OMR eşleşme tokenı gereklidir (401 Unauthorized).' });
+        }
+        const kullaniciAdi = String((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca';
+        const hamOlaylar = Array.isArray(govde && govde.olaylar)
+          ? govde.olaylar
+          : (govde && govde.olay ? [govde.olay] : []);
+        if (!hamOlaylar.length) {
+          return gonderJson(400, { hata: 'En az 1 geçerli senkron olayı (olaylar[]) gönderilmelidir.' });
+        }
+        if (hamOlaylar.length > 200) {
+          return gonderJson(400, { hata: 'Tek istekte en fazla 200 senkron olayı gönderilebilir.' });
+        }
+        const sonuc = await yazOmrSenkronOlaylariV2D1VeyaBellek(env, kullaniciAdi, hamOlaylar);
+        return gonderJson(200, {
+          basarili: true,
+          kullaniciAdi,
+          yazilanSayisi: sonuc.yazilanlar.length,
+          atlananSayisi: sonuc.atlananSayisi,
+          sonSeqNo: sonuc.sonSeqNo,
+          yazilanlar: sonuc.yazilanlar
+        });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
+    if (metot === 'GET' && yol === '/api/v2/sinav-senkron') {
+      try {
+        const token = cozHocaTokenIstekten(request, null, urlNesne);
+        const yetki = await dogrulaOmrVeyaHocaToken(env, token, '');
+        if (!yetki) {
+          return gonderJson(401, { hata: 'Senkron olaylarını okumak için doğrulanmış öğretmen veya OMR eşleşme tokenı gereklidir (401 Unauthorized).' });
+        }
+        const kullaniciAdi = String((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi || 'hoca').trim().toLowerCase() || 'hoca';
+        const sinceSeq = Math.max(0, parseInt(urlNesne.searchParams.get('sinceSeq') || '0', 10) || 0);
+        const sinavKoduFiltre = String(urlNesne.searchParams.get('sinavKodu') || '').trim();
+        const sonuc = await okuOmrSenkronOlaylariV2D1VeyaBellek(env, kullaniciAdi, sinavKoduFiltre, sinceSeq);
+        return gonderJson(200, {
+          basarili: true,
+          kullaniciAdi,
+          sinceSeq,
+          sonSeqNo: sonuc.sonSeqNo,
+          olaylar: sonuc.olaylar
         });
       } catch (err) {
         return gonderJson(400, { hata: err.message });
@@ -1833,6 +2153,20 @@ export default {
             ozetBilgi,
             guncellemeMs: simdi
           });
+        }
+
+        if (zorlaEz) {
+          for (const anahtar of Array.from(sunucuDurumu.mobilSinavPaketleri.keys())) {
+            if (anahtar.startsWith(`${kullaniciAdi}::`)) {
+              sunucuDurumu.mobilSinavPaketleri.delete(anahtar);
+            }
+          }
+          if (env && env.SINAV_DB) {
+            await hazirlaV2D1Tablolar(env);
+            await env.SINAV_DB.prepare(
+              'DELETE FROM mobil_sinav_paketleri WHERE kullanici_adi = ?1'
+            ).bind(kullaniciAdi).run().catch(() => {});
+          }
         }
 
         return gonderJson(200, {
