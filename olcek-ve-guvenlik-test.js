@@ -226,11 +226,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v17), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v18), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v17, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v17'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v18, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v18'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
@@ -1593,6 +1593,132 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
         srvParcaSonuc.ok &&
         wrkParcaSonuc.ok,
       JSON.stringify({ s: srvParcaSonuc, w: wrkParcaSonuc })
+    );
+
+    // [44] Cekirdek.dogrulaVeTemizleSoruParcasi: Zero-allocation yerinde şema, derinlik (>12) ve PII temizlik doğrulaması
+    const temizParcaOrnek = [{
+      id: 'S-T1',
+      tur: 'test',
+      metin: 'Örnek parça sorusu',
+      secenekler: ['A', 'B', 'C', 'D', 'E'],
+      dogruCevap: 'A',
+      sifre: 'gizli-kalmamali'
+    }];
+    const parcaTemizSonuc = Cekirdek.dogrulaVeTemizleSoruParcasi(temizParcaOrnek);
+    let parcaDerinHata = false;
+    try {
+      let derin = { ic: null };
+      let imlec = derin;
+      for (let i = 0; i < 14; i++) { imlec.ic = {}; imlec = imlec.ic; }
+      Cekirdek.dogrulaVeTemizleSoruParcasi([{ id: 'D1', tur: 'dy', metin: 'Derin', ek: derin }]);
+    } catch (_) {
+      parcaDerinHata = true;
+    }
+    let parcaSemaHata = false;
+    try {
+      Cekirdek.dogrulaVeTemizleSoruParcasi([{ id: 'B1', tur: 'bilinmeyen', metin: 'Bozuk' }]);
+    } catch (_) {
+      parcaSemaHata = true;
+    }
+    kontrol(
+      '[44] dogrulaVeTemizleSoruParcasi geçersiz şemayı ve >12 derinliği reddeder, sifre alanını yerinde siler',
+      parcaTemizSonuc.soruSayisi === 1 &&
+        parcaTemizSonuc.hassasAlanVardi === true &&
+        !Object.prototype.hasOwnProperty.call(temizParcaOrnek[0], 'sifre') &&
+        parcaDerinHata &&
+        parcaSemaHata,
+      JSON.stringify({ parcaTemizSonuc, parcaDerinHata, parcaSemaHata })
+    );
+
+    // [45] İstemci HTTP 503 Retry + Adaptif Yarıya Bölerek Parça Kurtarma Uçtan Uca Testi
+    const sayfa503 = await tarayici.newPage();
+    await sayfa503.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: 'networkidle0' });
+    await sayfa503.evaluate(async (tok) => {
+      sessionStorage.setItem('hoca_token', tok);
+      sessionStorage.setItem('hoca_kullanici', JSON.stringify({ kullaniciAdi: 'hoca', adSoyad: 'Test Hoca' }));
+    }, v2Tok);
+    await sayfa503.reload({ waitUntil: 'networkidle0' });
+    await bekle(300);
+
+    const kasa503Kurtarma = await sayfa503.evaluate(async () => {
+      const k = document.getElementById('btn-modal-hoca-kapat');
+      if (k && getComputedStyle(document.getElementById('modal-hoca-giris')).display !== 'none') k.click();
+
+      const ta = document.getElementById('toplu-soru-metin');
+      // 260 benzersiz soru ekle (~1 adet 260'lık parça oluşacak)
+      const eklenecekSatirlar = Array.from({ length: 260 }, (_, i) =>
+        `DY|H${(i % 14) + 1}|Orta|ÖÇ-1|Adaptif 503 kurtarma sorusu #${i + 1} (${Math.random().toString(36).slice(2, 7)})|D`
+      ).join('\n');
+      ta.value = eklenecekSatirlar;
+      document.getElementById('btn-toplu-soru-aktar').click();
+
+      const istatistik = { buyukParca503: 0, gecici503: 0, basariliParca: [] };
+      let ilkKucuk503Atildi = false;
+      const gercekFetch = window.fetch.bind(window);
+      window.fetch = async (url, opts) => {
+        if (String(url).includes('/api/bulut-kasa/parca') && opts && String(opts.method || '').toUpperCase() === 'PUT') {
+          try {
+            const govde = JSON.parse(opts.body);
+            const ikiliStr = atob(govde.veriSikistirilmis);
+            const u8 = new Uint8Array(ikiliStr.length);
+            for (let i = 0; i < ikiliStr.length; i++) u8[i] = ikiliStr.charCodeAt(i);
+            const ds = new DecompressionStream('gzip');
+            const w = ds.writable.getWriter();
+            w.write(u8);
+            w.close();
+            const txt = await new Response(ds.readable).text();
+            const arr = JSON.parse(txt);
+            // 180'den büyük parçaya kalıcı HTTP 503 enjekte et -> istemci yarıya bölmek ZORUNDA kalsın
+            if (Array.isArray(arr) && arr.length > 180) {
+              istatistik.buyukParca503++;
+              return new Response(JSON.stringify({ hata: 'Simüle 503 CPU limiti' }), {
+                status: 503,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
+            // Bölünmüş küçük parçanın ilk denemesine de geçici HTTP 503 at -> retry doğrulansın
+            if (!ilkKucuk503Atildi) {
+              ilkKucuk503Atildi = true;
+              istatistik.gecici503++;
+              return new Response('', { status: 503 });
+            }
+            istatistik.basariliParca.push(arr.length);
+          } catch (_) {}
+        }
+        return gercekFetch(url, opts);
+      };
+
+      try {
+        document.getElementById('btn-genel-kaydet-uygula').click();
+        const bas = Date.now();
+        while (Date.now() - bas < 15000) {
+          const d = document.getElementById('etiket-bulut-durumu').textContent || '';
+          if (d.includes('Bulut Senkron') && !d.includes('503') && !d.includes('hata')) break;
+          await new Promise((r) => setTimeout(r, 150));
+        }
+        await new Promise((r) => setTimeout(r, 400));
+        return {
+          istatistik,
+          bulutEtiket: (document.getElementById('etiket-bulut-durumu') || {}).textContent || '',
+          depoSoru: (JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}').sorular || []).length
+        };
+      } finally {
+        window.fetch = gercekFetch;
+      }
+    });
+    const sunucuSon503 = await httpHamIstek(port, 'GET', '/api/bulut-kasa', null, { Authorization: `Bearer ${v2Tok}` });
+    const sunucuSoruSayisi503 = (sunucuSon503.body && sunucuSon503.body.veri && Array.isArray(sunucuSon503.body.veri.sorular))
+      ? sunucuSon503.body.veri.sorular.length
+      : -1;
+    await sayfa503.close();
+    kontrol(
+      '[45] İstemci Parçalı Bulut Kasa: Kalıcı parça HTTP 503 yanıtında otomatik yarıya bölerek + geçici 503 retry ile sıfır soru kaybıyla Bulut Senkrona ulaşır',
+      kasa503Kurtarma.istatistik.buyukParca503 >= 3 &&
+        kasa503Kurtarma.istatistik.gecici503 === 1 &&
+        kasa503Kurtarma.istatistik.basariliParca.some((n) => n > 0 && n <= 180) &&
+        !kasa503Kurtarma.bulutEtiket.includes('503') &&
+        sunucuSoruSayisi503 >= 260,
+      JSON.stringify({ kasa503Kurtarma, sunucuSoruSayisi503 })
     );
 
     kontrol('Masaüstü oturumu boyunca sıfır sayfa JS hatası', sayfaHatalari.length === 0, sayfaHatalari.join(' | '));

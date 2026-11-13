@@ -1687,34 +1687,17 @@ function istekIsleyici(req, res) {
           if (Cekirdek.uretKasaParcaHash(acilmisJson) !== parcaHash) {
             return gonderJson(res, 400, { hata: 'Parça bütünlük karması (parcaHash) açılan veriyle uyuşmuyor.' });
           }
-          const dizi = Cekirdek.derinTemizleNesne(JSON.parse(acilmisJson), 0);
-          if (!Array.isArray(dizi)) {
-            return gonderJson(res, 400, { hata: 'Parça verisi bir soru dizisi olmalıdır.' });
-          }
-          let hassasAlanVardi = false;
-          for (let i = 0; i < dizi.length; i++) {
-            const s = dizi[i];
-            if (!s || typeof s !== 'object' || Array.isArray(s) || typeof s.id !== 'string' || typeof s.metin !== 'string' || !['dy', 'test', 'klasik'].includes(s.tur)) {
-              return gonderJson(res, 400, { hata: `Şema hatası: parça sorusu [${i}] geçersiz.` });
-            }
-            if (Object.prototype.hasOwnProperty.call(s, 'sifre')) {
-              delete s.sifre;
-              hassasAlanVardi = true;
-            }
-            if (Object.prototype.hasOwnProperty.call(s, 'sifreTekrar')) {
-              delete s.sifreTekrar;
-              hassasAlanVardi = true;
-            }
-          }
+          const dizi = JSON.parse(acilmisJson);
+          const { soruSayisi, hassasAlanVardi } = Cekirdek.dogrulaVeTemizleSoruParcasi(dizi);
           const saklanacakB64 = hassasAlanVardi ? paketleGzipB64Json(dizi) : veriSikistirilmis;
           sunucuDurumu.bulutKasaSoruParcalari.set(`${kullaniciAdi}::${parcaHash}`, {
             parcaHash,
-            soruSayisi: dizi.length,
+            soruSayisi,
             veriSikistirilmis: saklanacakB64,
             guncellemeMs: Date.now()
           });
           kaydetYerelDiskKasasi();
-          return gonderJson(res, 200, { basarili: true, parcaHash, soruSayisi: dizi.length });
+          return gonderJson(res, 200, { basarili: true, parcaHash, soruSayisi });
         } catch (err) {
           return gonderJson(res, 400, { hata: `Soru parçası açılamadı veya doğrulanamadı: ${err.message}` });
         }

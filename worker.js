@@ -121,8 +121,12 @@ function hesaplaKasaOzeti(veri) {
   };
 }
 
+const sistemDurumuOnbellek = new WeakMap();
+
 async function yukleSistemDurumuD1(env) {
   if (!env || !env.SINAV_DB) return;
+  const sonOkuma = sistemDurumuOnbellek.get(env.SINAV_DB);
+  if (sonOkuma && (Date.now() - sonOkuma) < 2500) return;
   try {
     const satirlar = await env.SINAV_DB.prepare('SELECT anahtar, deger_json FROM sistem_durumu').all();
     const liste = (satirlar && Array.isArray(satirlar.results)) ? satirlar.results : [];
@@ -164,11 +168,13 @@ async function yukleSistemDurumuD1(env) {
         sunucuDurumu.kurumsalSablonlar = v;
       }
     }
+    sistemDurumuOnbellek.set(env.SINAV_DB, Date.now());
   } catch (_) {}
 }
 
 async function kaydetSistemAnahtariD1(env, anahtar, deger) {
   if (!env || !env.SINAV_DB) return;
+  sistemDurumuOnbellek.delete(env.SINAV_DB);
   try {
     await env.SINAV_DB.prepare(
       `INSERT INTO sistem_durumu (anahtar, deger_json, guncelleme_ms)
@@ -236,6 +242,20 @@ function kontrolZeroTrustYuk(govde, baslangicMi = false) {
   return null;
 }
 
+async function okuHamJsonGovde(request, maksBayt = 524288) {
+  const ham = await request.text();
+  if (ham.length > maksBayt) {
+    throw new Error('İstek boyutu sınırı aşıldı');
+  }
+  const nesne = ham ? JSON.parse(ham) : {};
+  if (nesne && typeof nesne === 'object' && !Array.isArray(nesne)) {
+    delete nesne.__proto__;
+    delete nesne.constructor;
+    delete nesne.prototype;
+  }
+  return nesne;
+}
+
 async function okuJsonGovde(request, maksBayt = 524288) {
   const ham = await request.text();
   if (ham.length > maksBayt) {
@@ -265,7 +285,13 @@ function u8ToB64(u8) {
 }
 
 function b64ToU8(b64) {
-  const ikili = atob(String(b64 || '').trim());
+  const temiz = String(b64 || '').trim();
+  if (typeof Uint8Array.fromBase64 === 'function') {
+    try {
+      return Uint8Array.fromBase64(temiz);
+    } catch (_) {}
+  }
+  const ikili = atob(temiz);
   const u8 = new Uint8Array(ikili.length);
   for (let i = 0; i < ikili.length; i++) u8[i] = ikili.charCodeAt(i);
   return u8;
@@ -505,20 +531,32 @@ async function sorgulaSoruParcalariD1VeyaBellek(env, kullaniciAdi, parcaHashleri
   const mevcutHarita = new Map();
   if (benzersiz.length > 0) {
     if (env && env.SINAV_DB) {
-      await hazirlaV2D1Tablolar(env);
       const sutunlar = veriDahil ? 'parca_hash, soru_sayisi, veri_gzip_b64' : 'parca_hash, soru_sayisi';
-      for (let i = 0; i < benzersiz.length; i += 50) {
-        const grup = benzersiz.slice(i, i + 50);
-        const yerTutucular = grup.map((_, idx) => `?${idx + 2}`).join(', ');
-        const { results } = await env.SINAV_DB.prepare(
-          `SELECT ${sutunlar} FROM bulut_kasa_soru_parcalari WHERE kullanici_adi = ?1 AND parca_hash IN (${yerTutucular})`
-        ).bind(kullaniciAdi, ...grup).all();
-        for (const r of (results || [])) {
-          mevcutHarita.set(String(r.parca_hash), {
-            parcaHash: String(r.parca_hash),
-            soruSayisi: Number(r.soru_sayisi) || 0,
-            veriSikistirilmis: veriDahil ? String(r.veri_gzip_b64 || '') : ''
-          });
+      const sorguyuCalistir = async () => {
+        mevcutHarita.clear();
+        for (let i = 0; i < benzersiz.length; i += 50) {
+          const grup = benzersiz.slice(i, i + 50);
+          const yerTutucular = grup.map((_, idx) => `?${idx + 2}`).join(', ');
+          const { results } = await env.SINAV_DB.prepare(
+            `SELECT ${sutunlar} FROM bulut_kasa_soru_parcalari WHERE kullanici_adi = ?1 AND parca_hash IN (${yerTutucular})`
+          ).bind(kullaniciAdi, ...grup).all();
+          for (const r of (results || [])) {
+            mevcutHarita.set(String(r.parca_hash), {
+              parcaHash: String(r.parca_hash),
+              soruSayisi: Number(r.soru_sayisi) || 0,
+              veriSikistirilmis: veriDahil ? String(r.veri_gzip_b64 || '') : ''
+            });
+          }
+        }
+      };
+      try {
+        await sorguyuCalistir();
+      } catch (err) {
+        if (String(err && err.message || '').toLowerCase().includes('no such table')) {
+          await hazirlaV2D1Tablolar(env);
+          await sorguyuCalistir();
+        } else {
+          throw err;
         }
       }
     } else {
@@ -549,11 +587,20 @@ async function sorgulaSoruParcalariD1VeyaBellek(env, kullaniciAdi, parcaHashleri
 async function kaydetSoruParcasiD1VeyaBellek(env, kullaniciAdi, parcaHash, soruSayisi, veriSikistirilmis) {
   const simdi = Date.now();
   if (env && env.SINAV_DB) {
-    await hazirlaV2D1Tablolar(env);
-    await env.SINAV_DB.prepare(
+    const yazParca = () => env.SINAV_DB.prepare(
       `INSERT OR REPLACE INTO bulut_kasa_soru_parcalari (kullanici_adi, parca_hash, soru_sayisi, veri_gzip_b64, guncelleme_ms)
        VALUES (?1, ?2, ?3, ?4, ?5)`
     ).bind(kullaniciAdi, parcaHash, soruSayisi, veriSikistirilmis, simdi).run();
+    try {
+      await yazParca();
+    } catch (err) {
+      if (String(err && err.message || '').toLowerCase().includes('no such table')) {
+        await hazirlaV2D1Tablolar(env);
+        await yazParca();
+      } else {
+        throw err;
+      }
+    }
   } else {
     sunucuDurumu.bulutKasaSoruParcalari.set(`${kullaniciAdi}::${parcaHash}`, {
       parcaHash,
@@ -1062,7 +1109,7 @@ export default {
         if (env && env.SINAV_DB) {
           const sat = await env.SINAV_DB.prepare(
             `SELECT revizyon_no, guncelleme_ms, LENGTH(veri_json) AS veri_boyut,
-                    CASE WHEN LENGTH(veri_json) <= 250000 THEN veri_json ELSE '' END AS hafif_veri_json
+                    CASE WHEN LENGTH(veri_json) <= 450000 OR SUBSTR(veri_json, 1, 48) LIKE '%"parcali-v2"%' THEN veri_json ELSE '' END AS hafif_veri_json
              FROM bulut_kasalar WHERE kullanici_adi = ?1`
           ).bind(kullaniciAdi).first();
           if (sat) {
@@ -2048,7 +2095,15 @@ export default {
       let govde = null;
       if (metot === 'PUT' || metot === 'POST') {
         try {
-          govde = await okuJsonGovde(request, yol === '/api/bulut-kasa/parca' ? 2097152 : 16777216);
+          if (
+            yol === '/api/bulut-kasa/parca' ||
+            yol === '/api/bulut-kasa/parca-kontrol' ||
+            yol === '/api/bulut-kasa/parca-oku'
+          ) {
+            govde = await okuHamJsonGovde(request, yol === '/api/bulut-kasa/parca' ? 2097152 : 16777216);
+          } else {
+            govde = await okuJsonGovde(request, 16777216);
+          }
         } catch (err) {
           return gonderJson(400, { hata: err.message });
         }
@@ -2082,28 +2137,11 @@ export default {
           if (Cekirdek.uretKasaParcaHash(acilmisJson) !== parcaHash) {
             return gonderJson(400, { hata: 'Parça bütünlük karması (parcaHash) açılan veriyle uyuşmuyor.' });
           }
-          const dizi = Cekirdek.derinTemizleNesne(JSON.parse(acilmisJson), 0);
-          if (!Array.isArray(dizi)) {
-            return gonderJson(400, { hata: 'Parça verisi bir soru dizisi olmalıdır.' });
-          }
-          let hassasAlanVardi = false;
-          for (let i = 0; i < dizi.length; i++) {
-            const s = dizi[i];
-            if (!s || typeof s !== 'object' || Array.isArray(s) || typeof s.id !== 'string' || typeof s.metin !== 'string' || !['dy', 'test', 'klasik'].includes(s.tur)) {
-              return gonderJson(400, { hata: `Şema hatası: parça sorusu [${i}] geçersiz.` });
-            }
-            if (Object.prototype.hasOwnProperty.call(s, 'sifre')) {
-              delete s.sifre;
-              hassasAlanVardi = true;
-            }
-            if (Object.prototype.hasOwnProperty.call(s, 'sifreTekrar')) {
-              delete s.sifreTekrar;
-              hassasAlanVardi = true;
-            }
-          }
+          const dizi = JSON.parse(acilmisJson);
+          const { soruSayisi, hassasAlanVardi } = Cekirdek.dogrulaVeTemizleSoruParcasi(dizi);
           const saklanacakB64 = hassasAlanVardi ? await paketleGzipB64Json(dizi) : veriSikistirilmis;
-          await kaydetSoruParcasiD1VeyaBellek(env, kullaniciAdi, parcaHash, dizi.length, saklanacakB64);
-          return gonderJson(200, { basarili: true, parcaHash, soruSayisi: dizi.length });
+          await kaydetSoruParcasiD1VeyaBellek(env, kullaniciAdi, parcaHash, soruSayisi, saklanacakB64);
+          return gonderJson(200, { basarili: true, parcaHash, soruSayisi });
         } catch (err) {
           return gonderJson(400, { hata: `Soru parçası açılamadı veya doğrulanamadı: ${err.message}` });
         }
@@ -2185,7 +2223,7 @@ export default {
         if (env && env.SINAV_DB) {
           const sat = await env.SINAV_DB.prepare(
             `SELECT kullanici_adi, revizyon_no, ozet_bilgi, guncelleme_ms, LENGTH(veri_json) AS veri_boyut,
-                    CASE WHEN LENGTH(veri_json) <= 180000 THEN veri_json ELSE '' END AS hafif_veri_json
+                    CASE WHEN LENGTH(veri_json) <= 450000 OR SUBSTR(veri_json, 1, 48) LIKE '%"parcali-v2"%' THEN veri_json ELSE '' END AS hafif_veri_json
              FROM bulut_kasalar WHERE kullanici_adi = ?1`
           ).bind(kullaniciAdi).first();
           if (!sat) return null;
@@ -2479,9 +2517,11 @@ export default {
 
         if (istekKodlama === 'parcali-v2') {
           let metaNesne = null;
+          let metaTemizlendiMi = false;
           if (typeof (govde && govde.veriSikistirilmis) === 'string' && govde.veriSikistirilmis.trim()) {
             try {
               metaNesne = await cozGzipB64Json(govde.veriSikistirilmis);
+              metaTemizlendiMi = true;
             } catch (err) {
               return gonderJson(400, { hata: `parcali-v2 meta verisi açılamadı: ${err.message}` });
             }
@@ -2496,7 +2536,9 @@ export default {
             return gonderJson(400, { hata: 'soruParcaHashleri en fazla 1000 adet olabilir.' });
           }
           const soruParcaHashleri = hamHashler.map((h) => String(h || '').trim()).filter((h) => h && h.length <= 128);
-          const temizMeta = Cekirdek.temizleYedekHassasAlanlar(Cekirdek.derinTemizleNesne(metaNesne, 0));
+          const temizMeta = Cekirdek.temizleYedekHassasAlanlar(
+            metaTemizlendiMi ? metaNesne : Cekirdek.derinTemizleNesne(metaNesne, 0)
+          );
           temizMeta.sorular = [];
           const { eksikHashler, toplamSoruSayisi } = await sorgulaSoruParcalariD1VeyaBellek(env, kullaniciAdi, soruParcaHashleri, false);
           if (eksikHashler.length > 0) {

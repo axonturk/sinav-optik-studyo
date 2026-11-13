@@ -10349,6 +10349,54 @@
     return parcalar;
   }
 
+  function dogrulaVeTemizleSoruParcasi(dizi) {
+    if (!Array.isArray(dizi)) {
+      throw new Error('Parça verisi bir soru dizisi olmalıdır.');
+    }
+    if (dizi.length > 2000) {
+      throw new Error('Tek soru parçasında en fazla 2000 soru bulunabilir.');
+    }
+    const denetleYerinde = (deger, derinlik) => {
+      if (derinlik > 12) {
+        throw new Error('JSON derinlik sınırı (12) aşıldı.');
+      }
+      if (!deger || typeof deger !== 'object') return;
+      if (Array.isArray(deger)) {
+        for (let i = 0; i < deger.length; i++) {
+          denetleYerinde(deger[i], derinlik + 1);
+        }
+        return;
+      }
+      const anahtarlar = Object.keys(deger);
+      for (let i = 0; i < anahtarlar.length; i++) {
+        const k = anahtarlar[i];
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') {
+          delete deger[k];
+          continue;
+        }
+        denetleYerinde(deger[k], derinlik + 1);
+      }
+    };
+
+    let hassasAlanVardi = false;
+    for (let i = 0; i < dizi.length; i++) {
+      const s = dizi[i];
+      if (!s || typeof s !== 'object' || Array.isArray(s) || typeof s.id !== 'string' || typeof s.metin !== 'string' || !['dy', 'test', 'klasik'].includes(s.tur)) {
+        throw new Error(`Şema hatası: parça sorusu [${i}] geçersiz.`);
+      }
+      if (Object.prototype.hasOwnProperty.call(s, 'sifre')) {
+        delete s.sifre;
+        hassasAlanVardi = true;
+      }
+      if (Object.prototype.hasOwnProperty.call(s, 'sifreTekrar')) {
+        delete s.sifreTekrar;
+        hassasAlanVardi = true;
+      }
+      denetleYerinde(s, 1);
+    }
+    return { soruSayisi: dizi.length, hassasAlanVardi };
+  }
+
   function cozKasaOzetBilgisi(ozetBilgi, ozetJson = '') {
     if (typeof ozetJson === 'string' && ozetJson.trim()) {
       try {
@@ -10507,6 +10555,7 @@
     cozBirlesikSinavPaketi,
     uretKasaParcaHash,
     bolSoruBankasiParcalara,
+    dogrulaVeTemizleSoruParcasi,
     cozKasaOzetBilgisi,
     hesaplaKumulatifOcPcVePukoRaporu,
     uretOzelObsNotCsv,

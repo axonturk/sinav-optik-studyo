@@ -1086,6 +1086,27 @@
     }
   }
 
+  const GECICI_BULUT_HTTP_KODLARI = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+  async function fetchBulutTekrarli(url, secenekler = {}, maksDeneme = 4, beklemeDizi = [350, 800, 1600]) {
+    let sonHata = null;
+    for (let deneme = 0; deneme < maksDeneme; deneme++) {
+      try {
+        const yanit = await fetch(url, secenekler);
+        if (!GECICI_BULUT_HTTP_KODLARI.has(yanit.status) || deneme === maksDeneme - 1) {
+          return yanit;
+        }
+        await yanit.text().catch(() => '');
+      } catch (err) {
+        sonHata = err;
+        if (deneme === maksDeneme - 1) throw err;
+      }
+      const ms = beklemeDizi[Math.min(deneme, beklemeDizi.length - 1)] || 500;
+      await new Promise((r) => setTimeout(r, ms));
+    }
+    throw sonHata || new Error('Bulut sunucusuna geçici olarak ulaşılamadı');
+  }
+
   async function cozBulutYanitPaketi(veri, token) {
     if (!veri || typeof veri !== 'object') return null;
     if (veri.kodlama === 'parcali-v2') {
@@ -1107,14 +1128,14 @@
       if (eksik.length > 0 && token) {
         for (let i = 0; i < eksik.length; i += 10) {
           const grup = eksik.slice(i, i + 10);
-          const r = await fetch('/api/bulut-kasa/parca-oku', {
+          const r = await fetchBulutTekrarli('/api/bulut-kasa/parca-oku', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`
             },
             body: JSON.stringify({ parcaHashleri: grup })
-          });
+          }, 3, [300, 700]);
           const parcaYanit = await r.json().catch(() => null);
           if (!r.ok || !parcaYanit || !Array.isArray(parcaYanit.parcalar)) {
             throw new Error((parcaYanit && parcaYanit.hata) || `Soru parçası okunamadı (HTTP ${r.status})`);
@@ -1230,14 +1251,14 @@
 
         let yuklenecekHashler = [];
         if (kontrolEdilecek.length > 0) {
-          const ctrlYanit = await fetch('/api/bulut-kasa/parca-kontrol', {
+          const ctrlYanit = await fetchBulutTekrarli('/api/bulut-kasa/parca-kontrol', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`
             },
             body: JSON.stringify({ parcaHashleri: kontrolEdilecek })
-          });
+          }, 4, [350, 800, 1600]);
           const ctrlVeri = await ctrlYanit.json().catch(() => null);
           if (ctrlYanit.ok && ctrlVeri && Array.isArray(ctrlVeri.eksikHashler)) {
             const eksikSet = new Set(ctrlVeri.eksikHashler);
@@ -1252,42 +1273,89 @@
           }
         }
 
+        const altParcaHaritasi = new Map();
         if (parcaliKullan && yuklenecekHashler.length > 0) {
           const tekilYuklenecek = Array.from(new Set(yuklenecekHashler));
+          const yukleTekParcaSikiVeTekrarli = async (pObj) => {
+            const gzB64 = await sikistirGzipBase64(pObj.jsonMetin);
+            if (!gzB64) {
+              throw new Error('Tarayıcı parça gzip sıkıştırmasını tamamlayamadı');
+            }
+            const putParcaYanit = await fetchBulutTekrarli('/api/bulut-kasa/parca', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                parcaHash: pObj.parcaHash,
+                kodlama: 'gzip-b64',
+                veriSikistirilmis: gzB64
+              })
+            }, 3, [300, 700]);
+            const putParcaVeri = await putParcaYanit.json().catch(() => null);
+            if (!putParcaYanit.ok) {
+              const err = new Error((putParcaVeri && putParcaVeri.hata) || `Soru parçası yüklenemedi (HTTP ${putParcaYanit.status})`);
+              err.httpStatus = putParcaYanit.status;
+              throw err;
+            }
+            __sunucudaBilinenParcaHashleri.add(pObj.parcaHash);
+            return [pObj.parcaHash];
+          };
+
+          const yukleTekVeyaBolunmusParca = async (pObj) => {
+            try {
+              return await yukleTekParcaSikiVeTekrarli(pObj);
+            } catch (err) {
+              const bolunebilirStatus = !err.httpStatus || [413, 500, 502, 503, 504].includes(err.httpStatus);
+              if (!bolunebilirStatus || !Array.isArray(pObj.sorular) || pObj.sorular.length <= 1) {
+                throw err;
+              }
+              const orta = Math.ceil(pObj.sorular.length / 2);
+              const yarilar = [pObj.sorular.slice(0, orta), pObj.sorular.slice(orta)].filter((y) => y.length > 0);
+              const donenHashler = [];
+              for (const yari of yarilar) {
+                const altParcalar = C.bolSoruBankasiParcalara(yari, Math.max(1, yari.length), 130000);
+                for (const altP of altParcalar) {
+                  ekleYerelParcaOnbellege(altP.parcaHash, altP.sorular);
+                  if (__sunucudaBilinenParcaHashleri.has(altP.parcaHash)) {
+                    donenHashler.push(altP.parcaHash);
+                  } else {
+                    const resHashler = await yukleTekVeyaBolunmusParca(altP);
+                    donenHashler.push(...resHashler);
+                  }
+                }
+              }
+              return donenHashler;
+            }
+          };
+
           let siraIdx = 0;
+          let tamamlananSayac = 0;
+          const bulutEtiket = document.getElementById('etiket-bulut-durumu');
           const isci = async () => {
             while (siraIdx < tekilYuklenecek.length) {
               const hedefHash = tekilYuklenecek[siraIdx++];
               const pObj = parcaHarita.get(hedefHash);
               if (!pObj) continue;
-              const gzB64 = await sikistirGzipBase64(pObj.jsonMetin);
-              if (!gzB64) {
-                throw new Error('Tarayıcı parça gzip sıkıştırmasını tamamlayamadı');
+              const sonucHashler = await yukleTekVeyaBolunmusParca(pObj);
+              if (sonucHashler.length !== 1 || sonucHashler[0] !== pObj.parcaHash) {
+                altParcaHaritasi.set(pObj.parcaHash, sonucHashler);
               }
-              const putParcaYanit = await fetch('/api/bulut-kasa/parca', {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                  parcaHash: pObj.parcaHash,
-                  kodlama: 'gzip-b64',
-                  veriSikistirilmis: gzB64
-                })
-              });
-              const putParcaVeri = await putParcaYanit.json().catch(() => null);
-              if (!putParcaYanit.ok) {
-                throw new Error((putParcaVeri && putParcaVeri.hata) || `Soru parçası yüklenemedi (HTTP ${putParcaYanit.status})`);
+              tamamlananSayac++;
+              if (bulutEtiket && tekilYuklenecek.length >= 4) {
+                bulutEtiket.textContent = `☁️ Buluta aktarılıyor (${tamamlananSayac}/${tekilYuklenecek.length} parça)...`;
               }
-              __sunucudaBilinenParcaHashleri.add(pObj.parcaHash);
             }
           };
-          const eszamanSayisi = Math.min(3, tekilYuklenecek.length);
+          const eszamanSayisi = Math.min(2, tekilYuklenecek.length);
           await Promise.all(Array.from({ length: eszamanSayisi }, () => isci()));
         }
 
         if (parcaliKullan) {
+          const etkinSoruParcaHashleri = altParcaHaritasi.size > 0
+            ? soruParcaHashleri.flatMap((h) => altParcaHaritasi.get(h) || [h])
+            : soruParcaHashleri;
           const metaPaket = C.temizleYedekHassasAlanlar(Object.assign({}, tamPaket, {
             sorular: [],
             hocaHesap: tamPaket.hocaHesap ? Object.assign({}, tamPaket.hocaHesap) : undefined,
@@ -1296,20 +1364,20 @@
           const metaGzipB64 = await sikistirGzipBase64(JSON.stringify(metaPaket));
           const parcaliGovde = Object.assign({
             kodlama: 'parcali-v2',
-            soruParcaHashleri,
+            soruParcaHashleri: etkinSoruParcaHashleri,
             toplamSoruSayisi: sorularListe.length
           }, ortakMeta);
           if (metaGzipB64) parcaliGovde.veriSikistirilmis = metaGzipB64;
           else parcaliGovde.meta = metaPaket;
 
-          yanit = await fetch('/api/bulut-kasa', {
+          yanit = await fetchBulutTekrarli('/api/bulut-kasa', {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`
             },
             body: JSON.stringify(parcaliGovde)
-          });
+          }, 4, [350, 800, 1600]);
           veri = await yanit.json().catch(() => ({}));
         }
       }
