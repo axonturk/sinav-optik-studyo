@@ -974,6 +974,108 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
       JSON.stringify(frm059Kontroller)
     );
 
+    // 7.5B: Karşı-Örnek 5B — Seçmeli Yoklama Sayfa Kapasitesi (30 öğrenci -> varsayılan 20'de 2 sayfa vs '30'da tek A4; 52 öğrenci -> 'tek-sayfa'da tek A4)
+    await sayfa.evaluate(() => {
+      const depo = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+      depo.ogrenciler = Array.from({ length: 30 }, (_, i) => ({
+        ogrNo: String(20265001 + i),
+        adSoyad: `YOKLAMA ÖĞRENCİSİ ${i + 1}`,
+        dersIdler: ['ders-yon']
+      }));
+      depo.revizyonNo = (Number(depo.revizyonNo) || 0) + 50;
+      localStorage.setItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2', JSON.stringify(depo));
+      localStorage.setItem('SINAV_SON_REVIZYON_V1', String(depo.revizyonNo));
+    });
+    await sayfa.reload({ waitUntil: 'networkidle0' });
+    await bekle(250);
+    const yoklama30Sonuc = await sayfa.evaluate(() => {
+      const k = document.getElementById('btn-modal-hoca-kapat');
+      if (k && getComputedStyle(document.getElementById('modal-hoca-giris')).display !== 'none') k.click();
+      const tutKunye = document.getElementById('tut-kunye-modu');
+      if (tutKunye) {
+        tutKunye.value = 'kunyeli';
+        tutKunye.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const kapsamEl = document.getElementById('baski-kapsam-sec');
+      if (kapsamEl) {
+        kapsamEl.value = 'yoklama';
+        kapsamEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const sahne = document.getElementById('a4-onizleme-sahne');
+      const varsayilanSayfa = sahne.querySelectorAll('.a4-sayfa').length;
+
+      const tutMod = document.getElementById('tut-yoklama-sayfa-modu');
+      tutMod.value = '30';
+      tutMod.dispatchEvent(new Event('change', { bubbles: true }));
+      const ogrModDeger = document.getElementById('ogr-yoklama-sayfa-modu').value;
+      const sayfalar30 = Array.from(sahne.querySelectorAll('.a4-sayfa'));
+      const tasma30 = sayfalar30.some((sf) => sf.scrollHeight > sf.clientHeight + 2);
+      const metin30 = sahne.textContent || '';
+      return {
+        varsayilanSayfa,
+        ogrModDeger,
+        sayfa30: sayfalar30.length,
+        tasma30,
+        sonOgrVar: metin30.includes('20265030')
+      };
+    });
+
+    await sayfa.evaluate(() => {
+      const depo = JSON.parse(localStorage.getItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2') || '{}');
+      depo.ogrenciler = Array.from({ length: 52 }, (_, i) => ({
+        ogrNo: String(20265001 + i),
+        adSoyad: `YOKLAMA ÖĞRENCİSİ ${i + 1}`,
+        dersIdler: ['ders-yon']
+      }));
+      depo.revizyonNo = (Number(depo.revizyonNo) || 0) + 50;
+      localStorage.setItem('SINAV_OPTIK_STUDYO_VERI_TEMIZ_V2', JSON.stringify(depo));
+      localStorage.setItem('SINAV_SON_REVIZYON_V1', String(depo.revizyonNo));
+    });
+    await sayfa.reload({ waitUntil: 'networkidle0' });
+    await bekle(250);
+    const yoklama52Sonuc = await sayfa.evaluate(() => {
+      const k = document.getElementById('btn-modal-hoca-kapat');
+      if (k && getComputedStyle(document.getElementById('modal-hoca-giris')).display !== 'none') k.click();
+      const tutKunye = document.getElementById('tut-kunye-modu');
+      if (tutKunye) {
+        tutKunye.value = 'kunyeli';
+        tutKunye.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const kapsamEl = document.getElementById('baski-kapsam-sec');
+      if (kapsamEl) {
+        kapsamEl.value = 'yoklama';
+        kapsamEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      const ogrMod = document.getElementById('ogr-yoklama-sayfa-modu');
+      ogrMod.value = 'tek-sayfa';
+      ogrMod.dispatchEvent(new Event('change', { bubbles: true }));
+      const sahne = document.getElementById('a4-onizleme-sahne');
+      const sayfalar = Array.from(sahne.querySelectorAll('.a4-sayfa'));
+      const tasma = sayfalar.some((sf) => sf.scrollHeight > sf.clientHeight + 2);
+      const metin = sahne.textContent || '';
+      return {
+        tutModDeger: document.getElementById('tut-yoklama-sayfa-modu').value,
+        sayfa52: sayfalar.length,
+        tasma,
+        ilkOgrVar: metin.includes('20265001'),
+        sonOgrVar: metin.includes('20265052')
+      };
+    });
+    kontrol(
+      'Karşı-Örnek 5B (Seçmeli Yoklama Kapasitesi): Varsayılan 20 modunda 30 öğrenci 2 sayfaya bölünürken "30" ve 52 öğrencide "tek-sayfa" modu künyeli evrakta bile tek A4 sayfaya taşmadan sığar',
+      yoklama30Sonuc.varsayilanSayfa === 2 &&
+        yoklama30Sonuc.ogrModDeger === '30' &&
+        yoklama30Sonuc.sayfa30 === 1 &&
+        !yoklama30Sonuc.tasma30 &&
+        yoklama30Sonuc.sonOgrVar &&
+        yoklama52Sonuc.tutModDeger === 'tek-sayfa' &&
+        yoklama52Sonuc.sayfa52 === 1 &&
+        !yoklama52Sonuc.tasma &&
+        yoklama52Sonuc.ilkOgrVar &&
+        yoklama52Sonuc.sonOgrVar,
+      JSON.stringify({ yoklama30Sonuc, yoklama52Sonuc })
+    );
+
     // 7.6 & 7.7: Mobil OMR 2 Sekme Yarışı (5304 + 5317) VE ?0 x4 + 80 Aynı Cevaplı İki Farklı Kağıt Karşı-Örneği
     const mobilCokluSetup = Cekirdek.uretKompaktSetupQrPaketi({
       sinavKodu: 'MOBIL-COKLU-2026',

@@ -956,6 +956,18 @@
               <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.4rem;">
                 <span class="rozet rozet-mor" id="etiket-salon-ozet">—</span>
                 <button type="button" class="btn btn-kucuk" id="btn-salon-duzenle">Salon &amp; kontenjanları düzenle</button>
+                <div style="display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap; margin-left:auto; max-width:100%;">
+                  <label class="etiket" for="tut-yoklama-sayfa-modu" style="margin:0; white-space:nowrap;">Yoklama Sayfa Kapasitesi:</label>
+                  <select id="tut-yoklama-sayfa-modu" style="width:auto; max-width:100%; font-size:0.78rem; padding:0.24rem 0.45rem;">
+                    <option value="20" selected>Sayfa Başı 20 Öğrenci (Varsayılan · Geniş İmza)</option>
+                    <option value="25">Sayfa Başı 25 Öğrenci (Standart)</option>
+                    <option value="30">Sayfa Başı 30 Öğrenci (Kompakt)</option>
+                    <option value="35">Sayfa Başı 35 Öğrenci (Sıkı)</option>
+                    <option value="40">Sayfa Başı 40 Öğrenci (Yoğun)</option>
+                    <option value="60-cift">Sayfa Başı 60 Öğrenci (Çift Sütun · Amfi)</option>
+                    <option value="tek-sayfa">Tek A4 Sayfaya Sığdır (Otomatik)</option>
+                  </select>
+                </div>
               </div>
               <details>
                 <summary style="cursor:pointer; font-size:0.8rem; font-weight:700;">Gözetmenler &amp; Sınav Durumu Seçenekleri</summary>
@@ -1972,7 +1984,16 @@
         <div class="kart">
           <div class="kart-baslik">
             <span>‍Kayıtlı Sınıf Listesi</span>
-            <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <div style="display:flex; gap:0.4rem; flex-wrap:wrap; align-items:center; max-width:100%;">
+              <select id="ogr-yoklama-sayfa-modu" aria-label="Yoklama sayfa öğrenci kapasitesi" title="Yoklama evrakında bir A4 sayfasına kaç öğrenci sığdırılacağını seçin" style="width:auto; max-width:100%; font-size:0.76rem; padding:0.24rem 0.45rem;">
+                <option value="20" selected>Yoklama: 20 Öğr./Sayfa (Geniş)</option>
+                <option value="25">Yoklama: 25 Öğr./Sayfa</option>
+                <option value="30">Yoklama: 30 Öğr./Sayfa</option>
+                <option value="35">Yoklama: 35 Öğr./Sayfa</option>
+                <option value="40">Yoklama: 40 Öğr./Sayfa</option>
+                <option value="60-cift">Yoklama: 60 Öğr./Sayfa (Çift Sütun)</option>
+                <option value="tek-sayfa">Yoklama: Tek A4'e Sığdır (Oto)</option>
+              </select>
               <button type="button" class="btn btn-birincil btn-kucuk" id="btn-yoklama-cizelgesi-pdf" title="Sınav Yoklama Evrakını (İmza Çizelgesi) A4 PDF olarak indir">Yoklama PDF İndir</button>
               <button type="button" class="btn btn-kucuk" id="btn-yoklama-cizelgesi-yazdir" title="Sınav Yoklama Evrakını (İmza Çizelgesi) A4 olarak yazdır">İmzalı Yoklama Çizelgesi Yazdır</button>
             </div>

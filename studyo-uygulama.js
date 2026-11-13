@@ -74,7 +74,8 @@
       kaliteRevizyon: '',
       gozetmen1: '',
       gozetmen2: '',
-      uygunluk: 'bos'
+      uygunluk: 'bos',
+      yoklamaSayfaModu: '20'
     },
     pcQrEslesmeKodu: '',
     pcQrKameraStream: null,
@@ -3568,6 +3569,14 @@
         html: (() => {
           const yer = aktifDersSalonYerlesimi();
           const kayitlar = yer.yerlesim.length > 0 ? yer.yerlesim : [{ salon: { ad: tb.salon, gozetmenler: [] }, ogrenciler: [] }];
+          const yoklamaKayitlar = yoklamaSalonKayitlariniHazirla(tb, yer);
+          if (kapsam === 'yoklama') {
+            return yoklamaKayitlar.map((k) => uretSinavYoklamaEvrakiHTML(tb, k)).join('');
+          }
+          if (kapsam === 'tutanak-yoklama' && yoklamaKayitlar.length !== kayitlar.length) {
+            return kayitlar.map((k) => uretSinavDurumTutanagiHTML(tb, { ...k.salon, ogrenciSayisi: k.ogrenciler.length })).join('')
+              + yoklamaKayitlar.map((k) => uretSinavYoklamaEvrakiHTML(tb, k)).join('');
+          }
           return kayitlar
             .map((k) => (kapsam !== 'yoklama' ? uretSinavDurumTutanagiHTML(tb, { ...k.salon, ogrenciSayisi: k.ogrenciler.length }) : '')
               + (kapsam !== 'tutanak' ? uretSinavYoklamaEvrakiHTML(tb, k) : ''))
@@ -6884,6 +6893,9 @@
     if (sb.gozetmen1 !== undefined) ayarla('tut-gozetmen1', sb.gozetmen1);
     if (sb.gozetmen2 !== undefined) ayarla('tut-gozetmen2', sb.gozetmen2);
     if (sb.uygunluk) ayarla('tut-uygunluk', sb.uygunluk);
+    const yoklamaModu = normallestirYoklamaSayfaModu(sb.yoklamaSayfaModu);
+    ayarla('tut-yoklama-sayfa-modu', yoklamaModu);
+    ayarla('ogr-yoklama-sayfa-modu', yoklamaModu);
 
     const kurumDegeri = cozulmus.fakulte || sb.kurum || '';
     if (kurumDegeri) {
@@ -6983,7 +6995,8 @@
       kaliteRevizyon: kaynak === 'kagit-hizli' ? al('kagit-hizli-revizyon', '') : al('kalite-revizyon', ''),
       gozetmen1: al('tut-gozetmen1', ''),
       gozetmen2: al('tut-gozetmen2', ''),
-      uygunluk: al('tut-uygunluk', 'bos')
+      uygunluk: al('tut-uygunluk', 'bos'),
+      yoklamaSayfaModu: normallestirYoklamaSayfaModu(al('tut-yoklama-sayfa-modu', sb.yoklamaSayfaModu || '20'))
     };
 
     const aktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || durum.dersler[0] || null;
@@ -7046,36 +7059,62 @@
       dokumanNoYoklama: al('tut-dokuman-no-yoklama', sb.dokumanNoYoklama || 'FRM-059'),
       yayinTarihi: al('tut-yayin-tarihi', sb.yayinTarihi || '30.01.2023'),
       revTarihi: al('tut-rev-tarihi', sb.revTarihi || '-'),
-      revizyon: al('tut-rev-no', sb.revizyon || '-')
+      revizyon: al('tut-rev-no', sb.revizyon || '-'),
+      yoklamaSayfaModu: normallestirYoklamaSayfaModu(al('tut-yoklama-sayfa-modu', sb.yoklamaSayfaModu || '20'))
     };
   }
 
-  function tutanakKunyeTablosuHTML(b, baslik, dokumanNo, sayfaMetni) {
+  const GECERLI_YOKLAMA_SAYFA_MODLARI = ['20', '25', '30', '35', '40', '60-cift', 'tek-sayfa'];
+  function normallestirYoklamaSayfaModu(deger) {
+    const s = String(deger || '').trim();
+    return GECERLI_YOKLAMA_SAYFA_MODLARI.includes(s) ? s : '20';
+  }
+
+  function yoklamaSalonKayitlariniHazirla(tb, yer) {
+    const mod = normallestirYoklamaSayfaModu(tb && tb.yoklamaSayfaModu);
+    if (
+      (mod === '60-cift' || mod === 'tek-sayfa') &&
+      Array.isArray(durum.salonlar) &&
+      durum.salonlar.length === 1 &&
+      Number(durum.salonlar[0] && durum.salonlar[0].kontenjan) === 40
+    ) {
+      const tumOgrenciler = aktifDersOgrencileriniGetir();
+      return [{ salon: durum.salonlar[0], ogrenciler: tumOgrenciler }];
+    }
+    return yer && Array.isArray(yer.yerlesim) && yer.yerlesim.length > 0
+      ? yer.yerlesim
+      : [{ salon: { ad: (tb && tb.salon) || 'Salon 1', gozetmenler: [] }, ogrenciler: [] }];
+  }
+
+  function tutanakKunyeTablosuHTML(b, baslik, dokumanNo, sayfaMetni, kompaktMi = false) {
     const logo = durum.kaliteGorselDataUrl
-      ? `<img src="${C.guvenliURL(durum.kaliteGorselDataUrl)}" alt="Kurum Logosu" style="max-width:26mm; max-height:20mm; object-fit:contain;" />`
-      : '<div style="font-size:20pt;">🏛️</div>';
-    const hucre = 'border:1px solid #000; padding:3px 6px; font-size:8.5pt;';
+      ? `<img src="${C.guvenliURL(durum.kaliteGorselDataUrl)}" alt="Kurum Logosu" style="max-width:${kompaktMi ? '22mm' : '26mm'}; max-height:${kompaktMi ? '14mm' : '20mm'}; object-fit:contain;" />`
+      : `<div style="font-size:${kompaktMi ? '15pt' : '20pt'};">🏛️</div>`;
+    const hucre = kompaktMi
+      ? 'border:1px solid #000; padding:1.5px 5px; font-size:7.6pt; line-height:1.1;'
+      : 'border:1px solid #000; padding:3px 6px; font-size:8.5pt;';
+    const tabloAltBosluk = kompaktMi ? '4px' : '8px';
     // Seçmeli Belge No / Kalite Künyesi: Varsayılan ('sade') modda Doküman No / FRM-059 / Yayın Tarihi kutusu basılmaz!
     if (b.kunyeModu !== 'kunyeli') {
       const ustOkul = (b.fakulte || '').trim();
       return `
-        <table style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+        <table style="width:100%; border-collapse:collapse; margin-bottom:${tabloAltBosluk};">
           <tr>
-            <td style="${hucre} width:26mm; text-align:center;">${logo}</td>
-            <td style="${hucre} text-align:center; padding:6px 8px;">
-              ${ustOkul ? `<div style="font-size:10.5pt; font-weight:800; margin-bottom:2px;">${C.kacisHTML(ustOkul.toLocaleUpperCase('tr-TR'))}</div>` : ''}
-              <div style="font-size:13.5pt; font-weight:800;">${C.kacisHTML(baslik)}</div>
+            <td style="${hucre} width:${kompaktMi ? '22mm' : '26mm'}; text-align:center;">${logo}</td>
+            <td style="${hucre} text-align:center; padding:${kompaktMi ? '3px 6px' : '6px 8px'};">
+              ${ustOkul ? `<div style="font-size:${kompaktMi ? '9.5pt' : '10.5pt'}; font-weight:800; margin-bottom:${kompaktMi ? '1px' : '2px'};">${C.kacisHTML(ustOkul.toLocaleUpperCase('tr-TR'))}</div>` : ''}
+              <div style="font-size:${kompaktMi ? '11.5pt' : '13.5pt'}; font-weight:800;">${C.kacisHTML(baslik)}</div>
             </td>
-            <td style="${hucre} width:28mm; text-align:center; font-size:8pt; font-weight:700;">${C.kacisHTML(sayfaMetni)}</td>
+            <td style="${hucre} width:${kompaktMi ? '24mm' : '28mm'}; text-align:center; font-size:${kompaktMi ? '7.5pt' : '8pt'}; font-weight:700;">${C.kacisHTML(sayfaMetni)}</td>
           </tr>
         </table>
       `;
     }
     return `
-      <table style="width:100%; border-collapse:collapse; margin-bottom:8px;">
+      <table style="width:100%; border-collapse:collapse; margin-bottom:${tabloAltBosluk};">
         <tr>
-          <td rowspan="5" style="${hucre} width:30mm; text-align:center;">${logo}</td>
-          <td rowspan="5" style="${hucre} text-align:center; font-size:14pt; font-weight:800;">${C.kacisHTML(baslik)}</td>
+          <td rowspan="5" style="${hucre} width:${kompaktMi ? '25mm' : '30mm'}; text-align:center;">${logo}</td>
+          <td rowspan="5" style="${hucre} text-align:center; font-size:${kompaktMi ? '11.5pt' : '14pt'}; font-weight:800;">${C.kacisHTML(baslik)}</td>
           <td style="${hucre} width:34mm;"><strong>Doküman No.</strong></td>
           <td style="${hucre} width:30mm;">${C.kacisHTML(dokumanNo)}</td>
         </tr>
@@ -7150,9 +7189,82 @@
     const salonAd = kayit ? kayit.salon.ad : b.salon;
     const gozetmenler = kayit && (kayit.salon.gozetmenler || []).some(Boolean) ? kayit.salon.gozetmenler : b.gozetmenler;
     const kaynakOgrenciler = kayit ? kayit.ogrenciler : durum.ogrenciler;
-    const hucre = 'border:1px solid #000; padding:2px 5px; font-size:8.2pt; line-height:1.15;';
     const liste = kaynakOgrenciler.slice().sort((x, y) => String(x.ogrNo).localeCompare(String(y.ogrNo), 'tr', { numeric: true }));
-    const sayfaBasina = 20;
+    const mod = normallestirYoklamaSayfaModu(b && b.yoklamaSayfaModu);
+
+    const cozumleYoklamaDuzeni = () => {
+      const tekSutunAyarlar = {
+        '20': { sayfaBasina: 20, satirYuk: 28, sayfaPad: '7mm 10mm', fontPt: '8.2pt', hucrePad: '2px 5px', lineHeight: '1.15', bilgiFontPt: '8.2pt', bilgiPad: '2px 5px', baslikFontPt: '9pt', baslikMb: '4px', gozetmenYuk: 25, yedek: 2, kompaktMi: false, ciftSutun: false },
+        '25': { sayfaBasina: 25, satirYuk: 24, sayfaPad: '5.5mm 9mm', fontPt: '7.9pt', hucrePad: '1px 4px', lineHeight: '1.1', bilgiFontPt: '7.6pt', bilgiPad: '1.5px 4px', baslikFontPt: '8.4pt', baslikMb: '3px', gozetmenYuk: 22, yedek: 2, kompaktMi: true, ciftSutun: false },
+        '30': { sayfaBasina: 30, satirYuk: 21, sayfaPad: '5mm 9mm', fontPt: '7.6pt', hucrePad: '1px 4px', lineHeight: '1.08', bilgiFontPt: '7.5pt', bilgiPad: '1.5px 4px', baslikFontPt: '8.3pt', baslikMb: '3px', gozetmenYuk: 21, yedek: 2, kompaktMi: true, ciftSutun: false },
+        '35': { sayfaBasina: 35, satirYuk: 18.5, sayfaPad: '4.5mm 8.5mm', fontPt: '7.3pt', hucrePad: '0.5px 4px', lineHeight: '1.05', bilgiFontPt: '7.3pt', bilgiPad: '1px 4px', baslikFontPt: '8.1pt', baslikMb: '2px', gozetmenYuk: 20, yedek: 1, kompaktMi: true, ciftSutun: false },
+        '40': { sayfaBasina: 40, satirYuk: 16.5, sayfaPad: '4.2mm 8mm', fontPt: '7.0pt', hucrePad: '0.5px 3.5px', lineHeight: '1.04', bilgiFontPt: '7.2pt', bilgiPad: '1px 3.5px', baslikFontPt: '8.0pt', baslikMb: '2px', gozetmenYuk: 19, yedek: 1, kompaktMi: true, ciftSutun: false }
+      };
+      if (mod === 'tek-sayfa') {
+        if (liste.length <= 20) return tekSutunAyarlar['20'];
+        if (liste.length <= 25) return tekSutunAyarlar['25'];
+        if (liste.length <= 30) return tekSutunAyarlar['30'];
+        if (liste.length <= 35) return tekSutunAyarlar['35'];
+        if (liste.length <= 40) return tekSutunAyarlar['40'];
+        const sutunBasina = Math.max(21, Math.ceil(liste.length / 2) + 1);
+        let satirYuk = 16.2;
+        let fontPt = '6.8pt';
+        let hucrePad = '0.5px 2.5px';
+        if (sutunBasina <= 25) { satirYuk = 23; fontPt = '7.2pt'; hucrePad = '1px 3px'; }
+        else if (sutunBasina <= 30) { satirYuk = 20; fontPt = '7.0pt'; hucrePad = '0.8px 3px'; }
+        else if (sutunBasina <= 35) { satirYuk = 18; fontPt = '6.9pt'; hucrePad = '0.5px 2.5px'; }
+        else if (sutunBasina > 40) {
+          satirYuk = Math.max(12, Math.floor(810 / sutunBasina));
+          fontPt = '6.2pt';
+          hucrePad = '0 2px';
+        }
+        return {
+          sayfaBasina: Math.max(80, liste.length),
+          sutunKapasite: Math.max(40, sutunBasina),
+          satirYuk,
+          sayfaPad: '4.2mm 7.5mm',
+          fontPt,
+          hucrePad,
+          lineHeight: '1.03',
+          bilgiFontPt: '7.1pt',
+          bilgiPad: '1px 3.5px',
+          baslikFontPt: '8.0pt',
+          baslikMb: '2px',
+          gozetmenYuk: 19,
+          yedek: 1,
+          kompaktMi: true,
+          ciftSutun: true
+        };
+      }
+      if (mod === '60-cift') {
+        return {
+          sayfaBasina: 60,
+          sutunKapasite: 30,
+          satirYuk: 20,
+          sayfaPad: '4.5mm 7.5mm',
+          fontPt: '7.1pt',
+          hucrePad: '0.8px 3px',
+          lineHeight: '1.05',
+          bilgiFontPt: '7.3pt',
+          bilgiPad: '1px 4px',
+          baslikFontPt: '8.1pt',
+          baslikMb: '2px',
+          gozetmenYuk: 20,
+          yedek: 1,
+          kompaktMi: true,
+          ciftSutun: true
+        };
+      }
+      return tekSutunAyarlar[mod] || tekSutunAyarlar['20'];
+    };
+
+    const d = cozumleYoklamaDuzeni();
+    const hucre = `border:1px solid #000; padding:${d.hucrePad}; font-size:${d.fontPt}; line-height:${d.lineHeight};`;
+    const tekSatirHucre = d.kompaktMi
+      ? `${hucre} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;`
+      : hucre;
+    const bilgiHucre = `border:1px solid #000; padding:${d.bilgiPad}; font-size:${d.bilgiFontPt}; line-height:1.1;`;
+    const sayfaBasina = d.sayfaBasina;
     const sayfaAdedi = Math.max(1, Math.ceil(liste.length / sayfaBasina));
     const sayfalar = [];
     const ustBaslikMetni = (b.fakulte || '').trim()
@@ -7161,42 +7273,84 @@
     const bolumMetni = b.bolum !== undefined ? b.bolum : (b.ders.bolum || '');
     const sorumluMetni = b.sorumlu || b.ders.ogretimElemani || '';
 
-    for (let s = 0; s < sayfaAdedi; s++) {
-      const dilim = liste.slice(s * sayfaBasina, (s + 1) * sayfaBasina);
-      const satirSayisi = Math.max(10, Math.min(20, dilim.length + 2));
-      const satirYukseklikPx = 28;
-      let satirlar = '';
+    const tabloSatirlariUret = (dilim, baslangicNo, satirSayisi, darSutunMu) => {
+      const noGen = darSutunMu ? '7mm' : '10mm';
+      const numGen = darSutunMu ? '20mm' : '30mm';
+      const kitGen = darSutunMu ? '11.5mm' : '22mm';
+      const imzGen = darSutunMu ? '22mm' : '46mm';
+      const numFont = darSutunMu ? '6.4pt' : d.fontPt;
+      let govde = '';
       for (let i = 0; i < satirSayisi; i++) {
         const ogr = dilim[i];
-        const noStr = `${s * sayfaBasina + i + 1}.`;
-        satirlar += `<tr class="yoklama-imza-satir" style="height:${satirYukseklikPx}px; min-height:${satirYukseklikPx}px;">
-          <td style="${hucre} height:${satirYukseklikPx}px; width:10mm; text-align:center;">${noStr}</td>
-          <td style="${hucre} height:${satirYukseklikPx}px; width:30mm; font-family:Consolas,monospace;">${ogr ? C.kacisHTML(ogr.ogrNo) : ''}</td>
-          <td style="${hucre} height:${satirYukseklikPx}px;">${ogr ? C.kacisHTML(ogr.adSoyad) : ''}</td>
-          <td style="${hucre} height:${satirYukseklikPx}px; width:22mm; text-align:center;"></td>
-          <td style="${hucre} height:${satirYukseklikPx}px; width:46mm;"></td>
+        const noStr = `${baslangicNo + i}.`;
+        govde += `<tr class="yoklama-imza-satir" style="height:${d.satirYuk}px; min-height:${d.satirYuk}px;">
+          <td style="${tekSatirHucre} height:${d.satirYuk}px; width:${noGen}; text-align:center;">${noStr}</td>
+          <td style="${tekSatirHucre} height:${d.satirYuk}px; width:${numGen}; font-size:${numFont}; font-family:Consolas,monospace;">${ogr ? C.kacisHTML(ogr.ogrNo) : ''}</td>
+          <td style="${tekSatirHucre} height:${d.satirYuk}px;">${ogr ? C.kacisHTML(ogr.adSoyad) : ''}</td>
+          <td style="${tekSatirHucre} height:${d.satirYuk}px; width:${kitGen}; text-align:center;"></td>
+          <td style="${tekSatirHucre} height:${d.satirYuk}px; width:${imzGen};"></td>
         </tr>`;
       }
-      const bilgi = (e, d) => `<td style="${hucre} width:34mm;"><strong>${e}</strong></td><td style="${hucre}">${C.kacisHTML(d)}</td>`;
+      const baslikYazi = darSutunMu ? 'KİTAP.' : 'KİTAPÇIK';
+      return `
+        <table class="yoklama-imza-tablo" style="width:100%; border-collapse:collapse; ${d.kompaktMi ? 'table-layout:fixed;' : ''} margin-bottom:${darSutunMu ? '0' : '4px'};">
+          <thead><tr style="background:#e5e7eb; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+            <th style="${tekSatirHucre} width:${noGen}; text-align:center;">NO</th>
+            <th style="${tekSatirHucre} width:${numGen};">NUMARA</th>
+            <th style="${tekSatirHucre}">ADI SOYADI</th>
+            <th style="${tekSatirHucre} width:${kitGen}; text-align:center;">${baslikYazi}</th>
+            <th style="${tekSatirHucre} width:${imzGen};">İMZA</th>
+          </tr></thead>
+          <tbody>${govde}</tbody>
+        </table>
+      `;
+    };
+
+    for (let s = 0; s < sayfaAdedi; s++) {
+      const dilim = liste.slice(s * sayfaBasina, (s + 1) * sayfaBasina);
+      const baslangicNo = s * sayfaBasina + 1;
+      let tabloHTML = '';
+      if (d.ciftSutun) {
+        const sutunSatirSayisi = Math.max(15, Math.min(d.sutunKapasite || 30, Math.ceil(dilim.length / 2) + d.yedek));
+        const solDilim = dilim.slice(0, sutunSatirSayisi);
+        const sagDilim = dilim.slice(sutunSatirSayisi, sutunSatirSayisi * 2);
+        tabloHTML = `
+          <table style="width:100%; border-collapse:collapse; margin-bottom:4px; table-layout:fixed;">
+            <tr>
+              <td style="width:49.2%; vertical-align:top; padding:0;">${tabloSatirlariUret(solDilim, baslangicNo, sutunSatirSayisi, true)}</td>
+              <td style="width:1.6%; padding:0;"></td>
+              <td style="width:49.2%; vertical-align:top; padding:0;">${tabloSatirlariUret(sagDilim, baslangicNo + sutunSatirSayisi, sutunSatirSayisi, true)}</td>
+            </tr>
+          </table>
+        `;
+      } else {
+        const minBos = Math.min(10, sayfaBasina);
+        const satirSayisi = Math.max(minBos, Math.min(sayfaBasina, dilim.length + d.yedek));
+        tabloHTML = tabloSatirlariUret(dilim, baslangicNo, satirSayisi, false);
+      }
+
+      const bilgiTabloStil = d.kompaktMi
+        ? 'width:100%; border-collapse:collapse; margin-bottom:3px; table-layout:fixed;'
+        : 'width:100%; border-collapse:collapse; margin-bottom:4px;';
+      const bilgiMetinHucre = d.kompaktMi
+        ? `${bilgiHucre} white-space:nowrap; overflow:hidden; text-overflow:ellipsis;`
+        : bilgiHucre;
+      const bilgi = (e, deger) => `<td style="${bilgiHucre} width:32mm;"><strong>${e}</strong></td><td style="${bilgiMetinHucre}">${C.kacisHTML(deger)}</td>`;
+
       sayfalar.push(`
-        <div class="a4-sayfa" style="padding:7mm 10mm;">
+        <div class="a4-sayfa" style="padding:${d.sayfaPad};">
           <div class="a4-sayfa-etiket" style="margin-bottom:2px;">SINAV YOKLAMA EVRAKI — ${C.kacisHTML(b.ders.kod)} (${s + 1}/${sayfaAdedi})</div>
-          ${tutanakKunyeTablosuHTML(b, 'SINAV YOKLAMA EVRAKI', b.dokumanNoYoklama, `Sayfa ${s + 1} / ${sayfaAdedi}`)}
-          ${b.kunyeModu === 'kunyeli' ? `<div style="text-align:center; font-weight:700; font-size:9pt; margin-bottom:1px;">${C.kacisHTML(ustBaslikMetni)}</div>` : ''}
-          <div style="text-align:center; font-weight:700; font-size:9pt; margin-bottom:4px;">${C.kacisHTML(b.donem || '20…… - 20……')} EĞİTİM ÖĞRETİM YILI SINAV YOKLAMA EVRAKI</div>
-          <table style="width:100%; border-collapse:collapse; margin-bottom:4px;">
+          ${tutanakKunyeTablosuHTML(b, 'SINAV YOKLAMA EVRAKI', b.dokumanNoYoklama, `Sayfa ${s + 1} / ${sayfaAdedi}`, d.kompaktMi)}
+          ${b.kunyeModu === 'kunyeli' ? `<div style="text-align:center; font-weight:700; font-size:${d.baslikFontPt}; margin-bottom:1px;">${C.kacisHTML(ustBaslikMetni)}</div>` : ''}
+          <div style="text-align:center; font-weight:700; font-size:${d.baslikFontPt}; margin-bottom:${d.baslikMb};">${C.kacisHTML(b.donem || '20…… - 20……')} EĞİTİM ÖĞRETİM YILI SINAV YOKLAMA EVRAKI</div>
+          <table style="${bilgiTabloStil}">
             <tr>${bilgi('DERS ADI', `${b.ders.kod} — ${b.ders.ad}`)}${bilgi('BÖLÜMÜ', bolumMetni)}</tr>
             <tr>${bilgi('DERSİN SORUMLUSU', sorumluMetni)}${bilgi('SALON NO', salonAd)}</tr>
             <tr>${bilgi('SINAV TARİHİ VE SAATİ', b.tarihSaat)}${bilgi('SINAV TÜRÜ', b.sinavTuru)}</tr>
           </table>
-          <table class="yoklama-imza-tablo" style="width:100%; border-collapse:collapse; margin-bottom:5px;">
-            <thead><tr style="background:#e5e7eb; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
-              <th style="${hucre} width:10mm;">NO</th><th style="${hucre} width:30mm;">NUMARA</th><th style="${hucre}">ADI SOYADI</th><th style="${hucre} width:22mm; text-align:center;">KİTAPÇIK</th><th style="${hucre} width:46mm;">İMZA</th>
-            </tr></thead>
-            <tbody>${satirlar}</tbody>
-          </table>
+          ${tabloHTML}
           <table style="width:100%; border-collapse:collapse;">
-            <tr><td style="${hucre} height:25px; width:50mm;"><strong>Gözetmen 1:</strong> ${C.kacisHTML(gozetmenler[0] || '')}</td><td style="${hucre} height:25px;">İmza:</td><td style="${hucre} height:25px; width:50mm;"><strong>Gözetmen 2:</strong> ${C.kacisHTML(gozetmenler[1] || '')}</td><td style="${hucre} height:25px;">İmza:</td></tr>
+            <tr><td style="${bilgiHucre} height:${d.gozetmenYuk}px; width:50mm;"><strong>Gözetmen 1:</strong> ${C.kacisHTML(gozetmenler[0] || '')}</td><td style="${bilgiHucre} height:${d.gozetmenYuk}px;">İmza:</td><td style="${bilgiHucre} height:${d.gozetmenYuk}px; width:50mm;"><strong>Gözetmen 2:</strong> ${C.kacisHTML(gozetmenler[1] || '')}</td><td style="${bilgiHucre} height:${d.gozetmenYuk}px;">İmza:</td></tr>
           </table>
         </div>
       `);
@@ -9470,6 +9624,27 @@
         guncelleA4Onizleme();
       });
     }
+
+    const guncelleYoklamaSayfaModuSecimi = (yeniDeger) => {
+      const mod = normallestirYoklamaSayfaModu(yeniDeger);
+      if (!durum.evrakSablonu || typeof durum.evrakSablonu !== 'object') durum.evrakSablonu = {};
+      durum.evrakSablonu.yoklamaSayfaModu = mod;
+      ['tut-yoklama-sayfa-modu', 'ogr-yoklama-sayfa-modu'].forEach((sid) => {
+        const el = document.getElementById(sid);
+        if (el && el.value !== mod) el.value = mod;
+      });
+      verileriKaydet();
+      guncelleA4Onizleme();
+    };
+    ['tut-yoklama-sayfa-modu', 'ogr-yoklama-sayfa-modu'].forEach((sid) => {
+      const selEl = document.getElementById(sid);
+      if (selEl) {
+        selEl.addEventListener('change', (e) => {
+          e.stopPropagation();
+          guncelleYoklamaSayfaModuSecimi(selEl.value);
+        });
+      }
+    });
 
     const kaliteFormTipiEl = document.getElementById('kalite-form-tipi');
     if (kaliteFormTipiEl) {
@@ -14021,7 +14196,8 @@
           parcalar.push(uretSalonKapiListesiHTML(tb, yer));
         }
         if ((document.getElementById('chk-paket-yoklama') || {}).checked) {
-          parcalar.push(salonKayitlari.map((k) => uretSinavYoklamaEvrakiHTML(tb, k)).join(''));
+          const yoklamaKayitlari = yoklamaSalonKayitlariniHazirla(tb, yer);
+          parcalar.push(yoklamaKayitlari.map((k) => uretSinavYoklamaEvrakiHTML(tb, k)).join(''));
         }
         if ((document.getElementById('chk-paket-tutanak') || {}).checked) {
           parcalar.push(salonKayitlari.map((k) => uretSinavDurumTutanagiHTML(tb, Object.assign({}, k.salon, { ogrenciSayisi: k.ogrenciler.length }))).join(''));
