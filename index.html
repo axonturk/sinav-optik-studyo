@@ -1372,6 +1372,16 @@
          SEKME 3: MOBİL OPTİK OKUMA (OMR), KAMERA VE SİMÜLASYON LABORATUVARI
          ==================================================================== -->
     <section class="sekme-panel" id="sekme-omr">
+      <div class="kart" id="kart-telefon-sinavlari" hidden style="margin-bottom:0.9rem;">
+        <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;">
+          <span>📱 Telefondan gelen sınavlar</span>
+          <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+            <select id="sec-telefon-sinavi" aria-label="Telefondan gelen sınav" style="min-width:240px; font-size:0.82rem;"></select>
+            <button type="button" class="btn btn-basari btn-kucuk" id="btn-telefon-sinavi-csv">Excel'e aktar (.csv)</button>
+          </div>
+        </div>
+        <div id="telefon-sinavlari-kutu"></div>
+      </div>
       <div class="iki-sutun-duzen">
 
         <!-- Sol: Kamera, Fotoğraf Yükleme ve Sentetik OMR Simülasyon Testi -->
@@ -3402,7 +3412,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261114g"></script>
-  <script src="studyo-uygulama.js?v=20261114g"></script>
+  <script src="guvenlik-ve-veri.js?v=20261114h"></script>
+  <script src="studyo-uygulama.js?v=20261114h"></script>
 </body>
 </html>

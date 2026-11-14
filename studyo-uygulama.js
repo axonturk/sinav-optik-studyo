@@ -4432,6 +4432,121 @@
     }, 900);
   }
 
+  /* ------------------------------------------------------------------------
+     TELEFONDAN GELEN SINAVLAR — stüdyoda açık sınavla aynı kodu taşımayan telefon okumaları
+     eskiden sessizce atlanıyordu (telefonda kağıttan/kurulum karekoduyla kurulan sınavlar stüdyoda hiç görünmüyordu).
+     Artık sınav koduna göre ayrı tutulur; telefonun hesapladığı puan korunur (stüdyonun başka sınavıyla yeniden puanlanmaz).
+     Kaynak sunucudaki olay kaydıdır; stüdyo her açılışta baştan çeker, bu depo yalnız çevrimdışı görüntüleme içindir.
+     ------------------------------------------------------------------------ */
+  const TELEFON_SINAV_DEPO = 'SINAV_TELEFON_SINAVLARI_V1';
+  function telefonSinavlariniYukle() {
+    if (durum.telefonSinavlari && typeof durum.telefonSinavlari === 'object') return durum.telefonSinavlari;
+    try { durum.telefonSinavlari = JSON.parse(localStorage.getItem(TELEFON_SINAV_DEPO) || '{}') || {}; } catch (_) { durum.telefonSinavlari = {}; }
+    return durum.telefonSinavlari;
+  }
+  function telefonSinavlariniKaydet() {
+    try { localStorage.setItem(TELEFON_SINAV_DEPO, JSON.stringify(durum.telefonSinavlari || {})); } catch (_) {}
+  }
+  function telefonSinavKovasi(sinavKodu) {
+    const tum = telefonSinavlariniYukle();
+    const kod = String(sinavKodu || 'GENEL').trim().slice(0, 80) || 'GENEL';
+    if (!tum[kod]) tum[kod] = { sinavKodu: kod, ad: '', yapi: null, okumalar: {}, sonMs: 0 };
+    return tum[kod];
+  }
+  /* Bir senkron olayını telefon kovasına işler; true dönerse görünüm güncellenmeli */
+  function isleTelefonSinavOlayi(olay) {
+    if (!olay || olay.kaynakCihaz === 'masaustu') return false;
+    const kova = telefonSinavKovasi(olay.sinavKodu);
+    const zaman = Number(olay.zamanMs) || Date.now();
+    if (olay.tur === 'OKUDU_GUNCELLE' && olay.veri && typeof olay.veri === 'object') {
+      const k = olay.veri;
+      const id = String(k.id || `${k.ogrNo || ''}-${k.grup || ''}`);
+      const onceki = kova.okumalar[id];
+      if (onceki && Number(onceki._zamanMs) > zaman) return false;
+      kova.okumalar[id] = {
+        id, ogrNo: String(k.ogrNo || ''), adSoyad: String(k.adSoyad || ''), okunanNoKod: String(k.okunanNoKod || ''),
+        grup: String(k.grup || ''), toplamPuan: Number(k.toplamPuan) || 0,
+        dyDogru: Number(k.dyDogru) || 0, dyYanlis: Number(k.dyYanlis) || 0,
+        testDogru: Number(k.testDogru) || 0, testYanlis: Number(k.testYanlis) || 0,
+        bekliyor: /^BEKLEYEN/i.test(String(k.ogrNo || '')) || String(k.okunanNoKod || '').includes('?'),
+        _zamanMs: zaman
+      };
+      kova.sonMs = Math.max(kova.sonMs, zaman);
+      return true;
+    }
+    if (olay.tur === 'SINAV_TANIMI' && olay.veri && typeof olay.veri === 'object') {
+      const v = olay.veri;
+      kova.ad = String(v.ad || v.kayitAdi || v.sinavAdi || v.dersAd || kova.ad || '').slice(0, 120);
+      kova.yapi = {
+        dySayisi: Number(v.dySayisi) || 0, testSayisi: Number(v.testSayisi) || 0, klasikSayisi: Number(v.klasikSayisi) || 0,
+        dyToplamPuan: Number(v.dyToplamPuan) || 0, testToplamPuan: Number(v.testToplamPuan) || 0, klasikToplamPuan: Number(v.klasikToplamPuan) || 0,
+        kimlikModu: String(v.kimlikModu || ''), cevapAnahtarlari: (v.cevapAnahtarlari && typeof v.cevapAnahtarlari === 'object') ? v.cevapAnahtarlari : null
+      };
+      kova.sonMs = Math.max(kova.sonMs, zaman);
+      return true;
+    }
+    return false;
+  }
+  function telefonSinavOkumalari(kod) {
+    const kova = telefonSinavlariniYukle()[kod];
+    if (!kova) return [];
+    return Object.values(kova.okumalar || {}).sort((a, b) => String(a.ogrNo).localeCompare(String(b.ogrNo), 'tr'));
+  }
+  function cizTelefonSinavlariPaneli() {
+    const kutu = document.getElementById('telefon-sinavlari-kutu');
+    const sec = document.getElementById('sec-telefon-sinavi');
+    if (!kutu || !sec) return;
+    const tum = telefonSinavlariniYukle();
+    const kodlar = Object.keys(tum).filter((k) => Object.keys(tum[k].okumalar || {}).length > 0)
+      .sort((a, b) => (tum[b].sonMs || 0) - (tum[a].sonMs || 0));
+    const kart = document.getElementById('kart-telefon-sinavlari');
+    if (kart) kart.hidden = kodlar.length === 0;
+    if (!kodlar.length) { kutu.innerHTML = ''; return; }
+    const onceki = sec.value;
+    sec.innerHTML = kodlar.map((k) => {
+      const n = Object.keys(tum[k].okumalar).length;
+      return `<option value="${C.kacisHTML(k)}">${C.kacisHTML(tum[k].ad || k)} · ${n} kağıt</option>`;
+    }).join('');
+    if (onceki && kodlar.includes(onceki)) sec.value = onceki;
+    const kod = sec.value;
+    const kova = tum[kod];
+    const satirlar = telefonSinavOkumalari(kod);
+    const ogrAdi = (no) => {
+      const o = (durum.ogrenciKayitlari || []).find((x) => String(x.ogrNo) === String(no));
+      return o ? o.adSoyad : '';
+    };
+    const puanlar = satirlar.filter((s) => !s.bekliyor).map((s) => s.toplamPuan);
+    const ort = puanlar.length ? (puanlar.reduce((a, b) => a + b, 0) / puanlar.length).toFixed(1) : '—';
+    const yapiMetni = kova.yapi ? `${kova.yapi.dySayisi} D/Y + ${kova.yapi.testSayisi} Test${kova.yapi.klasikSayisi ? ` + ${kova.yapi.klasikSayisi} Klasik` : ''} · ` : '';
+    kutu.innerHTML = `
+      <div style="font-size:0.8rem; color:var(--metin-ikincil); margin:0.35rem 0 0.5rem;">Sınav kodu <strong class="mono">${C.kacisHTML(kod)}</strong> · ${yapiMetni}${satirlar.length} kağıt · ortalama ${ort} · puanlar telefonda hesaplandı</div>
+      <div class="tablo-sarmal" style="max-height:320px; overflow:auto;">
+        <table class="veri-tablo" id="tablo-telefon-sinavi">
+          <thead><tr><th>Öğr. No</th><th>Ad Soyad</th><th>Kodlanan</th><th>Kitapçık</th><th>D/Y</th><th>Test</th><th>Puan</th></tr></thead>
+          <tbody>${satirlar.map((s) => `<tr${s.bekliyor ? ' style="color:var(--uyari);"' : ''}>
+            <td class="mono">${C.kacisHTML(s.ogrNo)}</td><td>${C.kacisHTML(ogrAdi(s.ogrNo) || s.adSoyad || (s.bekliyor ? 'Öğrenci seçilmedi' : ''))}</td>
+            <td class="mono">${C.kacisHTML(s.okunanNoKod)}</td><td>${C.kacisHTML(s.grup)}</td>
+            <td>${s.dyDogru}D / ${s.dyYanlis}Y</td><td>${s.testDogru}D / ${s.testYanlis}Y</td><td><strong>${s.toplamPuan}</strong></td></tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+  }
+  function indirTelefonSinaviCsv() {
+    const sec = document.getElementById('sec-telefon-sinavi');
+    if (!sec || !sec.value) return;
+    const kod = sec.value;
+    const ogrAdi = (no) => { const o = (durum.ogrenciKayitlari || []).find((x) => String(x.ogrNo) === String(no)); return o ? o.adSoyad : ''; };
+    const temiz = (v) => C.temizleCsvFormulEnjeksiyon ? C.temizleCsvFormulEnjeksiyon(String(v)) : String(v);
+    const satirlar = [['Öğrenci No', 'Ad Soyad', 'Kodlanan', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Puan']]
+      .concat(telefonSinavOkumalari(kod).map((s) => [s.ogrNo, ogrAdi(s.ogrNo) || s.adSoyad, s.okunanNoKod, s.grup, s.dyDogru, s.dyYanlis, s.testDogru, s.testYanlis, s.toplamPuan]));
+    const csv = '﻿' + satirlar.map((r) => r.map((h) => `"${temiz(h).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `telefon-${kod}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
   /* Gerçek (okunabilir) Vektörel QR SVG üretici — qrcode-generator kütüphanesi (MIT) */
   function uretGercekQrSvg(metin, boyutPx) {
     if (typeof window.qrcode !== 'function' || !metin) return '';
@@ -7977,6 +8092,13 @@
 
   function baslatUygulama() {
     kurTelefonBaglaAkisi();
+    try {
+      const secTel = document.getElementById('sec-telefon-sinavi');
+      if (secTel) secTel.addEventListener('change', () => cizTelefonSinavlariPaneli());
+      const btnTelCsv = document.getElementById('btn-telefon-sinavi-csv');
+      if (btnTelCsv) btnTelCsv.addEventListener('click', () => indirTelefonSinaviCsv());
+      cizTelefonSinavlariPaneli();
+    } catch (_) {}
     verileriYukle();
     durum.ogrenciKayitlari = ogrenciKayitlariniHazirla(durum.ogrenciKayitlari);
     doldurDersSecici();
@@ -15192,12 +15314,17 @@ Yine de çıktı alınsın mı?`)) {
         let birlesenSayi = 0;
         let anahtarDegistiMi = false;
         let maksSeq = sinceSeq;
+        let telefonKovasiDegisti = false;
 
         olaylar.forEach((olay) => {
           if (!olay) return;
           if (Number(olay.seqNo) > maksSeq) maksSeq = Number(olay.seqNo);
           const kodUygun = !olay.sinavKodu || olay.sinavKodu === 'GENEL' || !aktifKod || aktifKod === 'GENEL' || olay.sinavKodu === aktifKod;
-          if (!kodUygun) return;
+          // Açık sınavla aynı kodu taşımayan telefon olayı artık atlanmaz: "Telefondan gelen sınavlar"a konur
+          if (!kodUygun || olay.tur === 'SINAV_TANIMI') {
+            if (isleTelefonSinavOlayi(olay)) telefonKovasiDegisti = true;
+            return;
+          }
 
           if (olay.tur === 'OKUDU_GUNCELLE' && olay.veri && typeof olay.veri === 'object') {
             const kayit = Object.assign({}, olay.veri);
@@ -15228,6 +15355,10 @@ Yine de çıktı alınsın mı?`)) {
         });
 
         durum.v2SonSeqNo = Math.max(maksSeq, Number(veri && veri.sonSeqNo) || 0);
+        if (telefonKovasiDegisti) {
+          telefonSinavlariniKaydet();
+          cizTelefonSinavlariPaneli();
+        }
         if (birlesenSayi > 0 || anahtarDegistiMi) {
           if (durum.okumaSonuclari.length > 0 && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
             durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());

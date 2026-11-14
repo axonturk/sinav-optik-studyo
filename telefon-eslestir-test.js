@@ -210,6 +210,21 @@ const kasaVerisi = (testA) => ({
     kontrol('"Senkronize Et" bilgisayardaki yeni anahtarı getirdi', sonra.b === 'ADCBA', sonra.b);
     kontrol('Okunmuş kağıt yeni anahtarla yeniden puanlandı, kayıt kaybolmadı', sonra.adet === 1 && Number(sonra.puan) < 100, JSON.stringify(sonra));
 
+    // 8a) Stüdyo: telefonun okuduğu ama stüdyoda açık olmayan sınav "Telefondan gelen sınavlar"da görünür
+    await bekleKosul(() => tel.evaluate(() => window.__mobilV2OutboxOku().bekleyenSayi === 0), 15000);
+    const pcAktifKod = await pc.evaluate(async () => { await window.__masaustuV2SenkronSimdi(); return true; });
+    void pcAktifKod;
+    await bekleKosul(() => pc.evaluate(() => !document.getElementById('kart-telefon-sinavlari').hidden), 6000);
+    const pcTel = await pc.evaluate(() => ({
+      gorunur: !document.getElementById('kart-telefon-sinavlari').hidden,
+      secenek: document.getElementById('sec-telefon-sinavi').textContent,
+      satirlar: Array.from(document.querySelectorAll('#tablo-telefon-sinavi tbody tr')).map((tr) => tr.textContent.replace(/\s+/g, ' ').trim()),
+      aktifTablo: (window.__masaustuOkumaSayisi ? window.__masaustuOkumaSayisi() : null)
+    }));
+    kontrol('Stüdyo: telefondan gelen sınav "Telefondan gelen sınavlar"da görünür (atlanmaz)', pcTel.gorunur && /1 kağıt/.test(pcTel.secenek), JSON.stringify(pcTel));
+    kontrol('Stüdyo: telefonun puanı korunur, öğrenci adı listeden gelir', pcTel.satirlar.length === 1 && /257419205/.test(pcTel.satirlar[0]) && /Deneme İki/.test(pcTel.satirlar[0]) && /Y100$/.test(pcTel.satirlar[0]), JSON.stringify(pcTel.satirlar));
+    kontrol('Stüdyo: sınavın adı telefonun gönderdiği sınav tanımından gelir', /Ağ Temelleri|BIL101/.test(pcTel.secenek), pcTel.secenek);
+
     // 8b) Bilgisayarda doğru cevabı İŞARETLENMEMİŞ sorulu sınav → telefon okumayı kilitler ve nedenini söyler
     const eksikli = kasaVerisi(['A', 'D', 'C', 'B', 'A']);
     eksikli.kayitliSinavlar.push({

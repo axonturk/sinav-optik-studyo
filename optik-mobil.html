@@ -1007,7 +1007,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261114g"></script>
+  <script src="guvenlik-ve-veri.js?v=20261114h"></script>
   <script>
     (function () {
       'use strict';
@@ -1566,6 +1566,8 @@
         const tamam = await senkronizeEtBulutMobilDersler({ sessiz: false, anahtarlariGuncelle: true });
         guncelleMobilHesapKarti();
         if (tamam) {
+          // Stüdyo, telefondaki sınavın adını ve yapısını "Telefondan gelen sınavlar"da göstersin
+          if (Array.isArray(mobilDurum.okumaSonuclari) && mobilDurum.okumaSonuclari.length > 0) gonderMobilSinavTanimi(true);
           const sayi = Object.keys(mobilDurum.dersPaketleriHaritasi || {}).filter((k) => k !== 'varsayilan').length;
           const sinavSayi = typeof tumMobilSinavlar === 'function' ? tumMobilSinavlar().length : 0;
           mobilHesapDurumYaz(`✓ ${sayi} ders · ${sinavSayi} sınav güncel (${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}).`, 'basari');
@@ -3236,6 +3238,22 @@
         return yeni;
       }
 
+      const gonderilenSinavTanimlari = new Set();
+      function gonderMobilSinavTanimi(zorla = false) {
+        const y = mobilDurum.sinavYapisi || {};
+        const kod = String(y.sinavKodu || '').trim();
+        if (!kod || (!zorla && gonderilenSinavTanimlari.has(kod))) return;
+        gonderilenSinavTanimlari.add(kod);
+        const paket = mobilDurum.dersPaketleriHaritasi && mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId];
+        kuyrugaAlMobilSenkronOlayi('SINAV_TANIMI', {
+          ad: y.kayitAdi || y.sinavAdi || y.dersAd || (paket && paket.ad) || kod,
+          dersAd: (paket && paket.ad) || y.dersAd || '',
+          dySayisi: y.dySayisi, testSayisi: y.testSayisi, klasikSayisi: y.klasikSayisi,
+          dyToplamPuan: y.dyToplamPuan, testToplamPuan: y.testToplamPuan, klasikToplamPuan: y.klasikToplamPuan,
+          kimlikModu: y.kimlikModu, haneSayisi: y.haneSayisi,
+          cevapAnahtarlari: y.cevapAnahtarlari
+        });
+      }
       function kuyrugaAlMobilSenkronOlayi(tur, veri, sinavKoduOzel = '') {
         const sinavKodu = String(sinavKoduOzel || (mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.sinavKodu) || 'GENEL').trim() || 'GENEL';
         const olay = {
@@ -3750,6 +3768,7 @@
 
         kaydetYerelDepoya();
         if (!secenekler.senkronAtla && senkronaGonderilebilirMi(sonuc)) {
+          gonderMobilSinavTanimi();
           kuyrugaAlMobilSenkronOlayi('OKUDU_GUNCELLE', hafifletMobilKayit(sonuc));
         }
         belirsiz = kagitKimlikBelirsizMi(sonuc);

@@ -10357,7 +10357,7 @@
       throw new Error('Senkron olayı geçerli bir nesne olmalıdır.');
     }
     const temiz = derinTemizleNesne(hamOlay, 0);
-    const izinliTurler = ['OKUDU_GUNCELLE', 'ANAHTAR_GUNCELLE', 'OGRENCI_EKLE', 'OKUDU_SIL'];
+    const izinliTurler = ['OKUDU_GUNCELLE', 'ANAHTAR_GUNCELLE', 'OGRENCI_EKLE', 'OKUDU_SIL', 'SINAV_TANIMI'];
     const tur = String(temiz.tur || '').trim().toUpperCase();
     if (!izinliTurler.includes(tur)) {
       throw new Error(`Desteklenmeyen senkron olay türü: ${tur || 'BOŞ'}`);
@@ -10410,6 +10410,28 @@
             sinifSube: String(o.sinifSube || o.sube || '').trim().slice(0, 40),
             salonAdi: String(o.salonAdi || o.salon || '').trim().slice(0, 40)
           }))
+      };
+    } else if (tur === 'SINAV_TANIMI') {
+      // Telefonda kurulan sınavın tanımı (stüdyoda "Telefondan gelen sınavlar"da ad/yapı olarak gösterilir)
+      const sayi = (v, ust) => Math.max(0, Math.min(ust, Number(v) || 0));
+      const anahtarlar = {};
+      const hamA = veriHam.cevapAnahtarlari && typeof veriHam.cevapAnahtarlari === 'object' ? veriHam.cevapAnahtarlari : {};
+      ['A', 'B', 'C', 'D'].forEach((g) => {
+        const a = hamA[g];
+        if (!a || typeof a !== 'object') return;
+        anahtarlar[g] = {
+          dy: (Array.isArray(a.dy) ? a.dy : []).slice(0, 60).map((x) => String(x || '').trim().toUpperCase().slice(0, 1)),
+          test: (Array.isArray(a.test) ? a.test : []).slice(0, 120).map((x) => String(x || '').trim().toUpperCase().slice(0, 1))
+        };
+      });
+      veri = {
+        ad: String(veriHam.ad || '').trim().slice(0, 120),
+        dersAd: String(veriHam.dersAd || '').trim().slice(0, 120),
+        dySayisi: sayi(veriHam.dySayisi, 60), testSayisi: sayi(veriHam.testSayisi, 120), klasikSayisi: sayi(veriHam.klasikSayisi, 20),
+        dyToplamPuan: sayi(veriHam.dyToplamPuan, 100), testToplamPuan: sayi(veriHam.testToplamPuan, 100), klasikToplamPuan: sayi(veriHam.klasikToplamPuan, 100),
+        kimlikModu: String(veriHam.kimlikModu || '').trim().slice(0, 8),
+        haneSayisi: sayi(veriHam.haneSayisi, 15),
+        cevapAnahtarlari: anahtarlar
       };
     } else if (tur === 'OKUDU_SIL') {
       veri = {
