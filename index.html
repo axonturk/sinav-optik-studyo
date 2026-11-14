@@ -139,6 +139,18 @@
           <svg class="ui-ikon"><use href="#i-chart"></use></svg>
           <span class="yan-menu-metin">Değerlendirme</span>
         </button>
+        <button type="button" class="sekme-btn" data-sekme="sekme-arsiv" title="Basılan, kaydedilen ve telefondan gelen tüm sınavlar · kopya şüphe raporu">
+          <svg class="ui-ikon"><use href="#i-book"></use></svg>
+          <span class="yan-menu-metin">Sınav Arşivi</span>
+        </button>
+        <button type="button" class="sekme-btn" data-sekme="sekme-ogrenci-dosyasi" title="Öğrenciyi isim veya numarayla ara: tüm sınavlar, şüpheler, kayıtlar">
+          <svg class="ui-ikon"><use href="#i-users"></use></svg>
+          <span class="yan-menu-metin">Öğrenci Dosyası</span>
+        </button>
+        <button type="button" class="sekme-btn" data-sekme="sekme-kayitlar" title="Değiştirilemez işlem ve delil kayıtları">
+          <svg class="ui-ikon"><use href="#i-sheet"></use></svg>
+          <span class="yan-menu-metin">Kayıtlar</span>
+        </button>
       </div>
 
       <div class="yan-menu-ayirici"></div>
@@ -1378,6 +1390,7 @@
           <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
             <select id="sec-telefon-sinavi" aria-label="Telefondan gelen sınav" style="min-width:240px; font-size:0.82rem;"></select>
             <button type="button" class="btn btn-basari btn-kucuk" id="btn-telefon-sinavi-csv">Excel'e aktar (.csv)</button>
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-telefon-sinavi-arsiv">Sınav arşivine kaydet</button>
           </div>
         </div>
         <div id="telefon-sinavlari-kutu"></div>
@@ -1642,6 +1655,40 @@
     <!-- ====================================================================
          SEKME 4: AKADEMİK DEĞERLENDİRME, MADDE ANALİZİ (pj, rjx) & NOT ÇİZELGESİ
          ==================================================================== -->
+    <section class="sekme-panel" id="sekme-arsiv">
+      <div class="kart" style="margin-bottom:0.9rem;">
+        <div class="kart-baslik"><span>📚 Sınav Arşivi</span></div>
+        <p style="font-size:0.82rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">Basılan / kaydedilen sınavlar, telefonla okunan sınavlar ve kopya şüpheleri. Telefondan gelen bir sınavı kalıcı kayda almak için "Arşive kaydet"e basın.</p>
+        <div id="arsiv-liste" class="tablo-sarmal"></div>
+      </div>
+      <div class="kart" id="arsiv-detay"></div>
+    </section>
+
+    <section class="sekme-panel" id="sekme-ogrenci-dosyasi">
+      <div class="kart">
+        <div class="kart-baslik"><span>👤 Öğrenci Dosyası</span></div>
+        <input type="search" id="ogr-dosya-ara" list="ogr-dosya-oneriler" placeholder="Öğrenci adı veya numarası yazın…" style="width:100%; font-size:1rem; margin-bottom:0.7rem;" autocomplete="off" />
+        <datalist id="ogr-dosya-oneriler"></datalist>
+        <div id="ogr-dosya-sonuc"></div>
+      </div>
+    </section>
+
+    <section class="sekme-panel" id="sekme-kayitlar">
+      <div class="kart">
+        <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;"><span>🧾 Kayıtlar</span>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <input type="search" id="kayitlar-ara" placeholder="Öğrenci, sınav veya olay ara…" style="min-width:220px;" />
+            <select id="kayitlar-tur" aria-label="Kayıt türü">
+              <option value="">Tüm kayıtlar</option>
+              <option>Online ihlal</option><option>Online sınav</option><option>Telefon okuma</option><option>Elle atama</option><option>Basım</option><option>Yoklama</option>
+            </select>
+            <button type="button" class="btn btn-basari btn-kucuk" id="btn-kayitlar-csv">Excel (.csv)</button>
+          </div></div>
+        <p style="font-size:0.8rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">Online sınav kayıtları sunucuda hash zinciriyle mühürlüdür; telefon okumaları sunucudaki olay sırası numarasıyla (#) izlenir. Kayıtlar değiştirilemez ve silinemez.</p>
+        <div id="kayitlar-liste" class="tablo-sarmal" style="max-height:70vh; overflow:auto;"></div>
+      </div>
+    </section>
+
     <section class="sekme-panel" id="sekme-analiz" data-alt-sekme="tumu">
       <!-- 4 SADE KPI KARTI + AKADEMİK EK METRİK ŞERİDİ -->
       <div class="kpi-izgara-4 yazdir-gizle">

@@ -1736,6 +1736,14 @@ function istekIsleyici(req, res) {
     return gonderJson(res, 200, { aktif: true, kod: Cekirdek.uretDegisenSalonKodu(s0.salonSirri, simdi), kalanSn: 60 - Math.floor(simdi / 1000) % 60, baslik: s0.baslik || '' });
   }
 
+  if (req.method === 'GET' && yol === '/api/online-zaman-analizi') {
+    const token = cozHocaTokenIstekten(req, null, urlNesne);
+    if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token)) return gonderJson(res, 401, { hata: 'Öğretmen oturumu gerekli.' });
+    const s0 = sunucuDurumu.aktifSinav || {};
+    const oturumlar = Array.from(sunucuDurumu.aktifTokenlar.values()).filter((o) => o && o.sinavId === s0.sinavId);
+    return gonderJson(res, 200, { sinavId: s0.sinavId || '', baslik: s0.baslik || '', oturumSayisi: oturumlar.length, ciftler: Cekirdek.tespitEtZamanBenzerligi(oturumlar).map((c) => Object.assign(c, { sinavAd: s0.baslik || '' })) });
+  }
+
   if (req.method === 'POST' && yol === '/api/kiosk-log-kaydet') {
     okuJsonGovde(req)
       .then((govde) => {

@@ -3383,6 +3383,117 @@
      Aynı kitapçık grubundaki öğrenci çiftlerinin ortak yanlış cevaplarını (W_AB)
      analiz ederek tesadüf ötesi benzerlikleri raporlar.
      ------------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------------
+     SINAV ARŞİVİ · KOPYA ŞÜPHE RAPORU · ÖĞRENCİ DOSYASI · KAYITLAR (saf hesap fonksiyonları)
+     ------------------------------------------------------------------------ */
+  /* İki okumanın yan yana cevap karşılaştırması (kopya raporu için): her soru için iki cevap ve durum */
+  function karsilastirIkiOkuma(a, b) {
+    const satirlar = [];
+    const ekle = (tur, da, db) => {
+      const n = Math.max((da || []).length, (db || []).length);
+      for (let i = 0; i < n; i++) {
+        const x = (da || [])[i] || {};
+        const y = (db || [])[i] || {};
+        const ayni = Boolean(x.verilen) && x.verilen === y.verilen;
+        satirlar.push({
+          soru: `${tur}${i + 1}`, cevap1: x.verilen || '', cevap2: y.verilen || '',
+          ortakYanlis: ayni && x.sonuc === 'YANLIS', ortakDogru: ayni && x.sonuc === 'DOGRU', farkli: Boolean(x.verilen && y.verilen && x.verilen !== y.verilen)
+        });
+      }
+    };
+    ekle('DY', a && a.dyDetay, b && b.dyDetay);
+    ekle('T', a && a.testDetay, b && b.testDetay);
+    return satirlar;
+  }
+
+  /* Online sınav zaman izi: aynı soruları birbirine çok yakın anlarda AYNI cevapla işaretleyen öğrenci çiftleri */
+  function tespitEtZamanBenzerligi(oturumlar = [], secenek = {}) {
+    const esikMs = Number(secenek.esikMs) || 10000;
+    const enAz = Number(secenek.enAzSoru) || 5;
+    const liste = (Array.isArray(oturumlar) ? oturumlar : []).filter((o) => o && o.cevaplar && o.cevapZamanlari);
+    const ciftler = [];
+    for (let i = 0; i < liste.length; i++) {
+      for (let j = i + 1; j < liste.length; j++) {
+        const a = liste[i];
+        const b = liste[j];
+        let yakinAyni = 0;
+        const sorular = [];
+        Object.keys(a.cevaplar).forEach((sid) => {
+          if (!Object.prototype.hasOwnProperty.call(b.cevaplar, sid)) return;
+          const va = String(a.cevaplar[sid] || '');
+          const vb = String(b.cevaplar[sid] || '');
+          const ta = Number(a.cevapZamanlari[sid]) || 0;
+          const tb = Number(b.cevapZamanlari[sid]) || 0;
+          if (va && va === vb && ta && tb && Math.abs(ta - tb) <= esikMs) {
+            yakinAyni++;
+            sorular.push(sid);
+          }
+        });
+        if (yakinAyni >= enAz) {
+          ciftler.push({ ogrenci1No: a.ogrNo, ogrenci1Ad: a.adSoyad || '', ogrenci2No: b.ogrNo, ogrenci2Ad: b.adSoyad || '', yakinAyniCevap: yakinAyni, sorular, riskSeviyesi: yakinAyni >= enAz * 2 ? 'YUKSEK' : 'ORTA' });
+        }
+      }
+    }
+    return ciftler.sort((x, y) => y.yakinAyniCevap - x.yakinAyniCevap);
+  }
+
+  /* Telefon okumalarında aynı kayıt kimliğine farklı öğrenci yazılmışsa "elle atama" kaydı çıkar */
+  function cikarElleAtamalar(olaylar = []) {
+    const sonNo = new Map();
+    const atamalar = [];
+    (Array.isArray(olaylar) ? olaylar : []).slice().sort((a, b) => (Number(a.seqNo) || 0) - (Number(b.seqNo) || 0)).forEach((o) => {
+      if (!o || o.tur !== 'OKUDU_GUNCELLE' || !o.veri) return;
+      const id = String(o.veri.id || '');
+      const no = String(o.veri.ogrNo || '');
+      if (!id || !no) return;
+      const onceki = sonNo.get(id);
+      if (onceki !== undefined && onceki !== no) {
+        atamalar.push({ kayitId: id, sinavKodu: o.sinavKodu || '', eskiNo: onceki, yeniNo: no, adSoyad: String(o.veri.adSoyad || ''), kodlanan: String(o.veri.okunanNoKod || ''), zamanMs: Number(o.zamanMs) || 0 });
+      }
+      sonNo.set(id, no);
+    });
+    return atamalar;
+  }
+
+  /* Öğrenci dosyası: bir öğrencinin tüm sınavları, kopya şüpheleri, ihlalleri ve atamaları */
+  function olusturOgrenciDosyasi(ogrNo, kaynak = {}) {
+    const no = String(ogrNo || '').trim();
+    const sinavlar = [];
+    const supheler = [];
+    (Array.isArray(kaynak.sinavlar) ? kaynak.sinavlar : []).forEach((s) => {
+      const okumalar = Array.isArray(s.okumalar) ? s.okumalar : [];
+      const kendi = okumalar.find((o) => String(o.ogrNo) === no);
+      if (!kendi) return;
+      sinavlar.push({
+        sinavAd: s.ad || s.sinavKodu || '', sinavKodu: s.sinavKodu || '', kaynak: s.kaynak || '', tarihMs: Number(s.tarihMs) || 0,
+        puan: Number(kendi.toplamPuan) || 0, grup: kendi.grup || '', okunanNoKod: kendi.okunanNoKod || '',
+        dyDogru: kendi.dyDogru, dyYanlis: kendi.dyYanlis, testDogru: kendi.testDogru, testYanlis: kendi.testYanlis
+      });
+      tespitEtKopyaBenzerlikCiftleri(okumalar).forEach((c) => {
+        if (String(c.ogrenci1No) === no || String(c.ogrenci2No) === no) {
+          const diger = String(c.ogrenci1No) === no ? { no: c.ogrenci2No, ad: c.ogrenci2Ad } : { no: c.ogrenci1No, ad: c.ogrenci1Ad };
+          supheler.push({ tur: 'ORTAK_YANLIS', sinavAd: s.ad || s.sinavKodu || '', digerNo: diger.no, digerAd: diger.ad, ortakYanlis: c.ortakYanlisSayisi, benzerlik: c.benzerlikYuzde, risk: c.riskSeviyesi, maddeler: c.ortakYanlisMaddeler });
+        }
+      });
+    });
+    (Array.isArray(kaynak.zamanCiftleri) ? kaynak.zamanCiftleri : []).forEach((c) => {
+      if (String(c.ogrenci1No) === no || String(c.ogrenci2No) === no) {
+        const diger = String(c.ogrenci1No) === no ? { no: c.ogrenci2No, ad: c.ogrenci2Ad } : { no: c.ogrenci1No, ad: c.ogrenci1Ad };
+        supheler.push({ tur: 'ZAMAN_IZI', sinavAd: c.sinavAd || 'Online sınav', digerNo: diger.no, digerAd: diger.ad, yakinAyniCevap: c.yakinAyniCevap, risk: c.riskSeviyesi });
+      }
+    });
+    const ihlaller = (Array.isArray(kaynak.loglar) ? kaynak.loglar : []).filter((l) => String(l.ogrNo) === no && /^IHLAL_/.test(String(l.olayTuru || '')));
+    const atamalar = (Array.isArray(kaynak.atamalar) ? kaynak.atamalar : []).filter((a) => String(a.yeniNo) === no || String(a.eskiNo) === no);
+    const yoklama = (Array.isArray(kaynak.yoklamalar) ? kaynak.yoklamalar : []).filter((y) => String(y.ogrNo) === no);
+    const puanlar = sinavlar.map((x) => x.puan);
+    return {
+      ogrNo: no,
+      sinavlar: sinavlar.sort((a, b) => (b.tarihMs || 0) - (a.tarihMs || 0)),
+      ortalama: puanlar.length ? Math.round((puanlar.reduce((a, b) => a + b, 0) / puanlar.length) * 10) / 10 : null,
+      supheler, ihlaller, atamalar, yoklama
+    };
+  }
+
   function tespitEtKopyaBenzerlikCiftleri(okumaSonuclari = []) {
     const ciftler = [];
     if (!Array.isArray(okumaSonuclari) || okumaSonuclari.length < 2) return ciftler;
@@ -10841,6 +10952,10 @@
     maskeleEposta,
     uretOgrenciDogrulamaKodu,
     uretTelefonEslesmeKodu,
+    karsilastirIkiOkuma,
+    tespitEtZamanBenzerligi,
+    cikarElleAtamalar,
+    olusturOgrenciDosyasi,
     uretDegisenSalonKodu,
     dogrulaDegisenSalonKodu,
     ipIzinliMi,

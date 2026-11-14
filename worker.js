@@ -2281,6 +2281,15 @@ export default {
       return gonderJson(200, { aktif: true, kod: Cekirdek.uretDegisenSalonKodu(s0.salonSirri, simdi), kalanSn: 60 - Math.floor(simdi / 1000) % 60, baslik: s0.baslik || '' });
     }
 
+    /* Öğretmen: online sınav zaman izi analizi (aynı soruları çok yakın anlarda aynı cevapla işaretleyenler) */
+    if (metot === 'GET' && yol === '/api/online-zaman-analizi') {
+      const token = cozHocaTokenIstekten(request, null, urlNesne);
+      if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token)) return gonderJson(401, { hata: 'Öğretmen oturumu gerekli.' });
+      const s0 = sunucuDurumu.aktifSinav || {};
+      const oturumlar = Array.from(sunucuDurumu.aktifTokenlar.values()).filter((o) => o && o.sinavId === s0.sinavId);
+      return gonderJson(200, { sinavId: s0.sinavId || '', baslik: s0.baslik || '', oturumSayisi: oturumlar.length, ciftler: Cekirdek.tespitEtZamanBenzerligi(oturumlar).map((c) => Object.assign(c, { sinavAd: s0.baslik || '' })) });
+    }
+
     if (metot === 'POST' && yol === '/api/kiosk-log-kaydet') {
       try {
         const govde = await okuJsonGovde(request);
