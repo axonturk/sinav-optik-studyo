@@ -4261,6 +4261,158 @@
     return '';
   }
 
+  /* ------------------------------------------------------------------------
+     TELEFONU BAĞLA — hoca girişinden sonra ilk iş: tek karekod, telefon bu hesaba bağlanır.
+     Karekod: <site>/optik-mobil#eslestir=KOD (tek kullanımlık, 5 dakika). Telefon bağlanınca pencere kapanır.
+     ------------------------------------------------------------------------ */
+  let __telefonBaglaZamanlayici = null;
+  let __telefonBaglaKod = '';
+  const TELEFON_BAGLI_ANAHTARI = (k) => `TELEFON_BAGLI_V1:${String(k || '').toLowerCase()}`;
+
+  function aktifHocaKullaniciAdi() {
+    if (durum.hocaHesap && durum.hocaHesap.kullaniciAdi) return durum.hocaHesap.kullaniciAdi;
+    try { return (JSON.parse(sessionStorage.getItem('AKTIF_HOCA_OTURUM_V1') || 'null') || {}).kullaniciAdi || ''; } catch (_) { return ''; }
+  }
+
+  function telefonBagliMi() {
+    try {
+      return Boolean(aktifHocaKullaniciAdi() && localStorage.getItem(TELEFON_BAGLI_ANAHTARI(aktifHocaKullaniciAdi())));
+    } catch (_) { return false; }
+  }
+
+  function guncelleTelefonBaglaDugmesi() {
+    const btn = document.getElementById('btn-telefon-bagla');
+    if (!btn) return;
+    const etiket = btn.querySelector('[data-telefon-bagla-etiket]');
+    if (etiket) etiket.textContent = telefonBagliMi() ? 'Telefon Bağlı ✓' : 'Telefonu Bağla';
+  }
+
+  function telefonBaglaKapat() {
+    clearTimeout(__telefonBaglaZamanlayici);
+    __telefonBaglaZamanlayici = null;
+    __telefonBaglaKod = '';
+    const modal = document.getElementById('modal-telefon-bagla');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function telefonBaglaAc() {
+    const modal = document.getElementById('modal-telefon-bagla');
+    if (!modal) return;
+    const qrKutu = document.getElementById('telefon-bagla-qr');
+    const kodEl = document.getElementById('telefon-bagla-kod');
+    const durumEl = document.getElementById('telefon-bagla-durum');
+    clearTimeout(__telefonBaglaZamanlayici);
+    modal.style.display = 'flex';
+    qrKutu.innerHTML = '<span style="color:#475569; font-size:0.85rem;">Karekod hazırlanıyor…</span>';
+    kodEl.textContent = '— — — —';
+    durumEl.style.color = 'var(--metin-ikincil)';
+    durumEl.textContent = '';
+    const token = sessionStorage.getItem('hoca_token') || '';
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') {
+      durumEl.textContent = 'Telefon bağlamak için uygulamayı internet adresinden açın.';
+      return;
+    }
+    if (!token) {
+      durumEl.textContent = 'Önce öğretmen girişi yapın.';
+      return;
+    }
+    // Telefon bağlanır bağlanmaz güncel dersleri bulsun diye önce buluta gönder (beklemeden)
+    try { bulutKasayaSenkronla(false).catch(() => {}); } catch (_) {}
+    let veri = null;
+    try {
+      const yanit = await fetch('/api/telefon-eslestir/olustur', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: '{}'
+      });
+      veri = await yanit.json().catch(() => null);
+      if (!yanit.ok || !veri || !veri.kod) throw new Error((veri && veri.hata) || `Sunucu yanıtı: ${yanit.status}`);
+    } catch (err) {
+      qrKutu.innerHTML = '';
+      durumEl.style.color = 'var(--tehlike)';
+      durumEl.textContent = `Karekod alınamadı: ${err.message}`;
+      return;
+    }
+    __telefonBaglaKod = veri.kod;
+    const adres = `${location.origin}/optik-mobil#eslestir=${veri.kod}`;
+    qrKutu.innerHTML = uretGercekQrSvg(adres, 240) || '<span style="color:#b91c1c;">Karekod çizilemedi</span>';
+    kodEl.textContent = `${veri.kod.slice(0, 4)} ${veri.kod.slice(4)}`;
+    const bitisMs = Number(veri.bitisMs) || (Date.now() + 300000);
+    const kontrol = async () => {
+      if (__telefonBaglaKod !== veri.kod) return;
+      const kalanSn = Math.max(0, Math.round((bitisMs - Date.now()) / 1000));
+      if (kalanSn <= 0) {
+        qrKutu.style.opacity = '0.25';
+        durumEl.style.color = 'var(--uyari)';
+        durumEl.textContent = 'Karekodun süresi doldu. "Yeni karekod"a basın.';
+        return;
+      }
+      qrKutu.style.opacity = '1';
+      durumEl.textContent = `Telefon bekleniyor… (${Math.floor(kalanSn / 60)}:${String(kalanSn % 60).padStart(2, '0')})`;
+      try {
+        const y = await fetch(`/api/telefon-eslestir/durum?kod=${encodeURIComponent(veri.kod)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store'
+        });
+        const d = await y.json().catch(() => ({}));
+        if (__telefonBaglaKod !== veri.kod) return;
+        if (d && d.durum === 'tamamlandi') {
+          try { localStorage.setItem(TELEFON_BAGLI_ANAHTARI(aktifHocaKullaniciAdi()), String(Date.now())); } catch (_) {}
+          guncelleTelefonBaglaDugmesi();
+          document.getElementById('telefon-bagla-govde').innerHTML = `
+            <div style="font-size:3rem; line-height:1;">✅</div>
+            <div style="font-size:1.1rem; font-weight:800; margin-top:0.4rem;">Telefon bağlandı</div>
+            <div style="font-size:0.85rem; color:var(--metin-ikincil); margin-top:0.3rem;">Dersleriniz ve cevap anahtarlarınız telefona indi.<br>Telefonda <strong>"Senkronize Et"</strong> düğmesi her zaman en günceli getirir.</div>`;
+          __telefonBaglaKod = '';
+          setTimeout(() => {
+            telefonBaglaKapat();
+            // Pencere içeriğini sonraki açılış için eski haline getir
+            const govde = document.getElementById('telefon-bagla-govde');
+            if (govde && __telefonBaglaGovdeSablon) govde.innerHTML = __telefonBaglaGovdeSablon;
+          }, 3500);
+          return;
+        }
+      } catch (_) { /* ağ hatası: tekrar dene */ }
+      __telefonBaglaZamanlayici = setTimeout(kontrol, 2000);
+    };
+    __telefonBaglaZamanlayici = setTimeout(kontrol, 1200);
+  }
+
+  let __telefonBaglaGovdeSablon = '';
+  function kurTelefonBaglaAkisi() {
+    const govde = document.getElementById('telefon-bagla-govde');
+    if (govde) __telefonBaglaGovdeSablon = govde.innerHTML;
+    const btn = document.getElementById('btn-telefon-bagla');
+    if (btn) btn.addEventListener('click', () => telefonBaglaAc());
+    const kapat = () => telefonBaglaKapat();
+    const k1 = document.getElementById('btn-telefon-bagla-kapat');
+    const k2 = document.getElementById('btn-telefon-bagla-sonra');
+    const yenile = document.getElementById('btn-telefon-bagla-yenile');
+    if (k1) k1.addEventListener('click', kapat);
+    if (k2) k2.addEventListener('click', kapat);
+    if (yenile) yenile.addEventListener('click', () => {
+      if (govde && __telefonBaglaGovdeSablon) govde.innerHTML = __telefonBaglaGovdeSablon;
+      telefonBaglaAc();
+    });
+  }
+
+  /* Hoca girişi tamamlanınca çağrılır: telefon bu tarayıcıda hiç bağlanmadıysa karekodu kendiliğinden açar */
+  function girisSonrasiTelefonBaglaTeklifEt() {
+    guncelleTelefonBaglaDugmesi();
+    if (telefonBagliMi()) return;
+    if (typeof navigator !== 'undefined' && navigator.webdriver) return;
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    try { if (sessionStorage.getItem('TELEFON_BAGLA_ERTELENDI_V1')) return; } catch (_) {}
+    try { sessionStorage.setItem('TELEFON_BAGLA_ERTELENDI_V1', '1'); } catch (_) {}
+    setTimeout(() => {
+      // Giriş penceresi ("Hoş geldiniz") karekodu örtmesin
+      const girisModal = document.getElementById('modal-hoca-giris');
+      const kapatBtn = document.getElementById('btn-modal-hoca-kapat');
+      if (girisModal && girisModal.style.display !== 'none' && kapatBtn) kapatBtn.click();
+      telefonBaglaAc();
+    }, 900);
+  }
+
   /* Gerçek (okunabilir) Vektörel QR SVG üretici — qrcode-generator kütüphanesi (MIT) */
   function uretGercekQrSvg(metin, boyutPx) {
     if (typeof window.qrcode !== 'function' || !metin) return '';
@@ -7805,6 +7957,7 @@
   }
 
   function baslatUygulama() {
+    kurTelefonBaglaAkisi();
     verileriYukle();
     durum.ogrenciKayitlari = ogrenciKayitlariniHazirla(durum.ogrenciKayitlari);
     doldurDersSecici();
@@ -8739,6 +8892,7 @@
         bilgiKutu.textContent = `✅ Hoş geldiniz ${durum.hocaHesap.adSoyad} (${durum.hocaHesap.kullaniciAdi}). Öğretmen oturumu doğrulandı.`;
         bilgiKutu.style.display = 'block';
         await bulutKasadanYukle(false).catch(() => {});
+        girisSonrasiTelefonBaglaTeklifEt();
       });
     }
 
@@ -13572,6 +13726,7 @@
         rozetDurum.textContent = `🟢 Oturum Açık (${kurtarilanHocaOturum.kullaniciAdi})`;
       }
       bulutKasadanYukle(false).catch(() => {});
+      guncelleTelefonBaglaDugmesi();
     }
 
     if (kurtarilanKioskOturum) {

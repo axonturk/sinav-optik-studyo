@@ -506,6 +506,34 @@
          MOD 1: TAM EKRAN KAMERA OPTİK TARAYICI (%75+ VİZÖR)
          ==================================================================== -->
     <section class="sekme-panel aktif" id="m-panel-tara">
+      <!-- HESAP KARTI: telefon bilgisayara bağlı mı? Bağlıysa tek düğme: Senkronize Et -->
+      <div class="kart" id="mobil-hesap-kart" style="margin-bottom:0.6rem; padding:0.65rem;">
+        <div id="mobil-hesap-bagli-degil">
+          <div style="font-weight:800; font-size:0.95rem; margin-bottom:0.25rem;">📱 Önce telefonu bilgisayara bağlayın</div>
+          <div style="font-size:0.78rem; color:var(--metin-ikincil); line-height:1.45; margin-bottom:0.45rem;">
+            Bilgisayarda Sınav Stüdyosu'na girin, soldaki yeşil <strong>"Telefonu Bağla"</strong> düğmesine basın ve çıkan karekodu telefonun <strong>kamerasıyla</strong> okutun.
+          </div>
+          <div style="display:flex; gap:0.35rem;">
+            <input type="text" id="girdi-mobil-eslesme-kod" inputmode="text" autocapitalize="characters" autocomplete="off" maxlength="9" placeholder="ya da 8 haneli kodu yazın" aria-label="Eşleştirme kodu" style="flex:1; min-width:0; font-size:0.95rem; letter-spacing:0.12em; text-transform:uppercase;" />
+            <button type="button" class="btn btn-birincil" id="btn-mobil-eslesme-bagla" style="white-space:nowrap;">Bağlan</button>
+          </div>
+        </div>
+        <div id="mobil-hesap-bagli" hidden>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.4rem; flex-wrap:wrap;">
+            <div style="min-width:0;">
+              <div style="font-weight:800; font-size:0.9rem;">✅ Bağlı: <span id="mobil-hesap-ad">Eğitmen</span></div>
+              <div style="font-size:0.76rem; color:var(--metin-ikincil);">📚 Okunacak ders: <strong id="mobil-hesap-aktif-ders">—</strong></div>
+            </div>
+            <button type="button" class="btn btn-basari" id="btn-mobil-senkronize" style="white-space:nowrap; font-weight:800;">🔄 Senkronize Et</button>
+          </div>
+          <div style="display:flex; gap:0.6rem; margin-top:0.3rem; font-size:0.74rem;">
+            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-mobil-ders-degistir" style="padding:2px 6px; min-height:28px;">Dersi değiştir</button>
+            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-mobil-baglanti-kaldir" style="padding:2px 6px; min-height:28px;">Bağlantıyı kaldır</button>
+          </div>
+        </div>
+        <div id="mobil-hesap-durum" role="status" aria-live="polite" style="font-size:0.76rem; margin-top:0.3rem; min-height:1em;"></div>
+      </div>
+
 
       <!-- Tam Ekran Kamera / Canvas Vizörü -->
       <div class="vizor-kutu" id="mobil-vizor-dis-kutu">
@@ -769,7 +797,7 @@
         </div>
         <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap; margin-bottom:0.4rem;">
           <select id="mobil-aktif-ders-sec" aria-label="Aktif Ders Seçimi" style="flex:1; min-width:160px; font-size:0.82rem;"></select>
-          <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-bulut-ders-cek" style="white-space:nowrap;">☁️ Buluttan Çek</button>
+          <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-bulut-ders-cek" style="white-space:nowrap;">🔄 Senkronize Et</button>
           <button type="button" class="btn btn-kucuk" id="btn-mobil-hoca-giris-ac" style="white-space:nowrap;">🔑 Giriş</button>
         </div>
         <div id="mobil-bulut-ders-durum" style="font-size:0.74rem; color:var(--metin-ikincil);"></div>
@@ -907,7 +935,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261114c"></script>
+  <script src="guvenlik-ve-veri.js?v=20261114d"></script>
   <script>
     (function () {
       'use strict';
@@ -1077,6 +1105,7 @@
       }
 
       function guncelleMobilDersSeciciUI() {
+        if (typeof guncelleMobilHesapKarti === 'function') setTimeout(guncelleMobilHesapKarti, 0);
         const sel = document.getElementById('mobil-aktif-ders-sec');
         const rozet = document.getElementById('mobil-ders-ogr-sayac-rozet');
         if (rozet) rozet.textContent = `${mobilDurum.ogrenciler.length} Öğrenci`;
@@ -1227,7 +1256,9 @@
             mobilDurum.omrYetkiToken = '';
             try { sessionStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
             try { localStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
-            if (durumEl) durumEl.textContent = '🔒 Oturum süresi doldu (401). Lütfen yeniden giriş yapın.';
+            try { localStorage.removeItem('MOBIL_BAGLI_HOCA_V1'); } catch (_) {}
+            if (typeof guncelleMobilHesapKarti === 'function') guncelleMobilHesapKarti();
+            if (durumEl) durumEl.textContent = '🔒 Bağlantı sona erdi. Bilgisayardaki "Telefonu Bağla" karekodunu yeniden okutun.';
             if (hataEl) {
               hataEl.textContent = 'Oturum doğrulanamadı (401/403). Tekrar giriş yapın.';
               hataEl.hidden = false;
@@ -1242,6 +1273,7 @@
           }
           let ilkDersId = '';
           const aktifDersIdSimdi = temizDersAnahtari(mobilDurum.dersId || 'varsayilan');
+          const senkronOncesiAnahtarIzi = anahtarParmakIzi(mobilDurum.sinavYapisi);
           const hashOzelYukVar = Boolean(
             location.hash && (location.hash.includes('setup=') || location.hash.includes('ogr='))
           );
@@ -1249,9 +1281,13 @@
             const id = temizDersAnahtari(d.id || d.dersId || d.sinavKodu);
             if (!ilkDersId) ilkDersId = id;
             const eski = mobilDurum.dersPaketleriHaritasi[id] || {};
-            const baglanModuMu = Boolean(location.hash && location.hash.includes('baglan=1'));
             const aktifMi = id === aktifDersIdSimdi;
             const gelenYapi = d.aktifSinavYapisi || d.sinavYapisi || null;
+            const anahtarDoluMuOn = (a) => Boolean(a && typeof a === 'object' && Object.values(a).some((g) => g && ((Array.isArray(g.dy) && g.dy.some(Boolean)) || (Array.isArray(g.test) && g.test.some(Boolean)))));
+            const buluttanAnahtarVar = anahtarDoluMuOn(gelenYapi && gelenYapi.cevapAnahtarlari) || anahtarDoluMuOn(d.cevapAnahtarlari);
+            // Bilgisayar asıl kaynaktır: Senkronize Et buluttaki anahtarı uygular; ama bulutta anahtar YOKSA telefondakini silmez.
+            const baglanModuMu = Boolean(location.hash && location.hash.includes('baglan=1')) ||
+              Boolean(secenek.anahtarlariGuncelle && (buluttanAnahtarVar || !eski.sinavYapisi));
             const yapi = (aktifMi && !baglanModuMu)
               ? kopyalaMobilSinavYapisi(mobilDurum.sinavYapisi)
               : kopyalaMobilSinavYapisi(gelenYapi || eski.sinavYapisi || mobilDurum.sinavYapisi);
@@ -1261,7 +1297,11 @@
               delete yapi.kurulumBekliyor;
               delete yapi.kurulumBekliyorImza;
               yapi.dersAd = d.ad || d.dersAdi || yapi.dersAd;
-              if (d.cevapAnahtarlari && typeof d.cevapAnahtarlari === 'object') {
+              // Öncelik KAYDEDİLMİŞ (basılmış) sınavın anahtarındadır. d.cevapAnahtarlari bilgisayarda o an ekranda
+              // açık duran TASLAKTAN gelebilir; yalnız kayıtlı sınavda anahtar yoksa kullanılır (eskiden taslak, basılan
+              // kağıdın anahtarını eziyordu ve kağıtlar yanlış anahtarla puanlanıyordu).
+              const kayitliAnahtarDolu = anahtarDoluMuOn(gelenYapi && gelenYapi.cevapAnahtarlari);
+              if (!kayitliAnahtarDolu && d.cevapAnahtarlari && typeof d.cevapAnahtarlari === 'object') {
                 yapi.cevapAnahtarlari = JSON.parse(JSON.stringify(d.cevapAnahtarlari));
               }
             }
@@ -1287,9 +1327,13 @@
             };
             if (baglanModuMu && aktifMi) {
               Object.assign(mobilDurum.sinavYapisi, yapi);
-              if (Array.isArray(d.ogrenciler) && d.ogrenciler.length > 0) {
-                mobilDurum.ogrenciler = d.ogrenciler.slice();
+              if (secenek.anahtarlariGuncelle) {
+                delete mobilDurum.sinavYapisi.kurulumBekliyor;
+                delete mobilDurum.sinavYapisi.kurulumBekliyorImza;
               }
+            }
+            if ((baglanModuMu || secenek.anahtarlariGuncelle) && aktifMi && Array.isArray(d.ogrenciler) && d.ogrenciler.length > 0) {
+              mobilDurum.ogrenciler = d.ogrenciler.slice();
             }
           });
           if (ilkDersId) {
@@ -1321,6 +1365,14 @@
           } else {
             guncelleMobilDersSeciciUI();
           }
+          if (secenek.anahtarlariGuncelle && anahtarParmakIzi(mobilDurum.sinavYapisi) !== senkronOncesiAnahtarIzi &&
+              Array.isArray(mobilDurum.okumaSonuclari) && mobilDurum.okumaSonuclari.length > 0 &&
+              typeof uygulaMobil100PuanNormalizasyon === 'function') {
+            uygulaMobil100PuanNormalizasyon(null, true);
+            if (typeof mobilUyariGoster === 'function') mobilUyariGoster(`🔄 Cevap anahtarı bilgisayardan güncellendi; okunmuş ${mobilDurum.okumaSonuclari.length} kağıt yeniden puanlandı.`, 'basari');
+          }
+          kaydetYerelDepoya();
+          if (typeof guncelleMobilHesapKarti === 'function') guncelleMobilHesapKarti();
           if (hataEl) { hataEl.textContent = ''; hataEl.hidden = true; }
           if (girisKutu) girisKutu.hidden = true;
           if (durumEl) durumEl.textContent = `☁️ ${veri.dersler.length} ders ve sınıf listeleri eşitlendi (${veri.kullaniciAdi || 'Eğitmen'}).`;
@@ -1332,6 +1384,99 @@
           if (durumEl) durumEl.textContent = `⚠️ Buluta erişilemedi: ${(err && err.message) || 'Ağ hatası'}`;
           return false;
         }
+      }
+
+      /* ── TELEFON ↔ BİLGİSAYAR EŞLEŞTİRME (tek karekod) ──
+         Bilgisayardaki "Telefonu Bağla" karekodu: <site>/optik-mobil#eslestir=KOD
+         Telefon kodu sunucuya verir, hocanın kendi oturumunu alır; ardından dersler ve cevap anahtarları iner. */
+      const MOBIL_BAGLI_HOCA_ANAHTARI = 'MOBIL_BAGLI_HOCA_V1';
+      function okuMobilBagliHoca() {
+        try { return JSON.parse(localStorage.getItem(MOBIL_BAGLI_HOCA_ANAHTARI) || 'null'); } catch (_) { return null; }
+      }
+      function mobilHesapDurumYaz(metin, tur = '') {
+        const el = document.getElementById('mobil-hesap-durum');
+        if (!el) return;
+        el.textContent = metin || '';
+        el.style.color = tur === 'hata' ? 'var(--tehlike)' : (tur === 'basari' ? 'var(--basari)' : 'var(--metin-ikincil)');
+      }
+      function guncelleMobilHesapKarti() {
+        const bagli = Boolean(alAktifMobilHocaToken());
+        const bilgi = okuMobilBagliHoca();
+        const degil = document.getElementById('mobil-hesap-bagli-degil');
+        const evet = document.getElementById('mobil-hesap-bagli');
+        if (degil) degil.hidden = bagli;
+        if (evet) evet.hidden = !bagli;
+        const adEl = document.getElementById('mobil-hesap-ad');
+        if (adEl) adEl.textContent = (bilgi && (bilgi.adSoyad || bilgi.kullaniciAdi)) || 'Eğitmen hesabı';
+        const dersEl = document.getElementById('mobil-hesap-aktif-ders');
+        if (dersEl) {
+          const paket = mobilDurum.dersPaketleriHaritasi && mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId];
+          const ad = (paket && paket.ad) || (mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.dersAd) || '—';
+          const sinavAd = mobilDurum.sinavYapisi && (mobilDurum.sinavYapisi.sinavAdi || mobilDurum.sinavYapisi.sinavKodu);
+          dersEl.textContent = `${ad} (${mobilDurum.ogrenciler.length} öğrenci)${sinavAd ? ` · Sınav: ${sinavAd}` : ''}`;
+        }
+      }
+      function mobilBaglantiyiKaldir() {
+        mobilDurum.omrYetkiToken = '';
+        try { sessionStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
+        try { localStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
+        try { localStorage.removeItem(MOBIL_BAGLI_HOCA_ANAHTARI); } catch (_) {}
+        guncelleMobilHesapKarti();
+      }
+      function telefonCihazAdi() {
+        const ua = String(navigator.userAgent || '');
+        const m = /(iPhone|iPad|Android)[^;)]*/.exec(ua);
+        return m ? m[0].trim().slice(0, 40) : 'Telefon';
+      }
+      async function tamamlaMobilTelefonEslesme(hamKod) {
+        const kod = C.normalizeTelefonEslesmeKodu(hamKod);
+        if (!kod) {
+          mobilHesapDurumYaz('Kod 8 karakter olmalı (ör. ABCD 2345).', 'hata');
+          return false;
+        }
+        mobilHesapDurumYaz('Bağlanıyor…');
+        let v = null;
+        try {
+          const yanit = await fetch('/api/telefon-eslestir/tamamla', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kod, cihaz: telefonCihazAdi() }),
+            cache: 'no-store'
+          });
+          v = await yanit.json().catch(() => null);
+          if (!yanit.ok || !v || !v.token) {
+            mobilHesapDurumYaz((v && v.hata) || `Bağlanılamadı (${yanit.status}).`, 'hata');
+            return false;
+          }
+        } catch (err) {
+          mobilHesapDurumYaz(anlasilirSunucuHatasi(err), 'hata');
+          return false;
+        }
+        kaydetMobilHocaToken(v.token);
+        try {
+          localStorage.setItem(MOBIL_BAGLI_HOCA_ANAHTARI, JSON.stringify({ kullaniciAdi: v.kullaniciAdi, adSoyad: v.adSoyad, zamanMs: Date.now() }));
+        } catch (_) {}
+        const kodInp = document.getElementById('girdi-mobil-eslesme-kod');
+        if (kodInp) kodInp.value = '';
+        guncelleMobilHesapKarti();
+        mobilHesapDurumYaz(`Telefon bağlandı (${v.adSoyad || v.kullaniciAdi}). Dersler indiriliyor…`, 'basari');
+        await mobilSenkronizeEt();
+        return true;
+      }
+      async function mobilSenkronizeEt() {
+        mobilHesapDurumYaz('Senkronize ediliyor…');
+        const tamam = await senkronizeEtBulutMobilDersler({ sessiz: false, anahtarlariGuncelle: true });
+        guncelleMobilHesapKarti();
+        if (tamam) {
+          const sayi = Object.keys(mobilDurum.dersPaketleriHaritasi || {}).filter((k) => k !== 'varsayilan').length;
+          mobilHesapDurumYaz(`✓ ${sayi} ders güncel (${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}).`, 'basari');
+        } else if (!alAktifMobilHocaToken()) {
+          mobilHesapDurumYaz('Bağlantı sona ermiş. Bilgisayardaki "Telefonu Bağla" karekodunu yeniden okutun.', 'hata');
+        } else {
+          const el = document.getElementById('mobil-bulut-ders-durum');
+          mobilHesapDurumYaz((el && el.textContent) || 'Senkronize edilemedi; internet bağlantısını kontrol edin.', 'hata');
+        }
+        return tamam;
       }
 
       function kaydetMobilHocaToken(tok) {
@@ -1809,7 +1954,9 @@
         sinavYapisi: mobilDurum.sinavYapisi,
         ogrenciler: mobilDurum.ogrenciler,
         okumaSonuclari: mobilDurum.okumaSonuclari,
-        okumaSayisi: mobilDurum.okumaSonuclari.length
+        okumaSayisi: mobilDurum.okumaSonuclari.length,
+        dersId: mobilDurum.dersId,
+        dersPaketleriHaritasi: mobilDurum.dersPaketleriHaritasi
       });
 
       window.__mobilOqv2TestUygula = (qrMetin, secenek = {}) => {
@@ -1826,6 +1973,11 @@
       function uygulaPwaQrMetni(hamMetin, kaynakEtiket = 'QR') {
         const metin = String(hamMetin || '').trim();
         if (!metin) return false;
+        if (metin.includes('eslestir=')) {
+          const kod = ayiklaHashParametresi(metin, 'eslestir');
+          tamamlaMobilTelefonEslesme(kod);
+          return true;
+        }
         if (metin.startsWith('OQV2:')) {
           // Veri koruma: Ayrı okutulan kağıt QR'ı ASLA daha önce okunmuş bir kayda uygulanmaz
           // (eskiden en son okunan öğrencinin kaydına yazılıp o öğrencinin notunu siliyordu).
@@ -3079,7 +3231,7 @@
           <div style="display:flex; justify-content:space-between; align-items:center; gap:0.4rem; margin-bottom:0.45rem;">
             <div>
               <div style="font-weight:800; font-size:1rem;">👤 ${C.kacisHTML(sonuc.adSoyad)}</div>
-              <div class="mono" style="font-size:0.76rem; color:var(--metin-ikincil);">No: ${C.kacisHTML(sonuc.numaraEslesmediMi ? (sonuc.okunanNoKod || '?') : sonuc.ogrNo)} · Kitapçık: ${C.kacisHTML(sonuc.grup)}${sonuc.ozelKagitQrCozuldu ? ' · 🔐 Özel Anahtar' : ''}</div>
+              <div class="mono" style="font-size:0.76rem; color:var(--metin-ikincil);">No: ${C.kacisHTML(sonuc.numaraEslesmediMi ? (sonuc.okunanNoKod || '?') : sonuc.ogrNo)}${(!sonuc.numaraEslesmediMi && sonuc.okunanNoKod) ? ` (kağıtta kodlanan: <strong>${C.kacisHTML(sonuc.okunanNoKod)}</strong>)` : ''} · Kitapçık: ${C.kacisHTML(sonuc.grup)}${sonuc.ozelKagitQrCozuldu ? ' · 🔐 Özel Anahtar' : ''}</div>
             </div>
             <div style="text-align:right;">
               <div style="font-size:1.35rem; font-weight:900; color:var(--basari);">
@@ -3696,11 +3848,45 @@
 
       /* Etkinlik Bağlantıları */
       document.addEventListener('DOMContentLoaded', () => {
+        const acilisEslesmeKodu = ayiklaHashParametresi(location.hash, 'eslestir');
+        if (acilisEslesmeKodu) {
+          // Kod tek kullanımlıktır: adres çubuğundan ve geçmişten hemen silinir
+          try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+        }
         yukleBaslangicVerisi();
         kontrolEtMobilSunucuBaglantisi();
         cizDokunmatikAnahtarEditoru();
         guncelleMobilSonucListesi();
-        if (
+        guncelleMobilHesapKarti();
+        const btnEslesmeBagla = document.getElementById('btn-mobil-eslesme-bagla');
+        const girdiEslesmeKod = document.getElementById('girdi-mobil-eslesme-kod');
+        if (btnEslesmeBagla && girdiEslesmeKod) {
+          btnEslesmeBagla.addEventListener('click', () => tamamlaMobilTelefonEslesme(girdiEslesmeKod.value));
+          girdiEslesmeKod.addEventListener('keydown', (e) => { if (e.key === 'Enter') tamamlaMobilTelefonEslesme(girdiEslesmeKod.value); });
+        }
+        const btnSenkronize = document.getElementById('btn-mobil-senkronize');
+        if (btnSenkronize) btnSenkronize.addEventListener('click', () => mobilSenkronizeEt());
+        const btnBaglantiKaldir = document.getElementById('btn-mobil-baglanti-kaldir');
+        if (btnBaglantiKaldir) {
+          btnBaglantiKaldir.addEventListener('click', () => {
+            if (confirm('Telefonun bilgisayarla bağlantısı kaldırılsın mı? Okunmuş kağıtlar telefonda kalır.')) {
+              mobilBaglantiyiKaldir();
+              mobilHesapDurumYaz('Bağlantı kaldırıldı.');
+            }
+          });
+        }
+        const btnDersDegistir = document.getElementById('btn-mobil-ders-degistir');
+        if (btnDersDegistir) {
+          btnDersDegistir.addEventListener('click', () => {
+            const b = document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-liste"]');
+            if (b) b.click();
+            const sel = document.getElementById('mobil-aktif-ders-sec');
+            if (sel) setTimeout(() => { sel.scrollIntoView({ block: 'center' }); sel.focus(); }, 80);
+          });
+        }
+        if (acilisEslesmeKodu && location.protocol.startsWith('http')) {
+          tamamlaMobilTelefonEslesme(acilisEslesmeKodu);
+        } else if (
           !window.__mobilTestBulutCekmeDurdur &&
           alAktifMobilHocaToken() &&
           navigator.onLine !== false &&
@@ -3729,7 +3915,7 @@
         }
         const btnBulutDersCek = document.getElementById('btn-mobil-bulut-ders-cek');
         if (btnBulutDersCek) {
-          btnBulutDersCek.addEventListener('click', () => senkronizeEtBulutMobilDersler({ sessiz: false }));
+          btnBulutDersCek.addEventListener('click', () => mobilSenkronizeEt());
         }
         const kutuHocaGiris = document.getElementById('kutu-mobil-hoca-giris');
         const btnHocaGirisAc = document.getElementById('btn-mobil-hoca-giris-ac');
@@ -3762,7 +3948,7 @@
                 body: JSON.stringify({ kullaniciAdi: kadi, sifre })
               });
               const v = await res.json();
-              if (!res.ok || !v || !v.basarili || !v.token) {
+              if (!res.ok || !v || !v.token) {
                 mobilDurum.omrYetkiToken = '';
                 try { sessionStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
                 try { localStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
@@ -3773,9 +3959,11 @@
                 return;
               }
               kaydetMobilHocaToken(v.token);
+              try { localStorage.setItem(MOBIL_BAGLI_HOCA_ANAHTARI, JSON.stringify({ kullaniciAdi: v.kullaniciAdi, adSoyad: v.adSoyad, zamanMs: Date.now() })); } catch (_) {}
+              guncelleMobilHesapKarti();
               const sifreInp = document.getElementById('mobil-hoca-sifre');
               if (sifreInp) sifreInp.value = '';
-              await senkronizeEtBulutMobilDersler({ sessiz: false });
+              await senkronizeEtBulutMobilDersler({ sessiz: false, anahtarlariGuncelle: true });
             } catch (err) {
               if (hataEl) {
                 hataEl.textContent = anlasilirSunucuHatasi(err);
