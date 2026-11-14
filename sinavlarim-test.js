@@ -102,6 +102,7 @@ const KASA = {
     fs.writeFileSync(girdiYolu, Buffer.from(url.split(',')[1], 'base64'));
     await (await tel.$('#input-mobil-foto')).uploadFile(girdiYolu);
     await bekle(1600);
+    await tel.evaluate(() => { const b = document.getElementById('btn-mobil-dogrulama-tamam'); const k = document.getElementById('mobil-dogrulama'); if (k && !k.hidden && b) b.click(); });
   };
 
   try {

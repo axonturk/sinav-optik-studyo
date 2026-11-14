@@ -586,6 +586,14 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     }
     try { fs.unlinkSync(eksikNoYol); } catch (_) {}
 
+    // Yeni akış: liste kendiliğinden açılmaz; doğrulama görünümündeki "Öğrenciyi seç" düğmesi açar
+    const ogrSecGorunur = await mobil.evaluate(() => {
+      const k = document.getElementById('mobil-dogrulama');
+      const b = document.getElementById('btn-mobil-dogrulama-ogrenci');
+      return Boolean(k && !k.hidden && b && !b.hidden);
+    });
+    if (ogrSecGorunur) await mobil.evaluate(() => document.getElementById('btn-mobil-dogrulama-ogrenci').click());
+    await bekle(300);
     const mukerrerKontrol = await mobil.evaluate(() => {
       const d = window.__mobilDurumOku();
       const modal = document.getElementById('modal-mobil-ogrenci-eslestir');
@@ -594,7 +602,7 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
         modalAcik: Boolean(modal && getComputedStyle(modal).display !== 'none')
       };
     });
-    kontrol('Aynı eşleşmeyen kağıt 4 kez okutulduğunda 4 mükerrer satır yerine YALNIZ 1 satır oluştu ve Öğrenci Eşleştirme Çekmecesi açıldı', mukerrerKontrol.toplamKayit === 2 && mukerrerKontrol.modalAcik, JSON.stringify(mukerrerKontrol));
+    kontrol('Aynı eşleşmeyen kağıt 4 kez okutulduğunda 4 mükerrer satır yerine YALNIZ 1 satır oluştu ve doğrulama görünümündeki "Öğrenciyi seç" ile Öğrenci Eşleştirme Çekmecesi açıldı', ogrSecGorunur && mukerrerKontrol.toplamKayit === 2 && mukerrerKontrol.modalAcik, JSON.stringify(mukerrerKontrol));
 
     // Alt çekmeceden tek dokunuşla 2017 ENES BATIN KIRILMAZ'a ata
     await mobil.click('[data-eslestir-sec-no="2017"]');
@@ -652,6 +660,7 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
     kontrol('Kişiye özel OQV2 şifreli QR çevrimdışı çözüldü: yanlış kodlanan numaraya rağmen 2021 BAHAR ÖNCEL kendi özel anahtarıyla 100 tam puan aldı', Boolean(baharOkuma && baharOkuma.toplamPuan === 100 && baharOkuma.adSoyad.includes('BAHAR')), JSON.stringify(baharOkuma));
 
     // 5D: Mobil PWA sıfırlama yapıldığında masaüstü ders ve sorularına ASLA dokunulmadığını doğrula
+    await mobil.evaluate(() => { const k = document.getElementById('mobil-dogrulama'); const b = document.getElementById('btn-mobil-dogrulama-tamam'); if (k && !k.hidden && b) b.click(); });
     await mobil.click('[data-msekme="m-panel-liste"]');
     await bekle(150);
     await mobil.click('#btn-mobil-temizle');
