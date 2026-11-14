@@ -84,7 +84,7 @@ async function gonderOgrenciEpostasi(env, ep) {
       ogrNo: ep.ogrNo, kod: ep.kod, amac: ep.amac, epostaMaske: Cekirdek.maskeleEposta(ep.kime), zamanMs: Date.now()
     });
     sunucuDurumu.ogrenciBekleyenKodlar = sunucuDurumu.ogrenciBekleyenKodlar.slice(0, 200);
-    await kaydetSistemAnahtariD1(env, 'ogrenci_bekleyen_kodlar', sunucuDurumu.ogrenciBekleyenKodlar);
+    await kaydetSistemAnahtariD1(env, `ogrenci_kod:${ep.ogrNo}`, sunucuDurumu.ogrenciBekleyenKodlar[0]);
     return { gonderildi: false, gecisModu: true };
   }
   try {
@@ -100,12 +100,9 @@ async function gonderOgrenciEpostasi(env, ep) {
 }
 
 function ogrenciGirisTokenDogrula(token, ogrNo) {
-  const kayit = token ? sunucuDurumu.ogrenciGirisTokenlari.get(String(token)) : null;
-  if (!kayit) return false;
-  if (Date.now() > kayit.bitisMs) {
-    sunucuDurumu.ogrenciGirisTokenlari.delete(String(token));
-    return false;
-  }
+  if (!token) return false;
+  const kayit = sunucuDurumu.ogrenciGirisTokenlari.get(ogrenciTokenOzeti(token));
+  if (!kayit || Date.now() > kayit.bitisMs) return false;
   return String(kayit.ogrNo) === String(ogrNo);
 }
 
@@ -175,6 +172,10 @@ async function yukleSistemDurumuD1(env) {
   try {
     const satirlar = await env.SINAV_DB.prepare('SELECT anahtar, deger_json FROM sistem_durumu').all();
     const liste = (satirlar && Array.isArray(satirlar.results)) ? satirlar.results : [];
+    // Öğrenci hesapları, giriş anahtarları ve bekleyen kodlar satır satır tutulur; her yüklemede baştan kurulur
+    const yeniHesaplar = {};
+    const yeniTokenlar = new Map();
+    const yeniKodlar = [];
     for (const s of liste) {
       if (!s || !s.anahtar || !s.deger_json) continue;
       const v = JSON.parse(s.deger_json);
@@ -211,17 +212,40 @@ async function yukleSistemDurumuD1(env) {
         sunucuDurumu.kioskDelilLoglari = v;
       } else if (s.anahtar === 'kurumsal_sablonlar' && Array.isArray(v)) {
         sunucuDurumu.kurumsalSablonlar = v;
-      } else if (s.anahtar === 'ogrenci_hesaplari' && v && typeof v === 'object' && !Array.isArray(v)) {
-        sunucuDurumu.ogrenciHesaplari = v;
-      } else if (s.anahtar === 'ogrenci_giris_tokenlari' && Array.isArray(v)) {
-        const simdiYukle = Date.now();
-        sunucuDurumu.ogrenciGirisTokenlari = new Map(v.filter((x) => Array.isArray(x) && x[1] && x[1].bitisMs > simdiYukle));
-      } else if (s.anahtar === 'ogrenci_bekleyen_kodlar' && Array.isArray(v)) {
-        sunucuDurumu.ogrenciBekleyenKodlar = v;
+      } else if (s.anahtar.startsWith('ogrenci_hesap:') && v && typeof v === 'object') {
+        yeniHesaplar[s.anahtar.slice('ogrenci_hesap:'.length)] = v;
+      } else if (s.anahtar.startsWith('ogrenci_token:') && v && v.bitisMs > Date.now()) {
+        yeniTokenlar.set(s.anahtar.slice('ogrenci_token:'.length), v);
+      } else if (s.anahtar.startsWith('ogrenci_kod:') && v && v.zamanMs) {
+        yeniKodlar.push(v);
       }
     }
+    sunucuDurumu.ogrenciHesaplari = yeniHesaplar;
+    sunucuDurumu.ogrenciGirisTokenlari = yeniTokenlar;
+    sunucuDurumu.ogrenciBekleyenKodlar = yeniKodlar.sort((a, b) => b.zamanMs - a.zamanMs).slice(0, 200);
     sistemDurumuOnbellek.set(env.SINAV_DB, Date.now());
   } catch (_) {}
+}
+
+async function silSistemAnahtariD1(env, anahtar) {
+  if (!env || !env.SINAV_DB) return;
+  sistemDurumuOnbellek.delete(env.SINAV_DB);
+  try {
+    await env.SINAV_DB.prepare('DELETE FROM sistem_durumu WHERE anahtar = ?1').bind(anahtar).run();
+  } catch (_) {}
+}
+
+/* Tek öğrencinin hesabını kendi satırına yazar (silinmişse satırı siler) */
+async function kaydetOgrenciHesabiD1(env, ogrNo) {
+  const no = String(ogrNo || '').trim();
+  if (!no) return;
+  const h = sunucuDurumu.ogrenciHesaplari[no];
+  if (h) await kaydetSistemAnahtariD1(env, `ogrenci_hesap:${no}`, h);
+  else await silSistemAnahtariD1(env, `ogrenci_hesap:${no}`);
+}
+
+function ogrenciTokenOzeti(token) {
+  return Cekirdek.uretDelilLogHash(String(token || ''), 'OGR-GIRIS-TOKEN');
 }
 
 async function kaydetSistemAnahtariD1(env, anahtar, deger) {
@@ -1654,7 +1678,7 @@ export default {
         }
         const eylem = yol.endsWith('hoca-liste') ? 'hoca-liste' : 'hoca-sifirla';
         const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler });
-        if (r.degisti) await kaydetSistemAnahtariD1(env, 'ogrenci_hesaplari', sunucuDurumu.ogrenciHesaplari);
+        if (r.degisti) await kaydetOgrenciHesabiD1(env, govde && govde.ogrNo);
         if (eylem === 'hoca-liste') {
           r.veri.epostaHazir = epostaServisiHazirMi(env);
           r.veri.bekleyenKodlar = epostaServisiHazirMi(env) ? [] : sunucuDurumu.ogrenciBekleyenKodlar.filter((k) => Date.now() - k.zamanMs < 10 * 60 * 1000);
@@ -1673,6 +1697,8 @@ export default {
           return gonderJson(429, { hata: 'Çok fazla istek. Biraz sonra tekrar deneyin.' }, { 'Retry-After': String(genelSinir.tekrarSn) });
         }
         const govde = await okuJsonGovde(request);
+        // Hesap işlemlerinde 2,5 sn'lik önbellek atlanır: başka kopyada (isolate) az önce yazılan kayıt/kod görülsün
+        if (env && env.SINAV_DB) { sistemDurumuOnbellek.delete(env.SINAV_DB); await yukleSistemDurumuD1(env); }
         const ogrNo = String((govde && govde.ogrNo) || '').trim();
         const girisSinirAnahtar = `ogr-giris-hata:${ip}:${ogrNo}`;
         if (eylem === 'giris') {
@@ -1688,7 +1714,7 @@ export default {
           if (r.kod === 401) await kontrolHizSiniri(env, girisSinirAnahtar, 8);
           if (r.kod === 200) await hizSiniriSifirla(env, girisSinirAnahtar);
         }
-        if (r.degisti) await kaydetSistemAnahtariD1(env, 'ogrenci_hesaplari', sunucuDurumu.ogrenciHesaplari);
+        if (r.degisti) await kaydetOgrenciHesabiD1(env, ogrNo);
         if (r.eposta) {
           const g = await gonderOgrenciEpostasi(env, r.eposta);
           r.veri.epostaGonderildi = Boolean(g.gonderildi);
@@ -1699,8 +1725,16 @@ export default {
         }
         if (r.girisOgrNo) {
           const token = uretRastgeleToken(24);
-          sunucuDurumu.ogrenciGirisTokenlari.set(token, { ogrNo: r.girisOgrNo, bitisMs: Date.now() + 4 * 60 * 60 * 1000 });
-          await kaydetSistemAnahtariD1(env, 'ogrenci_giris_tokenlari', Array.from(sunucuDurumu.ogrenciGirisTokenlari.entries()));
+          const tokenKaydi = { ogrNo: r.girisOgrNo, bitisMs: Date.now() + 4 * 60 * 60 * 1000 };
+          sunucuDurumu.ogrenciGirisTokenlari.set(ogrenciTokenOzeti(token), tokenKaydi);
+          await kaydetSistemAnahtariD1(env, `ogrenci_token:${ogrenciTokenOzeti(token)}`, tokenKaydi);
+          // Süresi dolmuş giriş anahtarı satırlarını temizle (tablo şişmesin)
+          if (env && env.SINAV_DB) {
+            try {
+              await env.SINAV_DB.prepare("DELETE FROM sistem_durumu WHERE anahtar LIKE 'ogrenci_token:%' AND guncelleme_ms < ?1")
+                .bind(Date.now() - 4 * 60 * 60 * 1000).run();
+            } catch (_) {}
+          }
           r.veri.girisToken = token;
         }
         return gonderJson(r.kod, r.veri);
@@ -1715,6 +1749,10 @@ export default {
         const ihlal = kontrolZeroTrustYuk(govde, true);
         if (ihlal) return gonderJson(400, { hata: ihlal });
         // Öğrenci hesabı zorunluyken oturum yalnız numara + şifreyle giriş yapmış öğrenciye açılır
+        if (ogrenciHesabiZorunluMu(env) && env && env.SINAV_DB && !ogrenciGirisTokenDogrula(govde.girisToken, String(govde.ogrNo || '').trim())) {
+          sistemDurumuOnbellek.delete(env.SINAV_DB);
+          await yukleSistemDurumuD1(env);
+        }
         if (ogrenciHesabiZorunluMu(env) && !ogrenciGirisTokenDogrula(govde.girisToken, String(govde.ogrNo || '').trim())) {
           return gonderJson(401, { hata: 'Sınava başlamak için önce öğrenci numaranız ve şifrenizle giriş yapın.', girisGerekli: true });
         }
