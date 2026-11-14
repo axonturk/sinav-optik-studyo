@@ -725,6 +725,25 @@
      Optik formun içindeki dinamik soru sayılarını (DY, Test, Klasik, Kimlik)
      2D yüksek kontrastlı 8x8 bit matrisi olarak basar ve kameradan okur.
      ------------------------------------------------------------------------ */
+  /* SINAV KİMLİK KODU — kağıt hangi sınava ait?
+     Sınavın değişmeyen gizli anahtarından 12 bitlik kod (1..4095). Geometri matrisinin son 16 bitine
+     (12 bit kod + 4 bit sağlama) basılır; telefon kağıdı okurken doğru sınavı kendisi seçer.
+     Cevap anahtarı sonradan düzeltilse de kod değişmez (gizli anahtar sabittir). */
+  function uretSinavKimlikKodu(gizliAnahtar) {
+    const g = String(gizliAnahtar || '').trim();
+    if (!g) return 0;
+    const hex = uretDelilLogHash(g, 'SINAV-KIMLIK-KODU');
+    const kod = parseInt(String(hex).replace(/[^0-9a-f]/gi, '').slice(0, 3) || '0', 16) & 0xFFF;
+    return kod === 0 ? 1 : kod;
+  }
+  function sinavKimlikKoduSaglama(kod) {
+    return ((kod ^ (kod >> 4) ^ (kod >> 8) ^ 0x9) & 0xF);
+  }
+  function sinavKimlikEtiketi(kod) {
+    const k = Number(kod) || 0;
+    return k > 0 ? k.toString(16).toUpperCase().padStart(3, '0') : '';
+  }
+
   function kodlaOptikGeometriMatrisi(ayar) {
     // 6 baytlık (48 bit) geometri özeti + 16 bit CRC = 64 bit (8x8 matris)
     const dy = Math.min(30, Math.max(0, Number(ayar.dySayisi || 0)));
@@ -748,6 +767,12 @@
       for (let i = 7; i >= 0; i--) {
         bitler.push((b >> i) & 1);
       }
+    }
+    // Son 16 bit: sınav kimlik kodu (12 bit) + sağlama (4 bit). Kod yoksa eski dolgu deseni (1010...) kalır.
+    const kimlikKodu = Number(ayar.sinavKimlikKodu) || uretSinavKimlikKodu(ayar.sinavGizliAnahtar);
+    if (kimlikKodu > 0 && kimlikKodu <= 0xFFF) {
+      const deger = ((kimlikKodu & 0xFFF) << 4) | sinavKimlikKoduSaglama(kimlikKodu);
+      for (let i = 15; i >= 0; i--) bitler.push((deger >> i) & 1);
     }
     while (bitler.length < 64) {
       bitler.push((bitler.length % 2 === 0) ? 1 : 0);
@@ -776,13 +801,21 @@
     if (baytlar[5] !== beklenenCrc) return null;
 
     const kimlikModu = kimlikKod === 2 ? 'tam' : (kimlikKod === 3 ? 'qr' : (kimlikKod === 0 ? 'son3' : 'son2'));
+    let sinavKimlikKodu = 0;
+    if (bitler.length >= 64) {
+      let deger = 0;
+      for (let i = 48; i < 64; i++) deger = (deger << 1) | (bitler[i] ? 1 : 0);
+      const kod = (deger >> 4) & 0xFFF;
+      if (deger !== 0xAAAA && kod > 0 && (deger & 0xF) === sinavKimlikKoduSaglama(kod)) sinavKimlikKodu = kod;
+    }
     return {
       dySayisi,
       testSayisi,
       sikSayisi,
       klasikSayisi,
       kimlikModu,
-      haneSayisi
+      haneSayisi,
+      sinavKimlikKodu
     };
   }
 
@@ -2249,6 +2282,7 @@
 
     let koseler = ozelKoseler;
     let formBulucu = null;
+    let okunanSinavKimlikKodu = 0;
     if (!koseler) {
       formBulucu = bulOptikFormKoseleri(imageData, { yukseklik: KY });
       if (!formBulucu.bulundu) {
@@ -2277,6 +2311,7 @@
         const tahminiKY = Math.max(150, Math.min(720, Math.round(2 * KANONIK_FIDUCIAL_MERKEZ + (KANONIK_GENISLIK - 2 * KANONIK_FIDUCIAL_MERKEZ) / fizikiOran)));
         const onDuzGri = perspektifDuzeltGri(kaynakGri, imageData.width, imageData.height, koseler, KG, tahminiKY);
         const geoCozum = okuOptikGeometriMatrisiPikselden(onDuzGri, KG, tahminiKY);
+        if (geoCozum && geoCozum.sinavKimlikKodu) okunanSinavKimlikKodu = geoCozum.sinavKimlikKodu;
         if (
           geoCozum &&
           (geoCozum.dySayisi !== etkinYapi.dySayisi ||
@@ -2576,6 +2611,7 @@
       klasikDetay,
       koseler,
       algilananYapi: etkinYapi,
+      sinavKimlikKodu: okunanSinavKimlikKodu,
       kanonikBoyut: { genislik: KG, yukseklik: KY },
       kanonikHarita: harita,
       kanonikIkili: duz.ikili,
@@ -6634,7 +6670,10 @@
         klasikSoruPuan: norm.klasikSoruPuan,
         sinavGizliAnahtar: String(yapiKaynak.sinavGizliAnahtar || s.sinavGizliAnahtar || '').trim(),
         cevapAnahtarlari: temizleAnahtarObj(yapiKaynak.cevapAnahtarlari || s.cevapAnahtarlari),
-        anahtarEksikSayisi: sayAnahtarEksikSorular(s.tumSeciliSorular || yapiKaynak.tumSeciliSorular)
+        anahtarEksikSayisi: sayAnahtarEksikSorular(s.tumSeciliSorular || yapiKaynak.tumSeciliSorular),
+        sinavKimlikKodu: uretSinavKimlikKodu(String(yapiKaynak.sinavGizliAnahtar || s.sinavGizliAnahtar || '').trim()),
+        kayitAdi: String(s.ad || s.sinavAdi || '').slice(0, 96),
+        guncellemeMs: Number(s.guncellemeMs || s.olusturmaMs || s.zamanMs) || 0
       };
     };
 
@@ -10675,6 +10714,8 @@
     maskeleEposta,
     uretOgrenciDogrulamaKodu,
     uretTelefonEslesmeKodu,
+    uretSinavKimlikKodu,
+    sinavKimlikEtiketi,
     sayAnahtarEksikSorular,
     normalizeTelefonEslesmeKodu,
     VARSAYILAN_DAVET_KODU,

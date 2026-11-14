@@ -227,11 +227,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v23), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v24), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v23, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v23'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v24, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v24'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
@@ -1370,7 +1370,13 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
     const v2MobilHatalar = [];
     v2MobilSayfa.on('pageerror', (e) => v2MobilHatalar.push(e.message));
     await v2MobilSayfa.setViewport({ width: 390, height: 844 });
-    await v2MobilSayfa.goto(`${taban}/optik-mobil.html`, { waitUntil: 'networkidle0' });
+    // Gerçek akış: önce sınav telefona yüklenir (sınavsız telefon kağıt okumaz)
+    const v2Kurulum = Cekirdek.uretKompaktSetupQrPaketi({
+      sinavKodu: 'V2-CANLI-2026', dersAd: 'Yazılım Mühendisliği', dySayisi: 10, testSayisi: 10, klasikSayisi: 2, sikSayisi: 5,
+      kimlikModu: 'son2', haneSayisi: 2, dyToplamPuan: 20, testToplamPuan: 60, klasikToplamPuan: 20,
+      cevapAnahtarlari: { A: { dy: Array(10).fill('D'), test: Array(10).fill('A') } }
+    }, [], taban);
+    await v2MobilSayfa.goto(`${taban}/${v2Kurulum.hashHref}`, { waitUntil: 'networkidle0' });
     const kagitV2DataUrl = await v2MobilSayfa.evaluate(() => {
       const C = window.SinavOptikCekirdek;
       const d = window.__mobilDurumOku();
