@@ -9880,18 +9880,22 @@
         kilitleVeyaAcKayitliSinav(true);
       }
 
+      let ciktiSozu = null;
       if (formatSecimi === 'word-indir') {
-        indirWordBelgesiOlarak(paket.html, paket.dosyaAdiTabani);
+        ciktiSozu = indirWordBelgesiOlarak(paket.html, paket.dosyaAdiTabani);
       } else if (formatSecimi === 'pdf-indir') {
-        cizDomSayfalariniPdfOlarakIndir(paket.html, paket.dosyaAdiTabani);
+        ciktiSozu = cizDomSayfalariniPdfOlarakIndir(paket.html, paket.dosyaAdiTabani);
       } else {
         window.print();
       }
 
       // Çıktı = kayıt: soru, cevap anahtarı veya optik içeren çıktıda basılan sınav dondurulur (kaydetmeyi unutma kopukluğu biter).
-      // Çıktı geciktirilmesin diye kayıt çıktıdan SONRA yapılır; çıktıda kullanılan yapı yeniden hesaplanmadan kullanılır.
+      // Word/PDF üretimi eşzamansızdır; kayıt çıktı TAMAMEN bittikten sonra yapılır ki çıktıyı geciktirmesin.
+      // Çıktıda kullanılan yapı yeniden hesaplanmadan kullanılır.
       if (sinavKagidiKapsamiMi || ['ayri-optik', 'anahtar'].includes(kapsamSecimi)) {
-        basimIcinOtomatikKaydet(kapsamSecimi, formatSecimi, yapi);
+        Promise.resolve(ciktiSozu)
+          .catch(() => null)
+          .then(() => setTimeout(() => basimIcinOtomatikKaydet(kapsamSecimi, formatSecimi, yapi), 0));
       }
     };
 

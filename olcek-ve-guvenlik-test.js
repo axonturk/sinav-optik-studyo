@@ -1365,7 +1365,8 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
       dersAdi: 'Yazılım Mühendisliği',
       omrToken: v2OmrTok
     });
-    const v2MobilSayfa = await tarayici.newPage();
+    const v2MobilBaglam = await tarayici.createBrowserContext();
+    const v2MobilSayfa = await v2MobilBaglam.newPage();
     const v2MobilHatalar = [];
     v2MobilSayfa.on('pageerror', (e) => v2MobilHatalar.push(e.message));
     await v2MobilSayfa.setViewport({ width: 390, height: 844 });
@@ -1409,6 +1410,7 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
       rozet: (document.getElementById('rozet-mobil-bekleyen') || {}).textContent || ''
     }));
     await v2MobilSayfa.close();
+    await v2MobilBaglam.close();
     kontrol(
       '[41] Çevrimdışı mobil okuma Outbox kuyruğuna düşer (0 yatay taşma) ve #baglan=1 ile sunucuya otomatik aktarılır',
       mobilCevrimdisiDurum.bekleyenSayi >= 1 &&
@@ -1720,6 +1722,79 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
         !kasa503Kurtarma.bulutEtiket.includes('503') &&
         sunucuSoruSayisi503 >= 260,
       JSON.stringify({ kasa503Kurtarma, sunucuSoruSayisi503 })
+    );
+
+    const sayfaMobilSon3 = await tarayici.newPage();
+    await sayfaMobilSon3.setViewport({ width: 412, height: 892 });
+    await sayfaMobilSon3.goto(`http://127.0.0.1:${port}/optik-mobil.html`, { waitUntil: 'domcontentloaded' });
+    const son3VeCopKareSonuc = await sayfaMobilSon3.evaluate(async () => {
+      const C = window.SinavOptikCekirdek;
+      const gercekYapi = {
+        sinavKodu: 'SON3-TEST',
+        dersAd: 'İleri Ağ Yönetimi',
+        dySayisi: 15,
+        testSayisi: 10,
+        klasikSayisi: 0,
+        sikSayisi: 5,
+        kimlikModu: 'son3',
+        haneSayisi: 3,
+        cevapAnahtarlari: {
+          A: { dy: Array(15).fill('D'), test: Array(10).fill('A'), klasik: [] }
+        }
+      };
+      const cvs = document.getElementById('mobil-canvas-vizor');
+      const ctx = cvs.getContext('2d', { willReadFrequently: true });
+      C.cizSentetikOptikFormCanvas(cvs, gercekYapi, {
+        grup: 'A',
+        ogrNoKod: '039',
+        dyCevaplar: Array(15).fill('D'),
+        testCevaplar: Array(10).fill('A'),
+        klasikPuanlar: []
+      });
+      // İstemcide başlangıç yapısının son2/10+10 olduğunu varsay; kağıttaki 8x8 matris son3 + 15 DY + 10 Test'i otomatik çözmeli
+      const img = ctx.getImageData(0, 0, cvs.width, cvs.height);
+      const okuma = C.okuOptikFormImageData(img, {
+        dySayisi: 10,
+        testSayisi: 10,
+        klasikSayisi: 0,
+        sikSayisi: 5,
+        kimlikModu: 'son2',
+        haneSayisi: 2,
+        cevapAnahtarlari: gercekYapi.cevapAnahtarlari
+      }, [{ ogrNo: '247419039', adSoyad: 'ALİ BAŞARAN' }]);
+
+      // Boş/bozuk (?? + 0 işaretli) kare PWA listesine eklenmemeli
+      const oncekiSayi = window.__mobilDurumOku().okumaSayisi;
+      const copImg = ctx.createImageData(400, 220);
+      for (let i = 0; i < copImg.data.length; i += 4) {
+        copImg.data[i] = 240; copImg.data[i + 1] = 240; copImg.data[i + 2] = 240; copImg.data[i + 3] = 255;
+      }
+      const copOkuma = C.okuOptikFormImageData(copImg, gercekYapi, []);
+      const sonrakiSayi = window.__mobilDurumOku().okumaSayisi;
+      return {
+        formBulundu: okuma.formBulundu,
+        okunanNoKod: okuma.okunanNoKod,
+        ogrNo: okuma.ogrNo,
+        algilananKimlikModu: okuma.algilananYapi && okuma.algilananYapi.kimlikModu,
+        algilananDy: okuma.algilananYapi && okuma.algilananYapi.dySayisi,
+        algilananTest: okuma.algilananYapi && okuma.algilananYapi.testSayisi,
+        copFormBulundu: copOkuma.formBulundu,
+        oncekiSayi,
+        sonrakiSayi
+      };
+    });
+    await sayfaMobilSon3.close();
+    kontrol(
+      '[46] Mobil OMR: son3 (039) kimlik ve 15 D/Y + 10 Test matrisi bozulmadan okunur; boş/bozuk kare reddedilir',
+      son3VeCopKareSonuc.formBulundu === true &&
+        son3VeCopKareSonuc.okunanNoKod === '039' &&
+        son3VeCopKareSonuc.ogrNo === '247419039' &&
+        son3VeCopKareSonuc.algilananKimlikModu === 'son3' &&
+        son3VeCopKareSonuc.algilananDy === 15 &&
+        son3VeCopKareSonuc.algilananTest === 10 &&
+        son3VeCopKareSonuc.copFormBulundu === false &&
+        son3VeCopKareSonuc.oncekiSayi === son3VeCopKareSonuc.sonrakiSayi,
+      JSON.stringify(son3VeCopKareSonuc)
     );
 
     kontrol('Masaüstü oturumu boyunca sıfır sayfa JS hatası', sayfaHatalari.length === 0, sayfaHatalari.join(' | '));

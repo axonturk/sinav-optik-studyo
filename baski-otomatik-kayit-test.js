@@ -47,7 +47,15 @@ function kontrol(ad, kosul, detay = '') {
       const fs2 = document.getElementById('baski-format-sec'); fs2.value = f; fs2.dispatchEvent(new Event('change', { bubbles: true }));
       document.getElementById('btn-secili-baski-calistir').click();
     }, kapsam, format);
-    await bekle(2500);
+    // Kayıt çıktı bittikten sonra yapılır: sabit süre yerine basım geçmişinin büyümesini bekle (soru içermeyen çıktıda 2,5 sn)
+    const toplamBasim = (dd) => (dd.kayitliSinavlar || []).reduce((t, k) => t + ((k.basimGecmisi || []).length), 0);
+    if (['yoklama', 'tutanak', 'tutanak-yoklama'].includes(kapsam)) { await bekle(2500); return; }
+    const once = toplamBasim(await depo());
+    for (let i = 0; i < 60; i++) {
+      await bekle(250);
+      if (toplamBasim(await depo()) > once) break;
+    }
+    await bekle(200);
   };
   try {
     await sayfa.goto(`${taban}/index.html`, { waitUntil: 'networkidle0' });
