@@ -61,8 +61,53 @@ const sunucuDurumu = {
   v2TablolarHazir: false,
   bulutKasaSoruParcalari: new Map(),
   bulutKasalarBellek: new Map(),
-  bulutGecmisBellek: new Map()
+  bulutGecmisBellek: new Map(),
+  ogrenciHesaplari: {}, // ogrNo -> { durum, eposta, telefon, sifreHash, kodOzeti, kodAmac, kodBitisMs, kodDeneme }
+  ogrenciGirisTokenlari: new Map(), // token -> { ogrNo, bitisMs }
+  ogrenciBekleyenKodlar: [] // E-posta servisi yokken (geçiş modu) öğretmenin göreceği kodlar
 };
+
+/* Öğrenci hesabı zorunluluğu: varsayılan AÇIK. Yalnız OGRENCI_HESAP_ZORUNLU="0" ile kapatılabilir. */
+function ogrenciHesabiZorunluMu(env) {
+  return String((env && env.OGRENCI_HESAP_ZORUNLU) || '1') !== '0';
+}
+
+function epostaServisiHazirMi(env) {
+  return Boolean(env && env.RESEND_API_KEY && env.EPOSTA_GONDEREN);
+}
+
+/* Doğrulama e-postası (Resend uyumlu). Servis yoksa kod öğretmen paneline düşer (geçiş modu). */
+async function gonderOgrenciEpostasi(env, ep) {
+  if (!ep) return { gonderildi: false };
+  if (!epostaServisiHazirMi(env)) {
+    sunucuDurumu.ogrenciBekleyenKodlar.unshift({
+      ogrNo: ep.ogrNo, kod: ep.kod, amac: ep.amac, epostaMaske: Cekirdek.maskeleEposta(ep.kime), zamanMs: Date.now()
+    });
+    sunucuDurumu.ogrenciBekleyenKodlar = sunucuDurumu.ogrenciBekleyenKodlar.slice(0, 200);
+    await kaydetSistemAnahtariD1(env, 'ogrenci_bekleyen_kodlar', sunucuDurumu.ogrenciBekleyenKodlar);
+    return { gonderildi: false, gecisModu: true };
+  }
+  try {
+    const yanit = await fetch(env.EPOSTA_API_URL || 'https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: env.EPOSTA_GONDEREN, to: [ep.kime], subject: ep.konu, text: ep.metin })
+    });
+    return { gonderildi: yanit.ok, hataKodu: yanit.ok ? 0 : yanit.status };
+  } catch (_) {
+    return { gonderildi: false, hataKodu: 503 };
+  }
+}
+
+function ogrenciGirisTokenDogrula(token, ogrNo) {
+  const kayit = token ? sunucuDurumu.ogrenciGirisTokenlari.get(String(token)) : null;
+  if (!kayit) return false;
+  if (Date.now() > kayit.bitisMs) {
+    sunucuDurumu.ogrenciGirisTokenlari.delete(String(token));
+    return false;
+  }
+  return String(kayit.ogrNo) === String(ogrNo);
+}
 
 async function hazirlaHashliHocaKaydiAsync(kayit) {
   const kopya = Object.assign({}, kayit);
@@ -166,6 +211,13 @@ async function yukleSistemDurumuD1(env) {
         sunucuDurumu.kioskDelilLoglari = v;
       } else if (s.anahtar === 'kurumsal_sablonlar' && Array.isArray(v)) {
         sunucuDurumu.kurumsalSablonlar = v;
+      } else if (s.anahtar === 'ogrenci_hesaplari' && v && typeof v === 'object' && !Array.isArray(v)) {
+        sunucuDurumu.ogrenciHesaplari = v;
+      } else if (s.anahtar === 'ogrenci_giris_tokenlari' && Array.isArray(v)) {
+        const simdiYukle = Date.now();
+        sunucuDurumu.ogrenciGirisTokenlari = new Map(v.filter((x) => Array.isArray(x) && x[1] && x[1].bitisMs > simdiYukle));
+      } else if (s.anahtar === 'ogrenci_bekleyen_kodlar' && Array.isArray(v)) {
+        sunucuDurumu.ogrenciBekleyenKodlar = v;
       }
     }
     sistemDurumuOnbellek.set(env.SINAV_DB, Date.now());
@@ -372,6 +424,31 @@ async function dogrulaOmrVeyaHocaToken(env, token, hedefOturumKodu = '') {
     return { tur: 'omr_eslesme', kullaniciAdi: payload.k, oturumKodu: payload.o, tid: payload.tid };
   } catch (_) {
     return null;
+  }
+}
+
+/* Yalnız HATALI denemeleri sayan sınır (giriş / doğrulama kodu): sayaç artırmadan durumu okur */
+async function hizSiniriDurumu(env, anahtar, maksDeneme = 8, pencereMs = 15 * 60 * 1000) {
+  const simdi = Date.now();
+  let sayac = 0;
+  let baslangic = 0;
+  if (env && env.SINAV_DB) {
+    try {
+      const sat = await env.SINAV_DB.prepare('SELECT sayac, pencere_baslangic_ms FROM hiz_sinirlari WHERE anahtar = ?1').bind(anahtar).first();
+      if (sat) { sayac = Number(sat.sayac) || 0; baslangic = Number(sat.pencere_baslangic_ms) || 0; }
+    } catch (_) {}
+  } else {
+    const m = sunucuDurumu.hizSinirlari.get(anahtar);
+    if (m) { sayac = m.sayac; baslangic = m.pencereBaslangicMs; }
+  }
+  if (!baslangic || (simdi - baslangic) >= pencereMs || sayac < maksDeneme) return { asildi: false, tekrarSn: 0 };
+  return { asildi: true, tekrarSn: Math.ceil(Math.max(1000, pencereMs - (simdi - baslangic)) / 1000) };
+}
+
+async function hizSiniriSifirla(env, anahtar) {
+  sunucuDurumu.hizSinirlari.delete(anahtar);
+  if (env && env.SINAV_DB) {
+    try { await env.SINAV_DB.prepare('DELETE FROM hiz_sinirlari WHERE anahtar = ?1').bind(anahtar).run(); } catch (_) {}
   }
 }
 
@@ -998,10 +1075,19 @@ export default {
         const havuz = Array.isArray(sunucuDurumu.hocaListesi) && sunucuDurumu.hocaListesi.length > 0
           ? sunucuDurumu.hocaListesi
           : [sunucuDurumu.hocaHesap];
+        // Kaba kuvvet koruması: aynı IP + kullanıcı adı için 15 dakikada 8 hatalı denemeden sonra bekletilir
+        const girisIp = String(request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '127.0.0.1').split(',')[0].trim();
+        const sinirAnahtar = `hoca-giris-hata:${girisIp}:${String(govde.kullaniciAdi || '').trim().toLowerCase()}`;
+        const sinir = await hizSiniriDurumu(env, sinirAnahtar, 8);
+        if (sinir.asildi) {
+          return gonderJson(429, { hata: `Çok fazla hatalı giriş denemesi. ${Math.ceil(sinir.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(sinir.tekrarSn) });
+        }
         const sonuc = await Cekirdek.dogrulaHocaGirisAsync(govde.kullaniciAdi, govde.sifre, havuz);
         if (!sonuc.basarili) {
+          if (sonuc.kod === 401) await kontrolHizSiniri(env, sinirAnahtar, 8);
           return gonderJson(sonuc.kod, { hata: sonuc.hata, durum: sonuc.durum || 'reddedildi' });
         }
+        await hizSiniriSifirla(env, sinirAnahtar);
         const hocaToken = uretRastgeleToken(24);
         const simdi = Date.now();
         sunucuDurumu.aktifHocaTokenlar.add(hocaToken);
@@ -1554,11 +1640,84 @@ export default {
       });
     }
 
+    // ---- Öğrenci hesabı: ayar / durum / ilk kayıt + e-posta kodu / giriş / şifre yenileme / öğretmen paneli ----
+    if (metot === 'GET' && yol === '/api/ogrenci-hesap/ayar') {
+      return gonderJson(200, { hesapZorunlu: ogrenciHesabiZorunluMu(env), epostaHazir: epostaServisiHazirMi(env) });
+    }
+    if (yol === '/api/ogrenci-hesap/hoca-liste' || yol === '/api/ogrenci-hesap/hoca-sifirla') {
+      try {
+        let govde = {};
+        if (metot === 'POST') { try { govde = await okuJsonGovde(request); } catch (_) { govde = {}; } }
+        const token = cozHocaTokenIstekten(request, govde, urlNesne);
+        if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token)) {
+          return gonderJson(401, { hata: 'Öğretmen oturumu gerekli.' });
+        }
+        const eylem = yol.endsWith('hoca-liste') ? 'hoca-liste' : 'hoca-sifirla';
+        const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler });
+        if (r.degisti) await kaydetSistemAnahtariD1(env, 'ogrenci_hesaplari', sunucuDurumu.ogrenciHesaplari);
+        if (eylem === 'hoca-liste') {
+          r.veri.epostaHazir = epostaServisiHazirMi(env);
+          r.veri.bekleyenKodlar = epostaServisiHazirMi(env) ? [] : sunucuDurumu.ogrenciBekleyenKodlar.filter((k) => Date.now() - k.zamanMs < 10 * 60 * 1000);
+        }
+        return gonderJson(r.kod, r.veri);
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+    if (metot === 'POST' && /^\/api\/ogrenci-hesap\/(durum|kayit-baslat|kayit-onayla|giris|sifre-sifirla-baslat|sifre-sifirla-onayla)$/.test(yol)) {
+      try {
+        const eylem = yol.split('/').pop();
+        const ip = String(request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '127.0.0.1').split(',')[0].trim();
+        const genelSinir = await kontrolHizSiniri(env, `ogr-hesap:${ip}`, 120, 15 * 60 * 1000);
+        if (!genelSinir.izinli) {
+          return gonderJson(429, { hata: 'Çok fazla istek. Biraz sonra tekrar deneyin.' }, { 'Retry-After': String(genelSinir.tekrarSn) });
+        }
+        const govde = await okuJsonGovde(request);
+        const ogrNo = String((govde && govde.ogrNo) || '').trim();
+        const girisSinirAnahtar = `ogr-giris-hata:${ip}:${ogrNo}`;
+        if (eylem === 'giris') {
+          const s2 = await hizSiniriDurumu(env, girisSinirAnahtar, 8);
+          if (s2.asildi) return gonderJson(429, { hata: `Çok fazla hatalı giriş. ${Math.ceil(s2.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(s2.tekrarSn) });
+        }
+        if (eylem === 'kayit-baslat' || eylem === 'sifre-sifirla-baslat') {
+          const s2 = await kontrolHizSiniri(env, `ogr-kod-gonder:${ogrNo}`, 4, 15 * 60 * 1000);
+          if (!s2.izinli) return gonderJson(429, { hata: `Çok sık kod istendi. ${Math.ceil(s2.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(s2.tekrarSn) });
+        }
+        const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler });
+        if (eylem === 'giris') {
+          if (r.kod === 401) await kontrolHizSiniri(env, girisSinirAnahtar, 8);
+          if (r.kod === 200) await hizSiniriSifirla(env, girisSinirAnahtar);
+        }
+        if (r.degisti) await kaydetSistemAnahtariD1(env, 'ogrenci_hesaplari', sunucuDurumu.ogrenciHesaplari);
+        if (r.eposta) {
+          const g = await gonderOgrenciEpostasi(env, r.eposta);
+          r.veri.epostaGonderildi = Boolean(g.gonderildi);
+          if (g.gecisModu) r.veri.gecisModu = true;
+          if (!g.gonderildi && !g.gecisModu) {
+            return gonderJson(502, { hata: 'Doğrulama e-postası gönderilemedi. Biraz sonra tekrar deneyin veya öğretmeninize başvurun.' });
+          }
+        }
+        if (r.girisOgrNo) {
+          const token = uretRastgeleToken(24);
+          sunucuDurumu.ogrenciGirisTokenlari.set(token, { ogrNo: r.girisOgrNo, bitisMs: Date.now() + 4 * 60 * 60 * 1000 });
+          await kaydetSistemAnahtariD1(env, 'ogrenci_giris_tokenlari', Array.from(sunucuDurumu.ogrenciGirisTokenlari.entries()));
+          r.veri.girisToken = token;
+        }
+        return gonderJson(r.kod, r.veri);
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
     if (metot === 'POST' && yol === '/api/ogrenci-oturum-baslat') {
       try {
         const govde = await okuJsonGovde(request);
         const ihlal = kontrolZeroTrustYuk(govde, true);
         if (ihlal) return gonderJson(400, { hata: ihlal });
+        // Öğrenci hesabı zorunluyken oturum yalnız numara + şifreyle giriş yapmış öğrenciye açılır
+        if (ogrenciHesabiZorunluMu(env) && !ogrenciGirisTokenDogrula(govde.girisToken, String(govde.ogrNo || '').trim())) {
+          return gonderJson(401, { hata: 'Sınava başlamak için önce öğrenci numaranız ve şifrenizle giriş yapın.', girisGerekli: true });
+        }
         if (!sunucuDurumu.aktifSinav || !sunucuDurumu.aktifSinav.aktif) {
           return gonderJson(403, { hata: 'Aktif bir online sınav bulunmuyor.' });
         }

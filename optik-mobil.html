@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Cep Optik Okuyucu (Mobil OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261113a" />
+  <link rel="stylesheet" href="ortak.css?v=20261114b" />
   <style>
     html, body {
       margin: 0;
@@ -787,30 +787,35 @@
 
       <div class="kart">
         <div class="kart-baslik">
-          <span>Sınıf Özeti ve Dışa Aktarım</span>
+          <span>Sınıf Özeti</span>
           <div style="display:flex; gap:0.35rem; flex-wrap:wrap;">
-            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-obs-csv">OBS Resmi (.csv)</button>
-            <button type="button" class="btn btn-basari btn-kucuk" id="btn-mobil-csv-indir">Okunanlar (.csv)</button>
-            <button type="button" class="btn btn-kucuk" id="btn-mobil-sonuc-json-indir" title="Stüdyo Madde Analizi ve ÖÇ Karnesi için soru bazlı detaylı sonuç paketi">Stüdyo Paketi (.json)</button>
-            <button type="button" class="btn btn-kucuk" id="btn-mobil-sinavpaket-indir" title="Çevrimdışı SHA-256 Mühürlü Tam Sınav Paketi (.sinavpaket.json)">💾 Sınav Paketi</button>
-            <label class="btn btn-kucuk" style="cursor:pointer;" title="Bilgisayardan .sinavpaket.json yükle">📥 Paket Yükle <input type="file" id="input-mobil-sinavpaket-yukle" accept=".json,.sinavpaket.json,application/json" style="display:none;" /></label>
             <button type="button" class="btn btn-kucuk" id="btn-mobil-geri-al" hidden>Geri Al</button>
             <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-mobil-temizle">Sıfırla</button>
           </div>
         </div>
         <div id="mobil-sinif-istatistik-ozet" style="font-size:0.85rem; margin-bottom:0.55rem;"></div>
 
-        <!-- Stüdyoya (PC) Detaylı Sonuç Aktarım Çubuğu -->
+        <!-- Tek birincil aktarım: Bilgisayara gönder. Diğer biçimler katlanır bölümde (sınav günü "hangisi?" sorusu kalmasın) -->
         <div style="padding:0.55rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:0.75rem;">
           <div style="font-weight:600; font-size:0.8rem; color:var(--birincil); margin-bottom:0.3rem;">
-            Bilgisayar Stüdyosuna Detaylı Sonuç Aktar
+            Sonuçları bilgisayara gönder
           </div>
           <div style="display:flex; gap:0.35rem; flex-wrap:wrap; align-items:center;">
-            <input type="text" id="mobil-sonuc-pc-kodu" placeholder="PC Oturum Kodu (Örn: PC-AB12CD)" style="flex:1; min-width:140px; font-size:0.78rem;" />
-            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-sonuc-pc-gonder">PC'ye Canlı Gönder</button>
-            <button type="button" class="btn btn-kucuk" id="btn-mobil-sonuc-kod-kopyala">Paketi Kopyala</button>
+            <input type="text" id="mobil-sonuc-pc-kodu" placeholder="Bilgisayardaki oturum kodu (ör. PC-AB12CD)" style="flex:1; min-width:140px; font-size:0.78rem;" />
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-sonuc-pc-gonder">Bilgisayara Gönder</button>
           </div>
           <div id="etiket-mobil-sonuc-aktar-bilgi" style="font-size:0.75rem; color:var(--metin-ikincil); margin-top:0.3rem;"></div>
+          <details style="margin-top:0.45rem;">
+            <summary style="cursor:pointer; font-size:0.78rem; color:var(--metin-ikincil);">Diğer biçimler (internet yoksa veya dosya gerekiyorsa)</summary>
+            <div style="display:flex; gap:0.35rem; flex-wrap:wrap; margin-top:0.4rem;">
+              <button type="button" class="btn btn-kucuk" id="btn-mobil-obs-csv">OBS not dosyası (.csv)</button>
+              <button type="button" class="btn btn-kucuk" id="btn-mobil-csv-indir">Okunanlar (.csv)</button>
+              <button type="button" class="btn btn-kucuk" id="btn-mobil-sonuc-json-indir" title="Stüdyo Madde Analizi ve ÖÇ Karnesi için soru bazlı detaylı sonuç paketi">Stüdyo paketi (.json)</button>
+              <button type="button" class="btn btn-kucuk" id="btn-mobil-sinavpaket-indir" title="Çevrimdışı SHA-256 Mühürlü Tam Sınav Paketi (.sinavpaket.json)">Sınav paketi</button>
+              <label class="btn btn-kucuk" style="cursor:pointer;" title="Bilgisayardan .sinavpaket.json yükle">Paket yükle <input type="file" id="input-mobil-sinavpaket-yukle" accept=".json,.sinavpaket.json,application/json" style="display:none;" /></label>
+              <button type="button" class="btn btn-kucuk" id="btn-mobil-sonuc-kod-kopyala">Paketi kopyala</button>
+            </div>
+          </details>
         </div>
 
         <div class="tablo-sarmal" style="overflow-x:auto; max-width:100%;">
@@ -879,6 +884,7 @@
     <button type="button" class="mobil-sekme-btn" data-msekme="m-panel-liste" title="Okunan Kağıtlar ve Sonuçlar">
       <svg class="ui-ikon"><use href="#i-chart"></use></svg>
       <span>Liste (<span id="mobil-alt-sayac">0</span>)</span>
+      <span id="mobil-bekleyen-rozet" hidden title="Öğrenci seçimi veya karar bekleyen kağıt" style="position:absolute; top:4px; right:10px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#d97706; color:#fff; font-size:11px; font-weight:700; line-height:18px; text-align:center;">0</span>
     </button>
     <button type="button" class="mobil-sekme-btn" data-msekme="m-panel-anahtar" title="Cevap Anahtarı ve Sınav Yapısı">
       <svg class="ui-ikon"><use href="#i-key"></use></svg>
@@ -899,7 +905,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261112b"></script>
+  <script src="guvenlik-ve-veri.js?v=20261114b"></script>
   <script>
     (function () {
       'use strict';
@@ -1149,14 +1155,21 @@
         if (!paket || !Array.isArray(paket.ogrenciler)) return;
         const gelenId = String(paket.dersId || '').trim();
         const gelenKod = String(paket.dersKod || '').trim();
-        const gelenAd = String(paket.dersAd || '').trim();
+        let gelenAd = String(paket.dersAd || '').trim();
         const mevcutVarsayilanBosMu =
           mobilDurum.dersId === 'varsayilan' &&
           mobilDurum.ogrenciler.length === 0 &&
           mobilDurum.okumaSonuclari.length === 0;
+        // Ders kimliği taşımayan liste, o an açık olan dersin listesinin ÜZERİNE YAZILMAZ (eskiden başka dersin listesi siliniyordu);
+        // telefon boşsa varsayılan derse, değilse ayrı bir "Aktarılan liste" dersine konur.
         const hedefId = gelenId
           ? temizDersAnahtari(gelenId)
-          : (gelenKod || gelenAd ? temizDersAnahtari(gelenKod || gelenAd) : (mevcutVarsayilanBosMu ? 'varsayilan' : mobilDurum.dersId));
+          : (gelenKod || gelenAd
+            ? temizDersAnahtari(gelenKod || gelenAd)
+            : (mevcutVarsayilanBosMu ? 'varsayilan' : temizDersAnahtari(`aktarilan-liste-${new Date().toISOString().slice(0, 16)}`)));
+        if (!gelenId && !gelenKod && !gelenAd && !mevcutVarsayilanBosMu) {
+          gelenAd = `Aktarılan liste (${new Date().toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})`;
+        }
 
         if (!mobilDurum.dersPaketleriHaritasi[hedefId]) {
           const bazYapi = kopyalaMobilSinavYapisi(mobilDurum.sinavYapisi);
@@ -1547,7 +1560,14 @@
             const hamMasaustu = localStorage.getItem(MASAUSTU_DEPO_ANAHTAR);
             if (hamMasaustu) {
               const mJson = JSON.parse(hamMasaustu);
-              const mVeri = C.semaDogrulaVeTemizle(mJson);
+              // Stüdyo deposundaki "ogrenciler" TÜM derslerin öğrencileridir; yalnız stüdyoda açık olan dersinkiler alınır
+              // (eskiden başka derslerin öğrencileri de bu sınavın listesine karışıyordu).
+              const aktifDers = String((mJson && mJson.aktifDersId) || '');
+              const hamListe = Array.isArray(mJson && mJson.ogrenciler) ? mJson.ogrenciler : [];
+              const dersListesi = aktifDers
+                ? hamListe.filter((o) => o && (!Array.isArray(o.dersIdler) || o.dersIdler.length === 0 || o.dersIdler.includes(aktifDers)))
+                : hamListe;
+              const mVeri = C.semaDogrulaVeTemizle(Object.assign({}, mJson, { ogrenciler: dersListesi }));
               if (Array.isArray(mVeri.ogrenciler) && mVeri.ogrenciler.length > 0) {
                 mobilDurum.ogrenciler = mVeri.ogrenciler;
               }
@@ -1580,9 +1600,16 @@
 
         if (onCozulmusSetup) {
           if (onCozulmusSetup.dersId) {
-            mobilDurum.dersId = temizDersAnahtari(onCozulmusSetup.dersId);
+            const yeniId = temizDersAnahtari(onCozulmusSetup.dersId);
+            if (yeniId !== mobilDurum.dersId) {
+              // Başka derse geçiş: önceki dersin listesi ve kodu yeni derse TAŞINMAZ (ders adları ve listeler karışıyordu)
+              const hedefPaket = mobilDurum.dersPaketleriHaritasi[yeniId];
+              mobilDurum.ogrenciler = hedefPaket && Array.isArray(hedefPaket.ogrenciler) ? hedefPaket.ogrenciler.slice() : [];
+              mobilDurum.dersKod = (hedefPaket && hedefPaket.kod) || '';
+            }
+            mobilDurum.dersId = yeniId;
           }
-          if (onCozulmusSetup.sinavKodu && !mobilDurum.dersKod) {
+          if (onCozulmusSetup.sinavKodu && !mobilDurum.dersKod && !onCozulmusSetup.dersId) {
             mobilDurum.dersKod = String(onCozulmusSetup.sinavKodu).replace(/-SINAV$/i, '');
           }
           delete mobilDurum.sinavYapisi.soruPuanlari;
@@ -1819,10 +1846,18 @@
             if (cozulmusSetup.omrToken || cozulmusSetup.eslesmeToken) {
               kaydetMobilHocaToken(cozulmusSetup.omrToken || cozulmusSetup.eslesmeToken);
             }
-            if (cozulmusSetup.dersId) {
-              mobilDurum.dersId = temizDersAnahtari(cozulmusSetup.dersId);
-            }
             const eskiAnahtar = etkinMobilSinavAnahtari();
+            if (cozulmusSetup.dersId) {
+              const yeniId = temizDersAnahtari(cozulmusSetup.dersId);
+              if (yeniId !== mobilDurum.dersId) {
+                // Önce mevcut dersi kendi paketine kaydet, sonra hedef dersin listesine geç (listeler/ders adları karışmasın)
+                guncelleMobilDersPaketKaydi();
+                const hedefPaket = mobilDurum.dersPaketleriHaritasi[yeniId];
+                mobilDurum.ogrenciler = hedefPaket && Array.isArray(hedefPaket.ogrenciler) ? hedefPaket.ogrenciler.slice() : [];
+                mobilDurum.dersKod = (hedefPaket && hedefPaket.kod) || '';
+              }
+              mobilDurum.dersId = yeniId;
+            }
             const yeniKodAnahtar = temizSinavAnahtariHesapla(cozulmusSetup.sinavKodu);
             const yeniAnahtar = mobilDurum.dersId && mobilDurum.dersId !== 'varsayilan'
               ? temizSinavAnahtariHesapla(mobilDurum.dersId + '__' + yeniKodAnahtar)
@@ -3453,8 +3488,18 @@
           ${bekleyenSayisi > 0 ? ` · <span class="rozet rozet-sari">⚠️ ${bekleyenSayisi} Eşleşme Bekliyor</span>` : ''}
         `;
 
+        // Seçim/karar bekleyen kağıtlar alt çubukta rozetle görünür ve listenin başında durur (sınav günü gözden kaçmasın)
+        const bekleyenRozet = document.getElementById('mobil-bekleyen-rozet');
+        if (bekleyenRozet) {
+          bekleyenRozet.textContent = String(bekleyenSayisi);
+          bekleyenRozet.hidden = bekleyenSayisi === 0;
+          const listeBtn = bekleyenRozet.closest('button');
+          if (listeBtn) listeBtn.style.position = 'relative';
+        }
         const tbody = document.getElementById('mobil-tablo-okunanlar');
         tbody.innerHTML = mobilDurum.okumaSonuclari
+          .slice()
+          .sort((a, b) => Number(kagitKimlikBelirsizMi(b)) - Number(kagitKimlikBelirsizMi(a)))
           .map((s) => {
             const belirsiz = kagitKimlikBelirsizMi(s);
             const gosterilenNo = belirsiz ? (s.okunanNoKod || '?0') : String(s.ogrNo);

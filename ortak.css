@@ -2543,3 +2543,14 @@ body:not(.sinav-basildi-kilitli) .a4-sahne [data-antet-alan]:hover {
     display: flex !important;
   }
 }
+
+
+/* Öğrenci hesabı adımları (kiosk): hesap zorunluyken eski tek-form alanları gizlenir,
+   sınav listesi / kurallar / başlat yalnız girişten sonra görünür */
+#kiosk-hesap-adimlari [hidden],
+#kiosk-hesap-adimlari[hidden] { display: none !important; }
+#kiosk-giris-formu.kiosk-hesap-modu .kiosk-eski-alan { display: none !important; }
+#kiosk-giris-formu.kiosk-hesap-modu:not(.kiosk-giris-tamam) .kiosk-giris-sonrasi { display: none !important; }
+.kiosk-h-adim { padding: 12px; border: 1px solid var(--kenar); border-radius: 8px; margin-bottom: 12px; background: var(--bg-kart); }
+#kiosk-h-mesaj.tur-hata { background: var(--tehlike-acik); color: var(--tehlike); }
+#kiosk-h-mesaj.tur-bilgi { background: var(--bg-ikincil); color: var(--metin); }

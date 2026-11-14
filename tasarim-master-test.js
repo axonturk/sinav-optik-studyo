@@ -18,6 +18,7 @@
    ========================================================================== */
 'use strict';
 
+process.env.SINAV_OGRENCI_HESAP_ZORUNLU = process.env.SINAV_OGRENCI_HESAP_ZORUNLU || '0'; // Bu test eski (hesapsız) kiosk akışını sınar; yeni akış: ogrenci-hesap-test.js
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer-core');

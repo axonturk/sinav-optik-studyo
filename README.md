@@ -34,7 +34,23 @@ npm run test:pwa         # manifest, servis işçisi, çevrimdışı açılış
 ```
 Uçtan uca testler Chrome/Edge ister. Kalite formu örnekleri (`ornek-dosyalar/`) kurumsal belge içerdiğinden depoya konmamıştır; ilgili e2e adımları için kendi örnek `.docx/.xls/.doc/.pdf` dosyalarınızı bu klasöre koyun.
 
+## Öğrenci hesabı ve e-posta doğrulama
+Online sınava yalnız öğretmenin sınıf listesindeki öğrenciler girebilir:
+1. Öğrenci numarasını yazar. İlk girişte e-posta, telefon ve şifresini belirler; e-postasına 6 haneli kod gider (10 dk geçerli, 5 deneme).
+2. Sonraki girişler numara + şifre. Şifre yenileme kayıtlı e-postaya kodla yapılır.
+3. Telefon ve e-posta yalnız öğretmenin **Sınıf ve Salonlar › Öğrenci hesapları** panelinde görünür; öğretmen hesabı sıfırlayabilir.
+
+E-posta gönderimi için (Cloudflare Worker) iki gizli değer gerekir; değerler koda yazılmaz:
+```bash
+npx wrangler secret put RESEND_API_KEY      # Resend API anahtarı
+npx wrangler secret put EPOSTA_GONDEREN     # örn. "Sınav Sistemi <sinav@alanadiniz.com>" (Resend'de doğrulanmış alan adı)
+```
+Bu değerler yokken sistem **geçiş modunda** çalışır: doğrulama kodu öğretmen panelinde görünür, öğrenci kodu öğretmenden ister.
+Öğrenci hesabı zorunluluğu varsayılan olarak açıktır; yalnız `OGRENCI_HESAP_ZORUNLU="0"` ortam değişkeniyle kapatılır.
+KVKK aydınlatma metnine, doğrulama kodunun e-posta adresine yurt dışındaki e-posta servisi üzerinden iletildiği eklenmelidir.
+
 ## Güvenlik notları
+- Öğretmen ve öğrenci girişlerinde 15 dakikada 8 hatalı denemeden sonra geçici engel vardır.
 - Varsayılan demo öğretim elemanı hesabı: kullanıcı `hoca`, parola `Demo!Hoca2026`. **Gerçek kullanımda mutlaka değiştirin.**
 - Depoda gerçek öğrenci, sınav sorusu veya cevap anahtarı yoktur; örnek veriler uydurmadır.
 - Sunucu istemciden `kagit`, `puan`, `dogruCevap`, `bitisMs` gibi alanları kabul etmez.

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261113a" />
+  <link rel="stylesheet" href="ortak.css?v=20261114b" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -2017,6 +2017,25 @@
         </div>
         </div>
       </div>
+
+      <!-- Öğrenci hesapları: online sınav girişi için açılan hesaplar, iletişim bilgisi (yalnız öğretmen görür), şifre sıfırlama -->
+      <div class="kart" id="kart-ogrenci-hesaplari" style="margin-top:16px;">
+        <div class="kart-baslik">
+          <span>Öğrenci hesapları (online sınav girişi)</span>
+          <button type="button" class="btn btn-kucuk" id="btn-ogrenci-hesaplari-yenile">Yenile</button>
+        </div>
+        <p style="font-size:13px; color:var(--metin-ikincil); margin:0 0 8px;">
+          Öğrenci ilk girişte e-posta, telefon ve şifresini belirler; e-postasına gelen kodla hesabı açılır. Telefon yalnız acil durumda size ulaşmak içindir ve yalnız burada görünür.
+        </p>
+        <div id="kutu-ogrenci-bekleyen-kodlar" hidden style="padding:10px 12px; border-radius:8px; background:var(--uyari-acik); color:var(--uyari); font-size:13px; margin-bottom:10px;"></div>
+        <div id="etiket-ogrenci-hesap-bilgi" style="font-size:13px; color:var(--metin-ikincil); margin-bottom:6px;"></div>
+        <div class="tablo-sarmal" style="max-height:340px; overflow:auto;">
+          <table class="veri-tablo">
+            <thead><tr><th>No</th><th>Ad Soyad</th><th>Hesap</th><th>E-posta</th><th>Telefon</th><th></th></tr></thead>
+            <tbody id="tablo-ogrenci-hesaplari"><tr><td colspan="6" style="color:var(--metin-soluk);">Listeyi görmek için "Yenile"ye basın.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
     <!-- ====================================================================
@@ -2468,11 +2487,88 @@
 
       <!-- Giriş ve İlk Kayıt Kutusu -->
       <div id="kiosk-giris-formu">
-        <p style="font-size:var(--yazi-md); color:var(--metin-ikincil); margin-bottom:12px;">
+        <!-- ÖĞRENCİ HESABI ADIMLARI (sunucuda öğrenci hesabı zorunluyken görünür):
+             numara -> (hesap varsa) şifre  |  (ilk giriş) e-posta + telefon + şifre -> e-postaya gelen kod -->
+        <div id="kiosk-hesap-adimlari" hidden>
+          <div id="kiosk-h-girisli" hidden style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--kenar); border-radius:8px; margin-bottom:12px;">
+            <span>Giriş yapıldı: <strong id="kiosk-h-girisli-ad"></strong></span>
+            <button type="button" class="btn btn-kucuk" id="btn-kiosk-h-cikis">Başka öğrenci</button>
+          </div>
+          <div id="kiosk-h-adim-numara" class="kiosk-h-adim">
+            <label class="etiket" for="kiosk-h-ogr-no">Öğrenci numaran</label>
+            <div style="display:flex; gap:8px;">
+              <input type="text" id="kiosk-h-ogr-no" inputmode="numeric" autocomplete="username" placeholder="Örn: 2023104011" style="flex:1;" />
+              <button type="button" class="btn btn-birincil" id="btn-kiosk-h-devam">Devam</button>
+            </div>
+          </div>
+          <div id="kiosk-h-adim-giris" class="kiosk-h-adim" hidden>
+            <p style="margin:0 0 8px;">Merhaba <strong id="kiosk-h-ad-maske"></strong>. Şifreni gir.</p>
+            <label class="etiket" for="kiosk-h-sifre">Şifre</label>
+            <input type="password" id="kiosk-h-sifre" autocomplete="current-password" />
+            <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-birincil" id="btn-kiosk-h-giris">Giriş yap</button>
+              <button type="button" class="btn btn-hayalet" id="btn-kiosk-h-unuttum">Şifremi unuttum</button>
+              <button type="button" class="btn btn-hayalet" id="btn-kiosk-h-geri-1">Numarayı değiştir</button>
+            </div>
+          </div>
+          <div id="kiosk-h-adim-kayit" class="kiosk-h-adim" hidden>
+            <p style="margin:0 0 8px;">Merhaba <strong id="kiosk-h-ad-maske-2"></strong>. İlk girişin; bilgilerini tamamla. E-postana bir doğrulama kodu göndereceğiz.</p>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="kiosk-h-eposta">E-posta adresin</label>
+                <input type="email" id="kiosk-h-eposta" autocomplete="email" placeholder="ornek@ogrenci.edu.tr" />
+              </div>
+              <div>
+                <label class="etiket" for="kiosk-h-telefon">Cep telefonun</label>
+                <input type="tel" id="kiosk-h-telefon" autocomplete="tel" placeholder="05XX XXX XX XX" />
+                <div style="font-size:12px; color:var(--metin-ikincil); margin-top:2px;">Öğretmeninin acil durumda sana ulaşabilmesi için. Yalnız öğretmenin görür.</div>
+              </div>
+            </div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="kiosk-h-sifre-1">Şifre belirle</label>
+                <input type="password" id="kiosk-h-sifre-1" autocomplete="new-password" />
+              </div>
+              <div>
+                <label class="etiket" for="kiosk-h-sifre-2">Şifre (tekrar)</label>
+                <input type="password" id="kiosk-h-sifre-2" autocomplete="new-password" />
+              </div>
+            </div>
+            <div style="font-size:12px; color:var(--metin-ikincil);">En az 8 karakter; büyük harf, küçük harf, rakam ve simge içermeli.</div>
+            <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-birincil" id="btn-kiosk-h-kod-gonder">Doğrulama kodunu gönder</button>
+              <button type="button" class="btn btn-hayalet" id="btn-kiosk-h-geri-2">Numarayı değiştir</button>
+            </div>
+          </div>
+          <div id="kiosk-h-adim-kod" class="kiosk-h-adim" hidden>
+            <p style="margin:0 0 8px;" id="kiosk-h-kod-bilgi"></p>
+            <label class="etiket" for="kiosk-h-kod">Doğrulama kodu (6 hane)</label>
+            <input type="text" id="kiosk-h-kod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="letter-spacing:4px; font-size:18px;" />
+            <div id="kiosk-h-yeni-sifre-alan" hidden>
+              <div class="form-satir" style="margin-top:8px;">
+                <div>
+                  <label class="etiket" for="kiosk-h-yeni-1">Yeni şifre</label>
+                  <input type="password" id="kiosk-h-yeni-1" autocomplete="new-password" />
+                </div>
+                <div>
+                  <label class="etiket" for="kiosk-h-yeni-2">Yeni şifre (tekrar)</label>
+                  <input type="password" id="kiosk-h-yeni-2" autocomplete="new-password" />
+                </div>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-birincil" id="btn-kiosk-h-onayla">Onayla</button>
+              <button type="button" class="btn btn-hayalet" id="btn-kiosk-h-geri-3">Geri</button>
+            </div>
+          </div>
+          <div id="kiosk-h-mesaj" role="status" hidden style="margin-top:10px; padding:8px 10px; border-radius:6px; font-size:13px;"></div>
+        </div>
+
+        <p class="kiosk-eski-alan" style="font-size:var(--yazi-md); color:var(--metin-ikincil); margin-bottom:12px;">
           Öğrenci numaranızla ilk girişinizde iletişim bilgilerinizi ve şifrenizi belirleyin. Sınav başladığında sorular size özel sırayla tek tek gösterilir.
         </p>
 
-        <div class="form-satir">
+        <div class="form-satir kiosk-eski-alan">
           <div>
             <label class="etiket" for="kiosk-ogr-no">Öğrenci Numaranız</label>
             <input type="text" id="kiosk-ogr-no" placeholder="Örn: 2023104011" value="" />
@@ -2484,7 +2580,7 @@
         </div>
 
         <!-- Öğrenciye Tanımlı Online Sınavlar Listesi ve Seçimi -->
-        <div id="kiosk-tanimli-sinavlar-kutu" style="padding:12px; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:12px;">
+        <div id="kiosk-tanimli-sinavlar-kutu" class="kiosk-giris-sonrasi" style="padding:12px; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
             <span style="font-weight:600; font-size:var(--yazi-md); color:var(--metin);">
               Size Tanımlı Online Sınavlar
@@ -2499,7 +2595,7 @@
         </div>
 
         <!-- İlk Giriş Zorunlu Profil ve Canlı Şifre Politikası Alanı -->
-        <div id="kiosk-ilk-kayit-alan" style="padding:12px; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:12px;">
+        <div id="kiosk-ilk-kayit-alan" class="kiosk-eski-alan" style="padding:12px; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:8px; margin-bottom:12px;">
           <div style="font-weight:600; font-size:var(--yazi-md); margin-bottom:8px; color:var(--metin);">
             İlk Giriş İletişim ve Şifre Belirleme
           </div>
@@ -2540,7 +2636,7 @@
         </div>
 
         <!-- Sınav Öncesi Kurallar ve Onay -->
-        <div id="kiosk-uyari-ve-onay-kutusu" style="padding:12px; background:var(--bg-ikincil); border:1px solid var(--kenar-koyu); border-radius:8px; margin-bottom:12px;">
+        <div id="kiosk-uyari-ve-onay-kutusu" class="kiosk-giris-sonrasi" style="padding:12px; background:var(--bg-ikincil); border:1px solid var(--kenar-koyu); border-radius:8px; margin-bottom:12px;">
           <div style="font-weight:600; font-size:var(--yazi-md); color:var(--metin); margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
             <span>Sınav Uygulama Kuralları</span>
             <span class="rozet rozet-sari" id="kiosk-dinamik-ihlal-kurali">1 İhlalde Sınav Sonlandırılır</span>
@@ -2559,7 +2655,7 @@
 
         <div id="kiosk-hata-kutu" hidden style="padding:8px 10px; background:var(--tehlike-acik); color:var(--tehlike); border-radius:6px; margin-bottom:10px; font-weight:500;"></div>
         <div style="display:flex; gap:8px;">
-          <button type="button" class="btn btn-birincil" id="btn-kiosk-oturum-baslat">Sınava Başla</button>
+          <button type="button" class="btn btn-birincil kiosk-giris-sonrasi" id="btn-kiosk-oturum-baslat">Sınava Başla</button>
           <button type="button" class="btn" id="btn-kiosk-cikis">Öğretmen Stüdyosuna Dön</button>
         </div>
       </div>
@@ -3275,7 +3371,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261112b"></script>
-  <script src="studyo-uygulama.js?v=20261114a"></script>
+  <script src="guvenlik-ve-veri.js?v=20261114b"></script>
+  <script src="studyo-uygulama.js?v=20261114b"></script>
 </body>
 </html>

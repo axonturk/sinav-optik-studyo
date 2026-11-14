@@ -67,8 +67,52 @@ const sunucuDurumu = {
   omrSenkronSeqSayac: 0,
   bulutKasalar: new Map(),
   bulutYedekGecmisi: new Map(),
-  bulutKasaSoruParcalari: new Map()
+  bulutKasaSoruParcalari: new Map(),
+  ogrenciHesaplari: {}, // ogrNo -> { durum, eposta, telefon, sifreHash, kodOzeti, kodAmac, kodBitisMs, kodDeneme }
+  ogrenciGirisTokenlari: new Map(), // token -> { ogrNo, bitisMs }
+  ogrenciBekleyenKodlar: [] // E-posta servisi yokken (geçiş modu) öğretmenin göreceği kodlar
 };
+
+/* Öğrenci hesabı zorunluluğu: canlıda açık. Eski uçtan uca testler SINAV_OGRENCI_HESAP_ZORUNLU=0 ile eski akışı kullanır. */
+function ogrenciHesabiZorunluMu() {
+  return process.env.SINAV_OGRENCI_HESAP_ZORUNLU !== '0';
+}
+
+function epostaServisiHazirMi() {
+  return Boolean(process.env.RESEND_API_KEY && process.env.EPOSTA_GONDEREN);
+}
+
+/* Doğrulama e-postası: Resend uyumlu API. Servis yapılandırılmamışsa kod öğretmen paneline düşer (geçiş modu). */
+async function gonderOgrenciEpostasi(ep) {
+  if (!ep) return { gonderildi: false };
+  if (!epostaServisiHazirMi()) {
+    sunucuDurumu.ogrenciBekleyenKodlar.unshift({
+      ogrNo: ep.ogrNo, kod: ep.kod, amac: ep.amac, epostaMaske: Cekirdek.maskeleEposta(ep.kime), zamanMs: Date.now()
+    });
+    sunucuDurumu.ogrenciBekleyenKodlar = sunucuDurumu.ogrenciBekleyenKodlar.slice(0, 200);
+    return { gonderildi: false, gecisModu: true };
+  }
+  try {
+    const yanit = await fetch(process.env.EPOSTA_API_URL || 'https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: process.env.EPOSTA_GONDEREN, to: [ep.kime], subject: ep.konu, text: ep.metin })
+    });
+    return { gonderildi: yanit.ok, hataKodu: yanit.ok ? 0 : yanit.status };
+  } catch (_) {
+    return { gonderildi: false, hataKodu: 503 };
+  }
+}
+
+function ogrenciGirisTokenDogrula(token, ogrNo) {
+  const kayit = token ? sunucuDurumu.ogrenciGirisTokenlari.get(String(token)) : null;
+  if (!kayit) return false;
+  if (Date.now() > kayit.bitisMs) {
+    sunucuDurumu.ogrenciGirisTokenlari.delete(String(token));
+    return false;
+  }
+  return String(kayit.ogrNo) === String(ogrNo);
+}
 
 const YEREL_KASA_DOSYASI = path.join(KOK_DIZIN, '.yerel-bulut-kasa.json');
 const DISK_KALICILIK_AKTIF = require.main === module || process.env.SINAV_YEREL_KASA_AKTIF === '1';
@@ -242,6 +286,21 @@ function kontrolHizSiniri(anahtar, maksDeneme = 8, pencereMs = 15 * 60 * 1000) {
   }
   mevcut.sayac += 1;
   return { izinli: true, kalan: maksDeneme - mevcut.sayac, tekrarSn: 0 };
+}
+
+/* Yalnız HATALI denemeleri sayan sınır (giriş / doğrulama kodu): sayaç artırmadan durumu okur */
+function hizSiniriDurumu(anahtar, maksDeneme = 8, pencereMs = 15 * 60 * 1000) {
+  const simdi = Date.now();
+  const mevcut = sunucuDurumu.hizSinirlari.get(anahtar);
+  if (!mevcut || (simdi - mevcut.pencereBaslangicMs) >= pencereMs) return { asildi: false, tekrarSn: 0 };
+  if (mevcut.sayac >= maksDeneme) {
+    return { asildi: true, tekrarSn: Math.ceil(Math.max(1000, pencereMs - (simdi - mevcut.pencereBaslangicMs)) / 1000) };
+  }
+  return { asildi: false, tekrarSn: 0 };
+}
+
+function hizSiniriSifirla(anahtar) {
+  sunucuDurumu.hizSinirlari.delete(anahtar);
 }
 
 function b64UrlEncode(buf) {
@@ -566,10 +625,18 @@ function istekIsleyici(req, res) {
         const havuz = Array.isArray(sunucuDurumu.hocaListesi) && sunucuDurumu.hocaListesi.length > 0
           ? sunucuDurumu.hocaListesi
           : [sunucuDurumu.hocaHesap];
+        // Kaba kuvvet koruması: aynı IP + kullanıcı adı için 15 dakikada 8 hatalı denemeden sonra bekletilir
+        const sinirAnahtar = `hoca-giris-hata:${istemciIpAl(req)}:${String(govde.kullaniciAdi || '').trim().toLowerCase()}`;
+        const sinir = hizSiniriDurumu(sinirAnahtar, 8);
+        if (sinir.asildi) {
+          return gonderJson(res, 429, { hata: `Çok fazla hatalı giriş denemesi. ${Math.ceil(sinir.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(sinir.tekrarSn) });
+        }
         const sonuc = await Cekirdek.dogrulaHocaGirisAsync(govde.kullaniciAdi, govde.sifre, havuz);
         if (!sonuc.basarili) {
+          if (sonuc.kod === 401) kontrolHizSiniri(sinirAnahtar, 8);
           return gonderJson(res, sonuc.kod, { hata: sonuc.hata, durum: sonuc.durum || 'reddedildi' });
         }
+        hizSiniriSifirla(sinirAnahtar);
         const hocaToken = crypto.randomBytes(24).toString('hex');
         sunucuDurumu.aktifHocaTokenlar.add(hocaToken);
         sunucuDurumu.aktifHocaOturumlari.set(hocaToken, {
@@ -1140,11 +1207,81 @@ function istekIsleyici(req, res) {
   }
 
   // 1. Öğrenci Online Sınav Oturumu Başlatma (Zero-Trust + Tekil Oturum Kilidi)
+  // ---- Öğrenci hesabı: ayar / durum / ilk kayıt + e-posta kodu / giriş / şifre yenileme / öğretmen paneli ----
+  if (req.method === 'GET' && yol === '/api/ogrenci-hesap/ayar') {
+    return gonderJson(res, 200, { hesapZorunlu: ogrenciHesabiZorunluMu(), epostaHazir: epostaServisiHazirMi() });
+  }
+  if (yol === '/api/ogrenci-hesap/hoca-liste' || yol === '/api/ogrenci-hesap/hoca-sifirla') {
+    okuJsonGovde(req)
+      .catch(() => ({}))
+      .then(async (govde) => {
+        const token = cozHocaTokenIstekten(req, govde, urlNesne);
+        if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token)) {
+          return gonderJson(res, 401, { hata: 'Öğretmen oturumu gerekli.' });
+        }
+        const eylem = yol.endsWith('hoca-liste') ? 'hoca-liste' : 'hoca-sifirla';
+        const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler });
+        if (eylem === 'hoca-liste') {
+          r.veri.epostaHazir = epostaServisiHazirMi();
+          r.veri.bekleyenKodlar = epostaServisiHazirMi() ? [] : sunucuDurumu.ogrenciBekleyenKodlar.filter((k) => Date.now() - k.zamanMs < 10 * 60 * 1000);
+        }
+        return gonderJson(res, r.kod, r.veri);
+      });
+    return;
+  }
+  if (req.method === 'POST' && /^\/api\/ogrenci-hesap\/(durum|kayit-baslat|kayit-onayla|giris|sifre-sifirla-baslat|sifre-sifirla-onayla)$/.test(yol)) {
+    const eylem = yol.split('/').pop();
+    const ip = istemciIpAl(req);
+    const genelSinir = kontrolHizSiniri(`ogr-hesap:${ip}`, 120, 15 * 60 * 1000);
+    if (!genelSinir.izinli) {
+      return gonderJson(res, 429, { hata: 'Çok fazla istek. Biraz sonra tekrar deneyin.' }, { 'Retry-After': String(genelSinir.tekrarSn) });
+    }
+    okuJsonGovde(req)
+      .then(async (govde) => {
+        const ogrNo = String((govde && govde.ogrNo) || '').trim();
+        const girisSinirAnahtar = `ogr-giris-hata:${ip}:${ogrNo}`;
+        if (eylem === 'giris') {
+          const s = hizSiniriDurumu(girisSinirAnahtar, 8);
+          if (s.asildi) return gonderJson(res, 429, { hata: `Çok fazla hatalı giriş. ${Math.ceil(s.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(s.tekrarSn) });
+        }
+        if (eylem === 'kayit-baslat' || eylem === 'sifre-sifirla-baslat') {
+          const s = kontrolHizSiniri(`ogr-kod-gonder:${ogrNo}`, 4, 15 * 60 * 1000);
+          if (!s.izinli) return gonderJson(res, 429, { hata: `Çok sık kod istendi. ${Math.ceil(s.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(s.tekrarSn) });
+        }
+        const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler });
+        if (eylem === 'giris') {
+          if (r.kod === 401) kontrolHizSiniri(girisSinirAnahtar, 8);
+          if (r.kod === 200) hizSiniriSifirla(girisSinirAnahtar);
+        }
+        if (r.eposta) {
+          const g = await gonderOgrenciEpostasi(r.eposta);
+          r.veri.epostaGonderildi = Boolean(g.gonderildi);
+          if (g.gecisModu) r.veri.gecisModu = true;
+          if (!g.gonderildi && !g.gecisModu) {
+            return gonderJson(res, 502, { hata: 'Doğrulama e-postası gönderilemedi. Biraz sonra tekrar deneyin veya öğretmeninize başvurun.' });
+          }
+        }
+        if (r.girisOgrNo) {
+          const token = crypto.randomBytes(24).toString('hex');
+          sunucuDurumu.ogrenciGirisTokenlari.set(token, { ogrNo: r.girisOgrNo, bitisMs: Date.now() + 4 * 60 * 60 * 1000 });
+          r.veri.girisToken = token;
+        }
+        return gonderJson(res, r.kod, r.veri);
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
   if (req.method === 'POST' && yol === '/api/ogrenci-oturum-baslat') {
     okuJsonGovde(req)
       .then((govde) => {
         const ihlal = kontrolZeroTrustYuk(govde, true);
         if (ihlal) return gonderJson(res, 400, { hata: ihlal });
+        // Öğrenci hesabı zorunluyken oturum yalnız numara + şifreyle giriş yapmış öğrenciye açılır
+        // (eskiden numarayı bilen herkes o öğrencinin yerine sınava girebiliyordu)
+        if (ogrenciHesabiZorunluMu() && !ogrenciGirisTokenDogrula(govde.girisToken, String(govde.ogrNo || '').trim())) {
+          return gonderJson(res, 401, { hata: 'Sınava başlamak için önce öğrenci numaranız ve şifrenizle giriş yapın.', girisGerekli: true });
+        }
 
         if (!sunucuDurumu.aktifSinav || !sunucuDurumu.aktifSinav.aktif) {
           return gonderJson(res, 403, { hata: 'Aktif bir online sınav bulunmuyor.' });

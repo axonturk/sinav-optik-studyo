@@ -5471,7 +5471,14 @@
     }
 
     const kayitliOgr = durum.ogrenciler.find((o) => String(o.ogrNo) === ogrNo);
-    if (!kayitliOgr || !kayitliOgr.ilkKayitTamam) {
+    // Öğrenci hesabı modunda kimlik sunucuda (numara + şifre + e-posta kodu) doğrulanır; yerel ilk kayıt formu kullanılmaz
+    const hesapModu = Boolean(document.getElementById('kiosk-giris-formu') && document.getElementById('kiosk-giris-formu').classList.contains('kiosk-hesap-modu'));
+    if (hesapModu && !durum.kioskGirisToken) {
+      hataKutu.textContent = 'Önce öğrenci numaran ve şifrenle giriş yap.';
+      hataKutu.hidden = false;
+      return;
+    }
+    if (!hesapModu && (!kayitliOgr || !kayitliOgr.ilkKayitTamam)) {
       const dogrulama = C.dogrulaOgrenciIlkKayit({ eposta, telefon, sifre, sifreTekrar });
       if (!dogrulama.gecerli) {
         hataKutu.textContent = dogrulama.hata;
@@ -5549,7 +5556,7 @@
         const yanit = await fetch('/api/ogrenci-oturum-baslat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ogrNo, adSoyad, ...(girilenSalonKodu ? { erisimKodu: girilenSalonKodu } : {}) })
+          body: JSON.stringify({ ogrNo, adSoyad, ...(girilenSalonKodu ? { erisimKodu: girilenSalonKodu } : {}), ...(durum.kioskGirisToken ? { girisToken: durum.kioskGirisToken } : {}) })
         });
         let veri = null;
         try {
@@ -6490,6 +6497,255 @@
       geriDonusKilit: true,
       oturumlar: []
     };
+  }
+
+  /* ==========================================================================
+     ÖĞRENCİ HESABI ADIMLARI (kiosk): numara -> şifre | ilk giriş: e-posta + telefon + şifre -> e-posta kodu
+     Sunucu "hesap zorunlu" diyorsa çalışır; değilse eski tek-form akışı aynen kalır.
+     ========================================================================== */
+  const kioskHesap = { ogrNo: '', adMaske: '', kodAmac: '', bagliMi: false };
+
+  async function kioskHesapApi(eylem, govde) {
+    const yanit = await fetch(`/api/ogrenci-hesap/${eylem}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(govde || {})
+    });
+    let veri = {};
+    try { veri = await yanit.json(); } catch (_) {}
+    return { ok: yanit.ok, kod: yanit.status, veri };
+  }
+
+  function kioskHesapMesaj(metin, tur = 'hata') {
+    const el = document.getElementById('kiosk-h-mesaj');
+    if (!el) return;
+    el.textContent = metin || '';
+    el.hidden = !metin;
+    el.className = tur === 'hata' ? 'tur-hata' : 'tur-bilgi';
+  }
+
+  function kioskHesapAdimGoster(adim) {
+    ['numara', 'giris', 'kayit', 'kod'].forEach((a) => {
+      const el = document.getElementById(`kiosk-h-adim-${a}`);
+      if (el) el.hidden = a !== adim;
+    });
+    kioskHesapMesaj('');
+    const odak = { numara: 'kiosk-h-ogr-no', giris: 'kiosk-h-sifre', kayit: 'kiosk-h-eposta', kod: 'kiosk-h-kod' }[adim];
+    setTimeout(() => { const el = document.getElementById(odak); if (el) el.focus(); }, 30);
+  }
+
+  function kioskHesapGirisTamam(ogrNo, adSoyad, girisToken) {
+    const form = document.getElementById('kiosk-giris-formu');
+    durum.kioskGirisToken = girisToken || '';
+    try { sessionStorage.setItem('KIOSK_OGR_GIRIS_V1', JSON.stringify({ ogrNo, adSoyad, girisToken })); } catch (_) {}
+    const noEl = document.getElementById('kiosk-ogr-no');
+    const adEl = document.getElementById('kiosk-ad-soyad');
+    if (noEl) noEl.value = ogrNo;
+    if (adEl) adEl.value = adSoyad || ogrNo;
+    ['numara', 'giris', 'kayit', 'kod'].forEach((a) => { const el = document.getElementById(`kiosk-h-adim-${a}`); if (el) el.hidden = true; });
+    const girisli = document.getElementById('kiosk-h-girisli');
+    const girisliAd = document.getElementById('kiosk-h-girisli-ad');
+    if (girisliAd) girisliAd.textContent = `${adSoyad || ''} (${ogrNo})`;
+    if (girisli) girisli.hidden = false;
+    kioskHesapMesaj('');
+    if (form) form.classList.add('kiosk-giris-tamam');
+    if (typeof guncelleKioskOgrenciSinavListesiUI === 'function') guncelleKioskOgrenciSinavListesiUI();
+  }
+
+  function kioskHesapCikis() {
+    const form = document.getElementById('kiosk-giris-formu');
+    durum.kioskGirisToken = '';
+    try { sessionStorage.removeItem('KIOSK_OGR_GIRIS_V1'); } catch (_) {}
+    if (form) form.classList.remove('kiosk-giris-tamam');
+    const girisli = document.getElementById('kiosk-h-girisli');
+    if (girisli) girisli.hidden = true;
+    ['kiosk-h-ogr-no', 'kiosk-h-sifre', 'kiosk-h-kod', 'kiosk-h-sifre-1', 'kiosk-h-sifre-2', 'kiosk-h-yeni-1', 'kiosk-h-yeni-2'].forEach((id) => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    kioskHesapAdimGoster('numara');
+  }
+
+  async function kurKioskHesapAkisi() {
+    const form = document.getElementById('kiosk-giris-formu');
+    const adimlar = document.getElementById('kiosk-hesap-adimlari');
+    if (!form || !adimlar || !(location.protocol === 'http:' || location.protocol === 'https:')) return;
+    let ayar = null;
+    try {
+      const y = await fetch('/api/ogrenci-hesap/ayar');
+      ayar = y.ok ? await y.json() : null;
+    } catch (_) { ayar = null; }
+    if (!ayar || !ayar.hesapZorunlu) {
+      form.classList.remove('kiosk-hesap-modu');
+      adimlar.hidden = true;
+      return;
+    }
+    form.classList.add('kiosk-hesap-modu');
+    adimlar.hidden = false;
+    // Aynı sekmede daha önce giriş yapıldıysa (sayfa yenilendi) giriş durumunu koru
+    let kayitli = null;
+    try { kayitli = JSON.parse(sessionStorage.getItem('KIOSK_OGR_GIRIS_V1') || 'null'); } catch (_) {}
+    if (kayitli && kayitli.girisToken) kioskHesapGirisTamam(kayitli.ogrNo, kayitli.adSoyad, kayitli.girisToken);
+    else if (!form.classList.contains('kiosk-giris-tamam')) kioskHesapAdimGoster('numara');
+    if (kioskHesap.bagliMi) return;
+    kioskHesap.bagliMi = true;
+    const tikla = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+    const enter = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') fn(); }); };
+    const deger = (id) => ((document.getElementById(id) || {}).value || '').trim();
+
+    const devam = async () => {
+      const ogrNo = deger('kiosk-h-ogr-no');
+      if (!ogrNo) { kioskHesapMesaj('Öğrenci numaranı yaz.'); return; }
+      const r = await kioskHesapApi('durum', { ogrNo });
+      if (!r.ok) { kioskHesapMesaj(r.veri.hata || 'Numara doğrulanamadı.'); return; }
+      kioskHesap.ogrNo = ogrNo;
+      kioskHesap.adMaske = r.veri.adMaske || '';
+      ['kiosk-h-ad-maske', 'kiosk-h-ad-maske-2'].forEach((id) => { const el = document.getElementById(id); if (el) el.textContent = kioskHesap.adMaske; });
+      kioskHesapAdimGoster(r.veri.durum === 'aktif' ? 'giris' : 'kayit');
+    };
+    const giris = async () => {
+      const r = await kioskHesapApi('giris', { ogrNo: kioskHesap.ogrNo, sifre: (document.getElementById('kiosk-h-sifre') || {}).value || '' });
+      if (!r.ok) { kioskHesapMesaj(r.veri.hata || 'Giriş yapılamadı.'); return; }
+      kioskHesapGirisTamam(kioskHesap.ogrNo, r.veri.adSoyad, r.veri.girisToken);
+    };
+    const kodBilgisiGoster = (veri, amac) => {
+      kioskHesap.kodAmac = amac;
+      const bilgi = document.getElementById('kiosk-h-kod-bilgi');
+      const yeniAlan = document.getElementById('kiosk-h-yeni-sifre-alan');
+      if (yeniAlan) yeniAlan.hidden = amac !== 'sifirlama';
+      kioskHesapAdimGoster('kod');
+      if (bilgi) {
+        bilgi.textContent = veri.gecisModu
+          ? 'E-posta gönderimi henüz kurulmadı. Doğrulama kodunu öğretmeninden iste (öğretmen panelinde görünür).'
+          : `Doğrulama kodu ${veri.epostaMaske || 'e-posta adresine'} gönderildi. Kod 10 dakika geçerli. Gelmediyse istenmeyen e-posta klasörüne bak.`;
+      }
+    };
+    const kodGonder = async () => {
+      const r = await kioskHesapApi('kayit-baslat', {
+        ogrNo: kioskHesap.ogrNo,
+        eposta: deger('kiosk-h-eposta'),
+        telefon: deger('kiosk-h-telefon'),
+        sifre: (document.getElementById('kiosk-h-sifre-1') || {}).value || '',
+        sifreTekrar: (document.getElementById('kiosk-h-sifre-2') || {}).value || ''
+      });
+      if (!r.ok) { kioskHesapMesaj(r.veri.hata || 'Kod gönderilemedi.'); return; }
+      kodBilgisiGoster(r.veri, 'kayit');
+    };
+    const unuttum = async () => {
+      const r = await kioskHesapApi('sifre-sifirla-baslat', { ogrNo: kioskHesap.ogrNo });
+      if (!r.ok) { kioskHesapMesaj(r.veri.hata || 'İstek gönderilemedi.'); return; }
+      kodBilgisiGoster(r.veri, 'sifirlama');
+    };
+    const onayla = async () => {
+      const kod = deger('kiosk-h-kod');
+      const govde = { ogrNo: kioskHesap.ogrNo, kod };
+      if (kioskHesap.kodAmac === 'sifirlama') {
+        govde.sifre = (document.getElementById('kiosk-h-yeni-1') || {}).value || '';
+        govde.sifreTekrar = (document.getElementById('kiosk-h-yeni-2') || {}).value || '';
+      }
+      const r = await kioskHesapApi(kioskHesap.kodAmac === 'sifirlama' ? 'sifre-sifirla-onayla' : 'kayit-onayla', govde);
+      if (!r.ok) { kioskHesapMesaj(r.veri.hata || 'Kod doğrulanamadı.'); return; }
+      kioskHesapGirisTamam(kioskHesap.ogrNo, r.veri.adSoyad, r.veri.girisToken);
+    };
+    tikla('btn-kiosk-h-devam', devam); enter('kiosk-h-ogr-no', devam);
+    tikla('btn-kiosk-h-giris', giris); enter('kiosk-h-sifre', giris);
+    tikla('btn-kiosk-h-kod-gonder', kodGonder);
+    tikla('btn-kiosk-h-unuttum', unuttum);
+    tikla('btn-kiosk-h-onayla', onayla); enter('kiosk-h-kod', onayla);
+    tikla('btn-kiosk-h-geri-1', () => kioskHesapAdimGoster('numara'));
+    tikla('btn-kiosk-h-geri-2', () => kioskHesapAdimGoster('numara'));
+    tikla('btn-kiosk-h-geri-3', () => kioskHesapAdimGoster(kioskHesap.kodAmac === 'sifirlama' ? 'giris' : 'kayit'));
+    tikla('btn-kiosk-h-cikis', kioskHesapCikis);
+  }
+
+  /* Öğretmen paneli: öğrenci hesapları, iletişim bilgisi, geçiş modunda bekleyen doğrulama kodları, şifre sıfırlama */
+  async function yukleOgrenciHesaplariPaneli() {
+    const tbody = document.getElementById('tablo-ogrenci-hesaplari');
+    const bilgi = document.getElementById('etiket-ogrenci-hesap-bilgi');
+    const kodKutu = document.getElementById('kutu-ogrenci-bekleyen-kodlar');
+    if (!tbody) return;
+    const token = sessionStorage.getItem('hoca_token') || '';
+    let veri = null;
+    try {
+      const y = await fetch('/api/ogrenci-hesap/hoca-liste', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      veri = await y.json();
+      if (!y.ok) throw new Error((veri && veri.hata) || `HTTP ${y.status}`);
+    } catch (err) {
+      if (bilgi) bilgi.textContent = `Liste alınamadı: ${err.message}`;
+      return;
+    }
+    const satirlar = Array.isArray(veri.ogrenciler) ? veri.ogrenciler : [];
+    const durumEtiket = { aktif: 'Açık', 'onay-bekliyor': 'Kod bekliyor', 'hesap-yok': 'Henüz yok' };
+    const acik = satirlar.filter((o) => o.durum === 'aktif').length;
+    if (bilgi) {
+      bilgi.textContent = `${satirlar.length} öğrenciden ${acik} tanesinin hesabı açık.` +
+        (veri.epostaHazir ? '' : ' E-posta gönderimi kurulu değil: doğrulama kodları aşağıda görünür, öğrenciye siz iletirsiniz.');
+    }
+    if (kodKutu) {
+      const kodlar = Array.isArray(veri.bekleyenKodlar) ? veri.bekleyenKodlar : [];
+      kodKutu.hidden = kodlar.length === 0;
+      kodKutu.innerHTML = kodlar.length
+        ? '<strong>Bekleyen doğrulama kodları (10 dk geçerli):</strong><br>' + kodlar
+          .map((k) => `${C.kacisHTML(k.ogrNo)} · ${k.amac === 'sifirlama' ? 'şifre yenileme' : 'ilk kayıt'} · <span class="mono" style="font-size:15px; font-weight:700;">${C.kacisHTML(k.kod)}</span>`)
+          .join('<br>')
+        : '';
+    }
+    tbody.innerHTML = satirlar.length
+      ? satirlar.map((o) => `
+          <tr>
+            <td class="mono">${C.kacisHTML(o.ogrNo)}</td>
+            <td>${C.kacisHTML(o.adSoyad)}</td>
+            <td>${C.kacisHTML(durumEtiket[o.durum] || o.durum)}</td>
+            <td>${C.kacisHTML(o.eposta || '—')}</td>
+            <td>${o.telefon ? `<a href="tel:${C.kacisHTML(o.telefon)}">${C.kacisHTML(o.telefon)}</a>` : '—'}</td>
+            <td>${o.durum !== 'hesap-yok' ? `<button type="button" class="btn btn-kucuk" data-ogr-hesap-sifirla="${C.kacisHTML(o.ogrNo)}">Şifreyi sıfırla</button>` : ''}</td>
+          </tr>`).join('')
+      : '<tr><td colspan="6" style="color:var(--metin-soluk);">Sunucuda bu derse ait öğrenci listesi yok. Önce online sınavı tanımlayın veya listeyi yükleyin.</td></tr>';
+  }
+
+  function bagliOgrenciHesaplariPaneli() {
+    const yenile = document.getElementById('btn-ogrenci-hesaplari-yenile');
+    if (yenile) yenile.addEventListener('click', yukleOgrenciHesaplariPaneli);
+    const tbody = document.getElementById('tablo-ogrenci-hesaplari');
+    if (tbody) {
+      tbody.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-ogr-hesap-sifirla]');
+        if (!btn) return;
+        const ogrNo = btn.getAttribute('data-ogr-hesap-sifirla');
+        // Geri alınamaz işlem: öğrenci bir sonraki girişte bilgilerini ve şifresini yeniden belirler
+        if (!window.confirm(`${ogrNo} numaralı öğrencinin hesabı sıfırlansın mı? Öğrenci bir sonraki girişte e-posta, telefon ve şifresini yeniden belirler.`)) return;
+        const token = sessionStorage.getItem('hoca_token') || '';
+        try {
+          const y = await fetch('/api/ogrenci-hesap/hoca-sifirla', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, token ? { Authorization: `Bearer ${token}` } : {}),
+            body: JSON.stringify({ ogrNo })
+          });
+          const v = await y.json().catch(() => ({}));
+          const bilgi = document.getElementById('etiket-ogrenci-hesap-bilgi');
+          if (bilgi) bilgi.textContent = y.ok ? (v.mesaj || 'Hesap sıfırlandı.') : (v.hata || `Sıfırlanamadı (HTTP ${y.status}).`);
+        } catch (_) {}
+        yukleOgrenciHesaplariPaneli();
+      });
+    }
+  }
+
+  /* Varsayılan (açık kaynakta yazılı) şifreyle giriş yapılınca kalıcı uyarı: herkes bu şifreyi biliyor */
+  function gosterVarsayilanSifreUyarisi(goster) {
+    let el = document.getElementById('uyari-varsayilan-sifre');
+    if (!goster) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'uyari-varsayilan-sifre';
+      el.className = 'yazdir-gizle';
+      el.setAttribute('role', 'alert');
+      el.style.cssText = 'margin:0 0 12px; padding:10px 14px; border-radius:8px; background:var(--tehlike-acik); color:var(--tehlike); font-size:13px; font-weight:600;';
+      el.textContent = 'Varsayılan şifreyle giriş yaptınız. Bu şifre açık kaynak kodda yazılı olduğu için herkes biliyor. Giriş penceresindeki "Şifremi unuttum" bölümünden hemen yeni bir şifre belirleyin.';
+      const hedef = document.getElementById('ana-icerik-alani') || document.body;
+      hedef.insertBefore(el, hedef.firstChild);
+    }
   }
 
   function onlineDersSoruSayisi(sinavTanimi) {
@@ -8211,6 +8467,7 @@
     const gecisYapOgrenciGirisKapisi = () => {
       yukleSunucuAktifOnlineSinavDurumu();
       guncelleKioskOgrenciSinavListesiUI();
+      kurKioskHesapAkisi();
       document.getElementById('modal-hoca-giris').style.display = 'none';
       document.getElementById('ana-icerik-alani').style.display = 'none';
       document.getElementById('kiosk-sinav-alani').style.display = 'block';
@@ -8351,6 +8608,7 @@
         });
         durum.hocaOturumAcik = true;
         document.body.classList.add('hoca-oturum-acik');
+        gosterVarsayilanSifreUyarisi(Boolean(C.VARSAYILAN_HOCA_HESAP && sifre === C.VARSAYILAN_HOCA_HESAP.sifre));
         try {
           sessionStorage.setItem(
             'AKTIF_HOCA_OTURUM_V1',
@@ -11083,7 +11341,15 @@
       btnOgrQrBaglantiKopyala.addEventListener('click', () => {
         const tabanEl = document.getElementById('ogrenci-qr-taban-adres');
         const taban = (tabanEl && tabanEl.value ? tabanEl.value : location.origin).trim().replace(/\/+$/, '');
-        const paket = C.uretOgrenciQrPaketi(durum.ogrenciler, { tabanAdres: taban, hedefSayfa: 'optik-mobil.html' });
+        // Bağlantı da QR gibi ders kimliği taşır; aksi hâlde telefon listeyi o an açık olan başka derse yazıyordu
+        const kopyaDers = (typeof aktifDersiGetir === 'function' ? aktifDersiGetir() : null) || { id: durum.aktifDersId || 'genel', kod: '', ad: '' };
+        const paket = C.uretOgrenciQrPaketi(durum.ogrenciler, {
+          tabanAdres: taban,
+          hedefSayfa: 'optik-mobil.html',
+          dersId: kopyaDers.id,
+          dersKod: kopyaDers.kod || '',
+          dersAd: kopyaDers.kod ? `${kopyaDers.kod} — ${kopyaDers.ad || 'Ders'}` : (kopyaDers.ad || '')
+        });
         if (navigator.clipboard && paket.tekUrl) {
           navigator.clipboard.writeText(paket.tekUrl);
         }
@@ -11567,6 +11833,7 @@
       btnOnlineKioskAc.addEventListener('click', () => {
         yukleSunucuAktifOnlineSinavDurumu();
         guncelleKioskOgrenciSinavListesiUI();
+        kurKioskHesapAkisi();
         document.getElementById('ana-icerik-alani').style.display = 'none';
         document.getElementById('kiosk-sinav-alani').style.display = 'block';
       });
@@ -11676,9 +11943,11 @@
     sorgulaIstemciIpBilgisi();
     uretCihazDonanimParmakIzi();
 
+    bagliOgrenciHesaplariPaneli();
     document.getElementById('btn-kiosk-ogrenci-modu').addEventListener('click', () => {
       yukleSunucuAktifOnlineSinavDurumu();
       guncelleKioskOgrenciSinavListesiUI();
+      kurKioskHesapAkisi();
       document.getElementById('modal-hoca-giris').style.display = 'none';
       document.getElementById('ana-icerik-alani').style.display = 'none';
       document.getElementById('kiosk-sinav-alani').style.display = 'block';
@@ -13256,6 +13525,7 @@
     } else if (dogrudanOgrenciModu) {
       yukleSunucuAktifOnlineSinavDurumu();
       guncelleKioskOgrenciSinavListesiUI();
+      kurKioskHesapAkisi();
       document.body.classList.add('kiosk-aktif');
       document.getElementById('modal-hoca-giris').style.display = 'none';
       document.getElementById('ana-icerik-alani').style.display = 'none';
@@ -13573,7 +13843,9 @@
       const pTop = (dy > 0 ? Number((document.getElementById('ayar-dy-toplam-puan') || {}).value || 0) : 0)
         + (ts > 0 ? Number((document.getElementById('ayar-test-toplam-puan') || {}).value || 0) : 0)
         + (kl > 0 ? Number((document.getElementById('ayar-klasik-toplam-puan') || {}).value || 0) : 0);
-      if (dy + ts + kl > 0 && Math.abs(pTop - 100) < 0.01) {
+      // Gerçek bir ders seçili değilse (örnek/demo kurgu) sınav "Baskıya Hazır" sayılmaz
+      const gercekDersVar = Array.isArray(durum.dersler) && durum.dersler.some((d) => d && d.id === durum.aktifDersId);
+      if (gercekDersVar && dy + ts + kl > 0 && Math.abs(pTop - 100) < 0.01) {
         return { kod: 'hazir', etiket: 'Baskıya Hazır', sinif: 'rozet rozet-yesil', cta: 'Baskı Öncesi Kontrol' };
       }
       return { kod: 'taslak', etiket: 'Taslak', sinif: 'rozet rozet-mavi', cta: 'Baskı Öncesi Kontrol' };
@@ -14188,23 +14460,31 @@
           aksiyonEtiket: ''
         },
         {
-          ok: !cakismaSorunVar,
+          // Boş sınıf listesi "Tamam" sayılmaz: öğrenciye özel evrak, yoklama ve optik eşleştirme boş kalır
+          ok: !cakismaSorunVar && (durum.ogrenciler || []).length > 0,
           baslik: `Sınıf listesi ve optik numara (${(durum.ogrenciler || []).length} öğrenci)`,
-          aciklama: cakismaSorunVar ? `${cakismaAdet} son 2 hane çakışması var.` : `Optik kimlik modu (${kimlikMod === 'son3' ? 'Son 3 Hane' : 'Son 2 Hane'}) çakışmasız.`,
+          aciklama: (durum.ogrenciler || []).length === 0
+            ? 'Sınıf listesi boş. Yoklama ve salon listeleri boş çıkar, telefon okuyucu kağıtları öğrenciyle eşleştiremez. Sınıf ve Salonlar\'dan listeyi yapıştırın.'
+            : (cakismaSorunVar ? `${cakismaAdet} son 2 hane çakışması var (okumada öğrenciyi siz seçersiniz).` : `Optik kimlik modu (${kimlikMod === 'son3' ? 'Son 3 Hane' : 'Son 2 Hane'}) çakışmasız.`),
           aksiyonId: cakismaSorunVar ? 'ucus-aksiyon-son3' : '',
           aksiyonEtiket: 'Son 3 hane yap'
         },
         {
-          ok: ocDenge.trafikIsigi !== 'kirmizi',
+          // Dersin ÖÇ listesi yoksa denge "tamam" değil, ölçülemiyor demektir
+          ok: (yapi.dersOgrenimCiktilari || []).length > 0 && ocDenge.trafikIsigi !== 'kirmizi',
           baslik: 'Bologna ÖÇ ve bilişsel denge',
-          aciklama: ocDenge.mesaj || 'ÖÇ kapsam kontrolü tamamlandı.',
+          aciklama: (yapi.dersOgrenimCiktilari || []).length === 0
+            ? 'Dersin öğrenme çıktıları (ÖÇ) tanımlı değil; ÖÇ kapsamı ve akreditasyon raporu üretilemez. Dersler bölümünden ÖÇ\'leri ekleyin.'
+            : (ocDenge.mesaj || 'ÖÇ kapsam kontrolü tamamlandı.'),
           aksiyonId: '',
           aksiyonEtiket: ''
         },
         {
-          ok: !aktifDersSalonYerlesimi().yetersiz,
+          ok: (durum.ogrenciler || []).length > 0 && !aktifDersSalonYerlesimi().yetersiz,
           baslik: `Salon kapasitesi ve oturma planı (${(durum.salonlar || []).length} salon)`,
-          aciklama: aktifDersSalonYerlesimi().yetersiz ? 'Salon kontenjanı öğrenci sayısının altında; otomatik ek salon açıldı.' : 'Salon kontenjanı tüm kayıtlı öğrenciler için yeterli.',
+          aciklama: (durum.ogrenciler || []).length === 0
+            ? 'Öğrenci olmadığı için salon dağılımı yapılamadı.'
+            : (aktifDersSalonYerlesimi().yetersiz ? 'Salon kontenjanı öğrenci sayısının altında; otomatik ek salon açıldı.' : 'Salon kontenjanı tüm kayıtlı öğrenciler için yeterli.'),
           aksiyonId: '',
           aksiyonEtiket: ''
         }

@@ -3439,12 +3439,10 @@
      dahil edilmesi, Ölçülmeyen ÖÇ ayrımı ve Öğrenci × ÖÇ Akreditasyon Matrisi içerir.
      ------------------------------------------------------------------------ */
   function hesaplaKazanimVeKarneAnalizi(okumaSonuclari = [], sinavYapisi = {}) {
-    const varsayilanKazanimlar = [
-      'ÖÇ-1: Ağ Katmanları ve Protokoller',
-      'ÖÇ-2: Kriptografi ve Parola Güvenliği',
-      'ÖÇ-3: Web ve Bulut Güvenliği (OWASP)',
-      'ÖÇ-4: Sıfır Güven (Zero-Trust) Mimari Tasarımı'
-    ];
+    // ÖÇ'si girilmemiş sorular tek bir "ÖÇ atanmamış" satırında toplanır.
+    // (Eskiden sıra numarasına göre "ÖÇ-1: Ağ Katmanları" gibi örnek ÖÇ'lere dağıtılıyor, başka derslerin
+    // akreditasyon raporuna uydurma veri giriyordu.)
+    const OC_ATANMAMIS = 'ÖÇ atanmamış';
     const grupA = (sinavYapisi.kitapciklar && sinavYapisi.kitapciklar.A) || { dy: [], test: [], klasik: [] };
     const dyBirimPuan = Math.max(0.5, Number(sinavYapisi.dySoruPuan || 2));
     const testBirimPuan = Math.max(0.5, Number(sinavYapisi.testSoruPuan || 5));
@@ -3454,7 +3452,7 @@
 
     const kazanimHaritasi = {};
     const kayitAc = (kod) => {
-      let anahtar = kod || varsayilanKazanimlar[0];
+      let anahtar = kod || OC_ATANMAMIS;
       const ocEslesme = String(anahtar).match(/^(ÖÇ-\d+|OC-\d+)/i);
       if (ocEslesme) {
         const ocOnEk = ocEslesme[1].toUpperCase().replace(/^OC-/, 'ÖÇ-');
@@ -3491,19 +3489,19 @@
     const klasikSoruListesi = grupA.klasik || [];
 
     dySoruListesi.forEach((s, idx) => {
-      const k = s.kazanim || s.ocKodu || varsayilanKazanimlar[idx % varsayilanKazanimlar.length];
+      const k = s.kazanim || s.ocKodu || OC_ATANMAMIS;
       const kh = kayitAc(k);
       kh.soruSayisi++;
       kh.azamiSoruPuan += dyBirimPuan;
     });
     testSoruListesi.forEach((s, idx) => {
-      const k = s.kazanim || s.ocKodu || varsayilanKazanimlar[(idx + 1) % varsayilanKazanimlar.length];
+      const k = s.kazanim || s.ocKodu || OC_ATANMAMIS;
       const kh = kayitAc(k);
       kh.soruSayisi++;
       kh.azamiSoruPuan += testBirimPuan;
     });
     klasikSoruListesi.forEach((s, idx) => {
-      const k = s.kazanim || s.ocKodu || varsayilanKazanimlar[3];
+      const k = s.kazanim || s.ocKodu || OC_ATANMAMIS;
       const tamP = klasikSoruPuanlari[idx] !== undefined ? Number(klasikSoruPuanlari[idx]) : Number(s.puan || klasikVarsayilanPuan);
       const kh = kayitAc(k);
       kh.soruSayisi++;
@@ -3517,7 +3515,7 @@
     const ogrenciKarneleri = sirali.map((ogr, siraIdx) => {
       const ogrKazanim = {};
       const ogrEkle = (kod, kazanilanPuan, azamiPuan) => {
-        const kh = kayitAc(kod || varsayilanKazanimlar[0]);
+        const kh = kayitAc(kod || OC_ATANMAMIS);
         const k = kh.kod;
         kh.toplamGirisimPuan += azamiPuan;
         kh.kazanilanToplamPuan += kazanilanPuan;
@@ -3533,7 +3531,7 @@
         const es = bulOgrenciKanonikCevap(ogr, 'dy', i, sinavYapisi);
         if (!es.detay) continue;
         const soru = dySoruListesi[i] || {};
-        const k = soru.kazanim || soru.ocKodu || varsayilanKazanimlar[i % varsayilanKazanimlar.length];
+        const k = soru.kazanim || soru.ocKodu || OC_ATANMAMIS;
         ogrEkle(k, es.dogruMu ? dyBirimPuan : 0, dyBirimPuan);
       }
 
@@ -3542,7 +3540,7 @@
         const es = bulOgrenciKanonikCevap(ogr, 'test', i, sinavYapisi);
         if (!es.detay) continue;
         const soru = testSoruListesi[i] || {};
-        const k = soru.kazanim || soru.ocKodu || varsayilanKazanimlar[(i + 1) % varsayilanKazanimlar.length];
+        const k = soru.kazanim || soru.ocKodu || OC_ATANMAMIS;
         ogrEkle(k, es.dogruMu ? testBirimPuan : 0, testBirimPuan);
       }
 
@@ -3554,7 +3552,7 @@
         );
         for (let i = 0; i < klasikAdet; i++) {
           const soru = klasikSoruListesi[i] || {};
-          const k = soru.kazanim || soru.ocKodu || varsayilanKazanimlar[3];
+          const k = soru.kazanim || soru.ocKodu || OC_ATANMAMIS;
           const tamP = klasikSoruPuanlari[i] !== undefined ? Number(klasikSoruPuanlari[i]) : Number(soru.puan || klasikVarsayilanPuan);
           const es = bulOgrenciKanonikCevap(ogr, 'klasik', i, sinavYapisi);
           let alinanP = null;
@@ -3619,9 +3617,12 @@
         barajEsigi,
         saglayanOgrenciSayisi,
         saglamaOraniYuzde,
-        durum: !olculduMu
-          ? (k.soruSayisi === 0 ? '⚪ Ölçülmedi (Bu Sınavda Soru Yok)' : '⚪ Veri Bekleniyor')
-          : (basariYuzde >= 70 ? '🟢 Başarılı (Hedef Sağlandı)' : (basariYuzde >= 50 ? '🟡 Orta (Desteklenmeli)' : '🔴 Kritik (Telafi Önerilir)'))
+        atanmamis: k.kod === OC_ATANMAMIS,
+        durum: k.kod === OC_ATANMAMIS
+          ? `⚠️ ${k.soruSayisi} sorunun ÖÇ'si girilmemiş — akreditasyon raporuna katılmaz; Soru Bankası'ndan ÖÇ atayın`
+          : !olculduMu
+            ? (k.soruSayisi === 0 ? '⚪ Ölçülmedi (Bu Sınavda Soru Yok)' : '⚪ Veri Bekleniyor')
+            : (basariYuzde >= 70 ? '🟢 Başarılı (Hedef Sağlandı)' : (basariYuzde >= 50 ? '🟡 Orta (Desteklenmeli)' : '🔴 Kritik (Telafi Önerilir)'))
       };
     });
 
@@ -4035,8 +4036,9 @@
 
       aktifSoru = {
         tur,
-        ocKodu: ocKodu || `ÖÇ-${((uretilenler.length % 4) + 1)}`,
-        kazanim: kazanim || ocKodu || `ÖÇ-${((uretilenler.length % 4) + 1)}`,
+        // ÖÇ etiketi yazılmamış soruya ÖÇ UYDURULMAZ (eskiden ÖÇ-1..4 sırayla atanıp akreditasyon raporuna giriyordu)
+        ocKodu: ocKodu || '',
+        kazanim: kazanim || ocKodu || '',
         metin: sMetin,
         siklar: [],
         dogruHarf: 'A',
@@ -7313,6 +7315,175 @@
     };
   }
 
+  /* ==========================================================================
+     ÖĞRENCİ HESABI (sunucu tarafı ortak mantık — server.js ve worker.js aynı fonksiyonu kullanır)
+     - Yalnız öğretmenin sınıf listesine eklediği numaralar hesap açabilir.
+     - İlk girişte e-posta + telefon + şifre; e-postaya 6 haneli kod gider, kod girilince hesap açılır.
+     - Sonraki girişler: numara + şifre. Şifre yenileme: kayıtlı e-postaya kod.
+     - Şifre PBKDF2 ile, doğrulama kodu SHA-256 özeti olarak saklanır (düz metin tutulmaz).
+     ========================================================================== */
+  const OGRENCI_KOD_GECERLILIK_MS = 10 * 60 * 1000;
+  const OGRENCI_KOD_AZAMI_DENEME = 5;
+
+  function uretOgrenciDogrulamaKodu() {
+    const b = kriptografikRastgeleBaytUret(4);
+    const sayi = ((b[0] << 24) >>> 0) + (b[1] << 16) + (b[2] << 8) + b[3];
+    return String(sayi % 1000000).padStart(6, '0');
+  }
+
+  function maskeleEposta(eposta = '') {
+    const e = String(eposta || '');
+    const at = e.indexOf('@');
+    if (at < 1) return '';
+    return `${e[0]}${'*'.repeat(Math.max(2, Math.min(6, at - 1)))}${e.slice(at)}`;
+  }
+
+  function maskeleAdSoyad(ad = '') {
+    return String(ad || '').trim().split(/\s+/).filter(Boolean)
+      .map((p, i) => (i === 0 ? p : `${p[0]}.`)).join(' ');
+  }
+
+  function ogrenciKodOzeti(ogrNo, kod) {
+    return uretDelilLogHash(`${String(ogrNo)}|${String(kod).trim()}`, 'OGR-DOGRULAMA-KOD');
+  }
+
+  function ogrenciDogrulamaEpostasi(amac, kod, adSoyad) {
+    const ad = String(adSoyad || '').trim() || 'Öğrenci';
+    if (amac === 'sifirlama') {
+      return {
+        konu: `Şifre yenileme kodunuz: ${kod}`,
+        metin: `Merhaba ${ad},\n\nSınav sistemi şifrenizi yenilemek için doğrulama kodunuz: ${kod}\n\nKod 10 dakika geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı dikkate almayın; şifreniz değişmez.\n`
+      };
+    }
+    return {
+      konu: `Sınav sistemi doğrulama kodunuz: ${kod}`,
+      metin: `Merhaba ${ad},\n\nSınav sistemine ilk kaydınızı tamamlamak için doğrulama kodunuz: ${kod}\n\nKod 10 dakika geçerlidir. Bu kaydı siz yapmadıysanız öğretmeninize bildirin.\n`
+    };
+  }
+
+  async function isleOgrenciHesapIstegi(eylem, govde = {}, ortam = {}) {
+    const hesaplar = ortam.hesaplar || {};
+    const liste = ortam.kayitliOgrenciler instanceof Map ? ortam.kayitliOgrenciler : new Map();
+    const simdi = Number(ortam.simdiMs) || Date.now();
+    const ogrNo = String((govde && govde.ogrNo) || '').trim().slice(0, 20);
+    const tanimli = ogrNo && liste.has(ogrNo);
+    const listeKaydi = tanimli ? liste.get(ogrNo) : null;
+    const hesap = ogrNo ? hesaplar[ogrNo] : null;
+    const aktifMi = Boolean(hesap && hesap.durum === 'aktif');
+    const sonuc = (kod, veri, ek = {}) => Object.assign({ kod, veri, eposta: null, degisti: false }, ek);
+    const tanimsizHata = () => sonuc(404, { hata: 'Bu öğrenci numarası öğretmeninizin sınıf listesinde yok. Numaranızı kontrol edin veya öğretmeninize başvurun.' });
+
+    if (eylem === 'durum') {
+      if (!tanimli) return tanimsizHata();
+      return sonuc(200, {
+        durum: aktifMi ? 'aktif' : 'yeni',
+        adMaske: maskeleAdSoyad(listeKaydi && listeKaydi.adSoyad),
+        epostaMaske: aktifMi ? maskeleEposta(hesap.eposta) : ''
+      });
+    }
+
+    if (eylem === 'kayit-baslat') {
+      if (!tanimli) return tanimsizHata();
+      if (aktifMi) return sonuc(409, { hata: 'Bu numara için hesap zaten açılmış. Şifrenizle giriş yapın veya "Şifremi unuttum"u kullanın.' });
+      const d = dogrulaOgrenciIlkKayit({ eposta: govde.eposta, telefon: govde.telefon, sifre: govde.sifre, sifreTekrar: govde.sifreTekrar });
+      if (!d.gecerli) return sonuc(400, { hata: d.hata });
+      const kod = uretOgrenciDogrulamaKodu();
+      hesaplar[ogrNo] = {
+        durum: 'onay-bekliyor',
+        eposta: d.eposta,
+        telefon: d.telefon,
+        sifreHash: await uretTuzluSifreOzetiWebCrypto(String(govde.sifre)),
+        kodOzeti: ogrenciKodOzeti(ogrNo, kod),
+        kodAmac: 'kayit',
+        kodBitisMs: simdi + OGRENCI_KOD_GECERLILIK_MS,
+        kodDeneme: 0,
+        guncellemeMs: simdi
+      };
+      const ep = ogrenciDogrulamaEpostasi('kayit', kod, listeKaydi && listeKaydi.adSoyad);
+      return sonuc(200, { epostaMaske: maskeleEposta(d.eposta), gecerlilikDk: 10 }, {
+        degisti: true,
+        eposta: { kime: d.eposta, konu: ep.konu, metin: ep.metin, ogrNo, kod, amac: 'kayit' }
+      });
+    }
+
+    if (eylem === 'kayit-onayla' || eylem === 'sifre-sifirla-onayla') {
+      const beklenenAmac = eylem === 'kayit-onayla' ? 'kayit' : 'sifirlama';
+      if (!tanimli || !hesap || hesap.kodAmac !== beklenenAmac || !hesap.kodOzeti) {
+        return sonuc(400, { hata: 'Geçerli bir doğrulama isteği yok. Kodu yeniden isteyin.' });
+      }
+      if (simdi > Number(hesap.kodBitisMs || 0)) {
+        return sonuc(410, { hata: 'Doğrulama kodunun süresi doldu. Yeni kod isteyin.' });
+      }
+      if (Number(hesap.kodDeneme || 0) >= OGRENCI_KOD_AZAMI_DENEME) {
+        return sonuc(429, { hata: 'Çok fazla hatalı kod girildi. Yeni kod isteyin.' });
+      }
+      if (ogrenciKodOzeti(ogrNo, govde.kod) !== hesap.kodOzeti) {
+        hesap.kodDeneme = Number(hesap.kodDeneme || 0) + 1;
+        return sonuc(401, { hata: `Kod hatalı. Kalan deneme: ${OGRENCI_KOD_AZAMI_DENEME - hesap.kodDeneme}` }, { degisti: true });
+      }
+      if (beklenenAmac === 'sifirlama') {
+        const kural = kontrolCanliSifreKurallari(govde.sifre, govde.sifreTekrar !== undefined ? govde.sifreTekrar : govde.sifre);
+        if (!kural.tumuGecerli) {
+          return sonuc(400, { hata: 'Yeni şifre tüm kuralları sağlamalı (en az 8 karakter, büyük ve küçük harf, rakam, simge) ve tekrarıyla aynı olmalı.' });
+        }
+        hesap.sifreHash = await uretTuzluSifreOzetiWebCrypto(String(govde.sifre));
+      }
+      hesap.durum = 'aktif';
+      delete hesap.kodOzeti;
+      delete hesap.kodAmac;
+      delete hesap.kodBitisMs;
+      hesap.kodDeneme = 0;
+      hesap.guncellemeMs = simdi;
+      return sonuc(200, { basarili: true, adSoyad: (listeKaydi && listeKaydi.adSoyad) || '' }, { degisti: true, girisOgrNo: ogrNo });
+    }
+
+    if (eylem === 'giris') {
+      if (!tanimli || !aktifMi) return sonuc(401, { hata: 'Öğrenci numarası veya şifre hatalı.' });
+      const ok = await dogrulaTuzluSifreWebCrypto(String(govde.sifre || ''), hesap.sifreHash);
+      if (!ok) return sonuc(401, { hata: 'Öğrenci numarası veya şifre hatalı.' });
+      return sonuc(200, { basarili: true, adSoyad: (listeKaydi && listeKaydi.adSoyad) || '' }, { girisOgrNo: ogrNo });
+    }
+
+    if (eylem === 'sifre-sifirla-baslat') {
+      // Hesabın var olup olmadığını dışarıya sızdırmamak için yanıt her durumda aynıdır
+      const genel = sonuc(200, { mesaj: 'Bu numaraya kayıtlı bir e-posta varsa doğrulama kodu gönderildi.' });
+      if (!tanimli || !aktifMi || !hesap.eposta) return genel;
+      const kod = uretOgrenciDogrulamaKodu();
+      hesap.kodOzeti = ogrenciKodOzeti(ogrNo, kod);
+      hesap.kodAmac = 'sifirlama';
+      hesap.kodBitisMs = simdi + OGRENCI_KOD_GECERLILIK_MS;
+      hesap.kodDeneme = 0;
+      hesap.guncellemeMs = simdi;
+      const ep = ogrenciDogrulamaEpostasi('sifirlama', kod, listeKaydi && listeKaydi.adSoyad);
+      genel.veri.epostaMaske = maskeleEposta(hesap.eposta);
+      genel.degisti = true;
+      genel.eposta = { kime: hesap.eposta, konu: ep.konu, metin: ep.metin, ogrNo, kod, amac: 'sifirlama' };
+      return genel;
+    }
+
+    if (eylem === 'hoca-liste') {
+      const satirlar = Array.from(liste.values()).map((o) => {
+        const h = hesaplar[String(o.ogrNo)] || null;
+        return {
+          ogrNo: String(o.ogrNo),
+          adSoyad: o.adSoyad || '',
+          durum: h ? h.durum : 'hesap-yok',
+          eposta: h ? h.eposta || '' : '',
+          telefon: h ? h.telefon || '' : ''
+        };
+      });
+      return sonuc(200, { ogrenciler: satirlar });
+    }
+
+    if (eylem === 'hoca-sifirla') {
+      if (!ogrNo || !hesaplar[ogrNo]) return sonuc(404, { hata: 'Bu numaraya ait öğrenci hesabı yok.' });
+      delete hesaplar[ogrNo];
+      return sonuc(200, { basarili: true, mesaj: 'Hesap sıfırlandı; öğrenci bir sonraki girişte bilgilerini yeniden tamamlar.' }, { degisti: true });
+    }
+
+    return sonuc(400, { hata: 'Bilinmeyen öğrenci hesap işlemi.' });
+  }
+
   /* Öğretmen / Öğretim Elemanı (Hoca) Kullanıcı Adı, Davet Kodu, Yönetici Onayı & Şifre Doğrulama Motoru */
   const VARSAYILAN_DAVET_KODU = 'AKADEMI-2026';
 
@@ -10536,6 +10707,9 @@
     uretResmiObsNotCizelgesiCSV,
     kontrolCanliSifreKurallari,
     dogrulaOgrenciIlkKayit,
+    isleOgrenciHesapIstegi,
+    maskeleEposta,
+    uretOgrenciDogrulamaKodu,
     VARSAYILAN_DAVET_KODU,
     VARSAYILAN_HOCA_HESAP,
     uretYeniDavetKodu,
