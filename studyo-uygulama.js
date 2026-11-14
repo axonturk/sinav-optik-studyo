@@ -3757,6 +3757,23 @@
       };
     }
 
+    if (kapsam === 'okunur-yoklama') {
+      const tb = okuTutanakBilgileri();
+      const ders = tb.ders || {};
+      const ogrenciler = Array.isArray(durum.ogrenciler) ? durum.ogrenciler : [];
+      const svgler = ogrenciler.length ? C.uretOkunabilirYoklamaSVG(ogrenciler, {
+        baslik: `${ders.kod || ''} ${ders.ad || ''} · ${String(tb.sinavTuru || '').split(' ')[0]}`.trim(),
+        alt: [tb.fakulte, tb.bolum, tb.salon].filter(Boolean).join(' · '),
+        tarih: tb.tarihSaat || ''
+      }) : [];
+      return {
+        html: svgler.length
+          ? svgler.map((svg, i) => `<div class="a4-sayfa"><div class="a4-sayfa-etiket">OKUNABİLİR YOKLAMA · SAYFA ${i + 1}/${svgler.length}</div><div style="width:100%; max-width:190mm; margin:0 auto;">${svg}</div></div>`).join('')
+          : '<div class="a4-sayfa"><p style="padding:2rem;">Öğrenci listesi boş. Önce öğrenci listesini yükleyin.</p></div>',
+        dosyaAdiTabani: `${dersKodTemiz}_Okunabilir_Yoklama`
+      };
+    }
+
     if (kapsam === 'ayri-optik') {
       return {
         html: uretAyriOptikSayfaHTML(yapi),
@@ -4150,7 +4167,7 @@
     if (!sahne) return;
 
     const baskiKapsamiSecili = (document.getElementById('baski-kapsam-sec') || {}).value || '';
-    if (['tutanak', 'yoklama', 'tutanak-yoklama'].includes(baskiKapsamiSecili)) {
+    if (['tutanak', 'yoklama', 'tutanak-yoklama', 'okunur-yoklama'].includes(baskiKapsamiSecili)) {
       sahne.innerHTML = uretKapsamaGoreBaskiHTML(yapi, baskiKapsamiSecili).html;
     } else if (yapi.onizlemeMod === 'ayri-optik') {
       sahne.innerHTML = uretAyriOptikSayfaHTML(yapi);
@@ -4796,7 +4813,7 @@
       <h4 style="margin:0.4rem 0;">Sınavlar</h4>
       ${dosya.sinavlar.length ? `<table class="veri-tablo"><thead><tr><th>Sınav</th><th>Kaynak</th><th>Kodlanan</th><th>Kitapçık</th><th>D/Y</th><th>Test</th><th>Puan</th></tr></thead><tbody>${dosya.sinavlar.map((x) => `<tr><td>${C.kacisHTML(x.sinavAd)}</td><td>${C.kacisHTML(x.kaynak)}</td><td class="mono">${C.kacisHTML(x.okunanNoKod)}</td><td>${C.kacisHTML(x.grup)}</td><td>${x.dyDogru ?? '-'}D/${x.dyYanlis ?? '-'}Y</td><td>${x.testDogru ?? '-'}D/${x.testYanlis ?? '-'}Y</td><td><strong>${x.puan}</strong></td></tr>`).join('')}</tbody></table>` : '<div style="color:var(--metin-ikincil);">Okunmuş sınav yok.</div>'}
       <h4 style="margin:0.6rem 0 0.3rem;">Şüpheler ve deliller</h4>
-      ${dosya.supheler.length ? dosya.supheler.map((x) => `<div class="kart" style="margin:0.3rem 0; border-left:4px solid ${x.risk === 'YUKSEK' ? 'var(--tehlike)' : 'var(--uyari)'};">${x.tur === 'ZAMAN_IZI' ? '⏱ Zaman izi' : '📄 Ortak yanlış'} · <strong>${C.kacisHTML(x.sinavAd)}</strong> · ${C.kacisHTML(ogrAdiBul(x.digerNo, x.digerAd))} (${C.kacisHTML(x.digerNo)}) ile ${x.tur === 'ZAMAN_IZI' ? `${x.yakinAyniCevap} soruda saniyeler içinde aynı cevap` : `<strong>${x.ortakYanlis} ortak yanlış</strong> (benzerlik %${x.benzerlik}${x.maddeler && x.maddeler.length ? ` · ${C.kacisHTML(x.maddeler.join(', '))}` : ''})`} · ${x.risk === 'YUKSEK' ? 'YÜKSEK' : 'Orta'} risk</div>`).join('') : '<div style="color:var(--metin-ikincil);">Kopya şüphesi yok.</div>'}
+      ${dosya.supheler.length ? dosya.supheler.map((x) => `<div class="kart" style="margin:0.3rem 0; border-left:4px solid ${x.risk === 'YUKSEK' ? 'var(--tehlike)' : 'var(--uyari)'};">${x.tur === 'YOKLAMA_UYUMSUZ' ? `🚩 Yoklama uyuşmazlığı · <strong>${C.kacisHTML(x.sinavAd)}</strong> · yoklamada imzası yok (gelmedi) ama sınav kağıdı okundu — kağıdı başkası doldurmuş olabilir · YÜKSEK risk</div>` : `${x.tur === 'ZAMAN_IZI' ? '⏱ Zaman izi' : '📄 Ortak yanlış'} · <strong>${C.kacisHTML(x.sinavAd)}</strong> · ${C.kacisHTML(ogrAdiBul(x.digerNo, x.digerAd))} (${C.kacisHTML(x.digerNo)}) ile ${x.tur === 'ZAMAN_IZI' ? `${x.yakinAyniCevap} soruda saniyeler içinde aynı cevap` : `<strong>${x.ortakYanlis} ortak yanlış</strong> (benzerlik %${x.benzerlik}${x.maddeler && x.maddeler.length ? ` · ${C.kacisHTML(x.maddeler.join(', '))}` : ''})`} · ${x.risk === 'YUKSEK' ? 'YÜKSEK' : 'Orta'} risk</div>`}`).join('') : '<div style="color:var(--metin-ikincil);">Kopya şüphesi yok.</div>'}
       <h4 style="margin:0.6rem 0 0.3rem;">Online sınav ihlalleri</h4>
       ${dosya.ihlaller.length ? `<ul style="margin:0; padding-left:1.1rem; font-size:0.82rem;">${dosya.ihlaller.map((l) => `<li>${tarihMetni(Date.parse(l.zamanIso || l.zamanDamgasi))} · ${C.kacisHTML(l.olayTuru)} · ${C.kacisHTML(l.aciklama || '')} · ihlal ${l.ihlalSayisi ?? ''}</li>`).join('')}</ul>` : '<div style="color:var(--metin-ikincil);">İhlal yok.</div>'}
       <h4 style="margin:0.6rem 0 0.3rem;">Elle atamalar (numara düzeltmeleri)</h4>
@@ -10689,7 +10706,7 @@ Yine de çıktı alınsın mı?`)) {
       return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
     };
     const kapsamDegeri = () => (document.getElementById('baski-kapsam-sec') || {}).value || 'sinif-aktif';
-    const TUTANAK_KAPSAMLARI = ['tutanak', 'yoklama', 'tutanak-yoklama'];
+    const TUTANAK_KAPSAMLARI = ['tutanak', 'yoklama', 'tutanak-yoklama', 'okunur-yoklama'];
     const guncelleKapsamPanelleri = () => {
       const k = kapsamDegeri();
       const ogrPanel = document.getElementById('panel-ogrenci-ozel');
@@ -15728,8 +15745,10 @@ Yine de çıktı alınsın mı?`)) {
         if (sinceSeq === 0) {
           durum.telefonSinavlari = {};
           durum.telefonOlaylari = [];
+          durum.yoklamalar = [];
           telefonKovasiDegisti = true;
         }
+        if (!Array.isArray(durum.yoklamalar)) durum.yoklamalar = [];
         if (!Array.isArray(durum.telefonOlaylari)) durum.telefonOlaylari = [];
 
         olaylar.forEach((olay) => {
@@ -15738,6 +15757,18 @@ Yine de çıktı alınsın mı?`)) {
           if (olay.tur === 'OKUDU_GUNCELLE' && olay.kaynakCihaz !== 'masaustu' && olay.veri) {
             durum.telefonOlaylari.push({ seqNo: Number(olay.seqNo) || 0, sinavKodu: olay.sinavKodu || '', zamanMs: Number(olay.zamanMs) || 0, tur: 'OKUDU_GUNCELLE', veri: { id: olay.veri.id, ogrNo: olay.veri.ogrNo, adSoyad: olay.veri.adSoyad, okunanNoKod: olay.veri.okunanNoKod, grup: olay.veri.grup, toplamPuan: olay.veri.toplamPuan } });
             if (durum.telefonOlaylari.length > 5000) durum.telefonOlaylari = durum.telefonOlaylari.slice(-5000);
+          }
+          if (olay.tur === 'YOKLAMA') {
+            // Telefonla okunan yoklama: Kayıtlar ve Öğrenci Dosyası'nda görünür (aynı öğrenci için en son okuma geçerli)
+            const satirlar = olay.veri && Array.isArray(olay.veri.satirlar) ? olay.veri.satirlar : [];
+            satirlar.forEach((x) => {
+              if (!x || !x.ogrNo) return;
+              const yeni = { ogrNo: String(x.ogrNo), durum: String(x.durum || 'belirsiz'), elle: Boolean(x.elle), sinavKodu: olay.sinavKodu || '', zamanMs: Number(olay.zamanMs) || 0, seqNo: Number(olay.seqNo) || 0, sayfa: Number(olay.veri.sayfa) || 0 };
+              const i = durum.yoklamalar.findIndex((y) => y.ogrNo === yeni.ogrNo && y.sinavKodu === yeni.sinavKodu);
+              if (i < 0) durum.yoklamalar.push(yeni);
+              else if ((durum.yoklamalar[i].seqNo || 0) <= yeni.seqNo) durum.yoklamalar[i] = yeni;
+            });
+            return;
           }
           const kodUygun = !olay.sinavKodu || olay.sinavKodu === 'GENEL' || !aktifKod || aktifKod === 'GENEL' || olay.sinavKodu === aktifKod;
           // Açık sınavla aynı kodu taşımayan telefon olayı artık atlanmaz: "Telefondan gelen sınavlar"a konur

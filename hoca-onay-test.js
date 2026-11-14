@@ -700,6 +700,9 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
     sureInp.value = '75 Dakika';
     sureInp.dispatchEvent(new Event('input'));
   });
+  // Üstteki sabit kayıt çubuğu düğmeyi örtmesin diye önce ortaya kaydır
+  await sayfa.$eval('#btn-kagit-sablon-kaydet', (b) => b.scrollIntoView({ block: 'center', behavior: 'instant' }));
+  await new Promise((r) => setTimeout(r, 100));
   await sayfa.click('#btn-kagit-sablon-kaydet');
   await new Promise((r) => setTimeout(r, 250));
 
