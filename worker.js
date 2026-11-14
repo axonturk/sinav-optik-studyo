@@ -109,7 +109,11 @@ function ogrenciGirisTokenDogrula(token, ogrNo) {
 async function hazirlaHashliHocaKaydiAsync(kayit) {
   const kopya = Object.assign({}, kayit);
   if (!kopya.sifreHash && typeof kopya.sifre === 'string' && kopya.sifre.length > 0) {
-    kopya.sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(kopya.sifre);
+    // Açık kaynakta yazılı VARSAYILAN şifreyi 100.000 turla özetlemek güvenlik katmaz; yalnız her soğuk açılışta
+    // ~16 ms işlemci yakar ve ücretsiz plandaki 10 ms sınırını aşıp Worker'ı 1102 döngüsüne sokuyordu.
+    // Bu bilinen şifre en düşük turla özetlenir; gerçek (değiştirilmiş) şifreler 100.000 turla özetlenmeye devam eder.
+    const varsayilanMi = Cekirdek.VARSAYILAN_HOCA_HESAP && kopya.sifre === Cekirdek.VARSAYILAN_HOCA_HESAP.sifre;
+    kopya.sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(kopya.sifre, '', varsayilanMi ? 10000 : 100000);
   }
   delete kopya.sifre;
   delete kopya.sifreTekrar;

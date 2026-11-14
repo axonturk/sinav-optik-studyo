@@ -498,6 +498,8 @@
     <button type="button" class="btn btn-kucuk" id="btn-mobil-genel-bildirim-kapat" style="padding:2px 8px; min-height:28px;">✕</button>
   </div>
 
+  <!-- Sunucu bağlantı uyarısı: sunucusuz adreste açıldıysa veya sunucu yanıt vermiyorsa ham hata yerine ne yapılacağını söyler -->
+  <div id="mobil-sunucu-uyari" role="alert" hidden style="margin:8px 12px 0; padding:10px 12px; border-radius:8px; background:#7c2d12; color:#fff; font-size:13px; line-height:1.4;"></div>
   <main>
 
     <!-- ====================================================================
@@ -905,7 +907,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261114b"></script>
+  <script src="guvenlik-ve-veri.js?v=20261114c"></script>
   <script>
     (function () {
       'use strict';
@@ -1261,6 +1263,14 @@
               if (d.cevapAnahtarlari && typeof d.cevapAnahtarlari === 'object') {
                 yapi.cevapAnahtarlari = JSON.parse(JSON.stringify(d.cevapAnahtarlari));
               }
+            }
+            // Buluttan cevap anahtarı OLMADAN gelen yeni ders: anahtar başka dersten/örnekten kopyalanmış olur.
+            // Kurulum QR'ı okutulana ya da anahtar girilene kadar bu derste kağıt okunmaz (liste QR'ındaki kilitle aynı).
+            const anahtarDoluMu = (a) => Boolean(a && typeof a === 'object' && Object.values(a).some((g) => g && ((Array.isArray(g.dy) && g.dy.some(Boolean)) || (Array.isArray(g.test) && g.test.some(Boolean)))));
+            const buluttanAnahtarGeldi = anahtarDoluMu(gelenYapi && gelenYapi.cevapAnahtarlari) || anahtarDoluMu(d.cevapAnahtarlari);
+            if (!buluttanAnahtarGeldi && !eski.sinavYapisi && !aktifMi) {
+              yapi.kurulumBekliyor = true;
+              yapi.kurulumBekliyorImza = anahtarParmakIzi(yapi);
             }
             const mevcutOkumalar = aktifMi
               ? (Array.isArray(mobilDurum.okumaSonuclari) ? mobilDurum.okumaSonuclari.slice() : [])
@@ -2518,6 +2528,7 @@
               headers: basliklar,
               body: JSON.stringify({ olaylar: bekleyenler.slice(0, 150) })
             });
+            guncelleMobilSunucuUyari(sunucuYanitiniSiniflandir(pushYanit));
             if (pushYanit.status === 401 || pushYanit.status === 403) {
               await pushYanit.text().catch(() => '');
               return { ok: false, sebep: 'yetkisiz' };
@@ -2539,7 +2550,8 @@
             headers: { Authorization: `Bearer ${token}` },
             cache: 'no-store'
           });
-          if (pullYanit.ok) {
+          guncelleMobilSunucuUyari(sunucuYanitiniSiniflandir(pullYanit));
+          if (pullYanit.ok && mobilSunucuSagligi === 'ok') {
             const lv = await pullYanit.json();
             const gelenOlaylar = Array.isArray(lv && lv.olaylar) ? lv.olaylar : [];
             let anahtarGuncellendiMi = false;
@@ -2588,6 +2600,10 @@
           }
           return { ok: true, sonSeqNo };
         } catch (_) {
+          // Yanıt JSON değilse (sunucusuz adres) ya da ağ hatası: durumu anlaşılır biçimde göster
+          if (typeof navigator === 'undefined' || navigator.onLine !== false) {
+            if (mobilSunucuSagligi === 'ok' || mobilSunucuSagligi === 'bilinmiyor') guncelleMobilSunucuUyari('yanitsiz');
+          }
           guncelleMobilSenkronRozetUI(false);
           return { ok: false, sebep: 'ag_hatasi' };
         } finally {
@@ -2601,6 +2617,59 @@
         meta: okuMobilV2Meta()
       });
       window.__mobilV2SenkronTetikle = (sec = {}) => senkronizeEtMobilV2Olaylar(sec);
+
+      /* Sunucu sağlığı: 'ok' | 'yanitsiz' (5xx, 1102) | 'sunucusuz' (yanıt HTML: GitHub Pages vb.) | 'yetkisiz' | 'bilinmiyor' */
+      var ASIL_UYGULAMA_ADRESI = 'https://sinav.axonturk.workers.dev/optik-mobil.html';
+      var mobilSunucuSagligi = 'bilinmiyor'; // var: init sırasında rozet daha erken çağrılırsa TDZ hatası olmasın
+      function sunucuYanitiniSiniflandir(yanit) {
+        if (!yanit) return 'yanitsiz';
+        const tur = String((yanit.headers && yanit.headers.get('content-type')) || '').toLowerCase();
+        if (tur.includes('text/html')) return 'sunucusuz';
+        if (yanit.status === 401 || yanit.status === 403) return 'yetkisiz';
+        if (yanit.status >= 500) return 'yanitsiz';
+        return 'ok';
+      }
+      function sunucuSagligiMetni(durumKodu) {
+        if (durumKodu === 'sunucusuz') {
+          return `Bu adres (${location.host}) sınav sunucusuna bağlanamaz: burada yalnız sayfa var, sunucu yok. Okumalar telefonda güvende ama bilgisayara gönderilemez. Uygulamayı ${ASIL_UYGULAMA_ADRESI} adresinden açın ve oradan yükleyin.`;
+        }
+        if (durumKodu === 'yanitsiz') {
+          return 'Sınav sunucusu şu an yanıt vermiyor. Okumalarınız telefonda güvende; sunucu düzelince kendiliğinden gönderilir. Okumaya devam edebilirsiniz.';
+        }
+        if (durumKodu === 'yetkisiz') {
+          return 'Telefonun sunucu oturumu sona ermiş. Okumalar telefonda güvende; göndermek için yeniden bağlanın (bilgisayardaki QR ya da Giriş).';
+        }
+        return '';
+      }
+      function guncelleMobilSunucuUyari(durumKodu) {
+        mobilSunucuSagligi = durumKodu || mobilSunucuSagligi;
+        const el = document.getElementById('mobil-sunucu-uyari');
+        if (!el) return;
+        const metin = sunucuSagligiMetni(mobilSunucuSagligi);
+        el.textContent = metin;
+        el.hidden = !metin;
+        guncelleMobilSenkronRozetUI(false);
+      }
+      async function kontrolEtMobilSunucuBaglantisi() {
+        if (!(location.protocol === 'http:' || location.protocol === 'https:')) return;
+        try {
+          const y = await fetch('/api/ag-adresi', { cache: 'no-store' });
+          const sinif = sunucuYanitiniSiniflandir(y);
+          await y.text().catch(() => ''); // gövde okunmazsa bağlantı açık kalır
+          guncelleMobilSunucuUyari(sinif);
+        } catch (_) {
+          if (typeof navigator === 'undefined' || navigator.onLine !== false) guncelleMobilSunucuUyari('yanitsiz');
+        }
+      }
+      /* Kullanıcıya gösterilen hata: "Unexpected token '<'" gibi ham JSON hataları yerine durumu anlatır */
+      function anlasilirSunucuHatasi(err) {
+        const m = String((err && err.message) || '');
+        if (/Unexpected token|is not valid JSON|JSON\.parse/i.test(m)) {
+          return sunucuSagligiMetni(mobilSunucuSagligi === 'yanitsiz' ? 'yanitsiz' : 'sunucusuz') || 'Sunucudan beklenmeyen yanıt geldi.';
+        }
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'İnternet bağlantısı yok. Okumalar telefonda güvende; bağlantı gelince gönderilir.';
+        return sunucuSagligiMetni('yanitsiz');
+      }
 
       function guncelleMobilSenkronRozetUI(senkronOnaylandi = false) {
         const rozet = document.getElementById('rozet-mobil-bekleyen');
@@ -2617,7 +2686,12 @@
         if (bekleyenSayi > 0) {
           rozet.hidden = false;
           rozet.className = 'rozet rozet-sari';
-          rozet.textContent = cevrimdisi ? `Çevrimdışı Bekleyen: ${bekleyenSayi}` : `Bekleyen: ${bekleyenSayi}`;
+          rozet.textContent = cevrimdisi
+            ? `Çevrimdışı · ${bekleyenSayi} gönderilmedi`
+            : (mobilSunucuSagligi === 'yanitsiz' || mobilSunucuSagligi === 'sunucusuz' || mobilSunucuSagligi === 'yetkisiz'
+              ? `${bekleyenSayi} gönderilemedi`
+              : `${bekleyenSayi} gönderiliyor`);
+          rozet.title = sunucuSagligiMetni(mobilSunucuSagligi) || 'Okumalar sunucuya gönderilmeyi bekliyor; telefonda güvende.';
           return;
         }
         if (toplam === 0) {
@@ -3186,6 +3260,20 @@
             mobilDurum.sinavYapisi.dySayisi !== sonuc.algilananYapi.dySayisi ||
             mobilDurum.sinavYapisi.testSayisi !== sonuc.algilananYapi.testSayisi ||
             mobilDurum.sinavYapisi.klasikSayisi !== sonuc.algilananYapi.klasikSayisi;
+          // Yapısı seçili sınavla uyuşmayan kağıt BAŞKA bir sınava aittir: seçili sınavın yapısı ve puanları sessizce
+          // değiştirilmez, kağıt kaydedilmez. (Eskiden kağıda göre yapı değiştirilip puanlar örnek orana göre
+          // yeniden dağıtılıyordu: "15 D/Y (27p)" ve 19,8 gibi anlamsız puanlar.)
+          // Yalnız "kağıttan anahtar oku" modunda öğretmenin anahtar kağıdı yapıyı belirler.
+          if (degistiMi && !masterAnahtarModu) {
+            const y0 = mobilDurum.sinavYapisi;
+            const metin = (dy, t, k) => `${dy} D/Y + ${t} Test${k ? ` + ${k} Klasik` : ''}`;
+            if (!seri) {
+              mobilUyariGoster(`⚠️ Bu kağıt ${metin(sonuc.algilananYapi.dySayisi, sonuc.algilananYapi.testSayisi, sonuc.algilananYapi.klasikSayisi)}; seçili sınav "${y0.dersAd || 'Aktif sınav'}" ise ${metin(y0.dySayisi, y0.testSayisi, y0.klasikSayisi)}. Kağıt bu sınava ait değil, kaydedilmedi. Doğru sınavı seçin ya da o sınavın kurulum QR'ını okutun.`);
+              bipCal(false);
+            }
+            if (vizorDisKutu) vizorDisKutu.classList.remove('vizor-kilitlendi');
+            return null;
+          }
           mobilDurum.sinavYapisi.dySayisi = sonuc.algilananYapi.dySayisi;
           mobilDurum.sinavYapisi.testSayisi = sonuc.algilananYapi.testSayisi;
           mobilDurum.sinavYapisi.klasikSayisi = sonuc.algilananYapi.klasikSayisi;
@@ -3579,6 +3667,7 @@
       /* Etkinlik Bağlantıları */
       document.addEventListener('DOMContentLoaded', () => {
         yukleBaslangicVerisi();
+        kontrolEtMobilSunucuBaglantisi();
         cizDokunmatikAnahtarEditoru();
         guncelleMobilSonucListesi();
         if (
@@ -3658,7 +3747,7 @@
               await senkronizeEtBulutMobilDersler({ sessiz: false });
             } catch (err) {
               if (hataEl) {
-                hataEl.textContent = `Sunucuya erişilemedi: ${(err && err.message) || 'Ağ hatası'}`;
+                hataEl.textContent = anlasilirSunucuHatasi(err);
                 hataEl.hidden = false;
               }
             }
@@ -4606,6 +4695,7 @@
 
         window.addEventListener('hashchange', () => {
           yukleBaslangicVerisi();
+        kontrolEtMobilSunucuBaglantisi();
           cizDokunmatikAnahtarEditoru();
           cizMobilOgrenciQrBilgisayara();
         });
