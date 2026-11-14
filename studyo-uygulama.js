@@ -15315,6 +15315,12 @@ Yine de çıktı alınsın mı?`)) {
         let anahtarDegistiMi = false;
         let maksSeq = sinceSeq;
         let telefonKovasiDegisti = false;
+        // Oturumun ilk çekişinde (sinceSeq = 0) telefon sınavları sunucudan SIFIRDAN kurulur:
+        // sunucudan silinen eski olaylar tarayıcıda kalıp görünmeye devam etmez.
+        if (sinceSeq === 0) {
+          durum.telefonSinavlari = {};
+          telefonKovasiDegisti = true;
+        }
 
         olaylar.forEach((olay) => {
           if (!olay) return;
