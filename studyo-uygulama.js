@@ -5815,7 +5815,11 @@
         kalanSureRozet.textContent = `${String(varsayilanSecili.sureDk || 40).padStart(2, '0')}:00`;
       }
       if (salonSatir) {
-        salonSatir.style.display = varsayilanSecili.erisimKodu ? 'block' : 'none';
+        const kodGerekli = Boolean(varsayilanSecili.erisimKodu || varsayilanSecili.erisimKoduGerekli || varsayilanSecili.degisenSalonKodu ||
+          (durum.onlineSinav && durum.onlineSinav.sinavId === varsayilanSecili.sinavId && (durum.onlineSinav.erisimKoduGerekli || durum.onlineSinav.degisenSalonKodu)));
+        salonSatir.style.display = kodGerekli ? 'block' : 'none';
+        const kodEtiket = salonSatir.querySelector('label');
+        if (kodEtiket) kodEtiket.textContent = (varsayilanSecili.degisenSalonKodu || (durum.onlineSinav && durum.onlineSinav.degisenSalonKodu)) ? 'Salon Kodu (tahtadaki güncel 6 haneli kod)' : 'Salon Giriş Kodu';
       }
       if (dinamikKuralRozet) {
         const maksIhlalSecEl = document.getElementById('online-maks-ihlal');
@@ -5825,6 +5829,12 @@
         dinamikKuralRozet.textContent = mIhlal === 1
           ? '🛑 1 İhlalde Anında Sınav Bitirilir (Sıfır Tolerans)'
           : (mIhlal > 1 ? `🚨 ${mIhlal} İhlalde Sınav Otomatik Bitirilir` : '⚠️ Tüm İhlaller Delil Loguna Raporlanır');
+        const kuralMetni = document.getElementById('kiosk-kural-ihlal-metni');
+        if (kuralMetni) {
+          kuralMetni.innerHTML = mIhlal > 0
+            ? `<strong>Ekrandan her ayrılışınız (başka sekme/uygulama, tam ekrandan çıkma) ihlal sayılır. ${mIhlal === 1 ? 'İlk ihlalde' : `${mIhlal}. ihlalde`} sınavınız otomatik sonlandırılır</strong> ve o ana kadar verdiğiniz cevaplar teslim edilir.`
+            : '<strong>Ekrandan her ayrılışınız (başka sekme/uygulama, tam ekrandan çıkma) ihlal olarak kaydedilir</strong> ve öğretmeniniz tarafından değerlendirilir.';
+        }
       }
     }
   }
@@ -5896,7 +5906,7 @@
 
     const yapi = okuAktifSinavYapisi();
     const onl = durum.onlineSinav || {};
-    if (onl.erisimKodu) {
+    if (onl.erisimKodu && !onl.degisenSalonKodu) {
       const girilenSalonKodu = ((document.getElementById('kiosk-salon-kodu') && document.getElementById('kiosk-salon-kodu').value) || '').trim();
       if (girilenSalonKodu !== String(onl.erisimKodu).trim()) {
         hataKutu.textContent = '🔑 Girdiğiniz Salon / Sınav Giriş Kodu hatalı. Lütfen gözetmenin paylaştığı kodu kontrol ediniz.';
@@ -5964,6 +5974,7 @@
         if (Array.isArray(veri.sorular) && veri.sorular.length > 0) {
           kisiyeOzelSorular = veri.sorular;
         }
+        if (veri.maksIhlal !== undefined) onl.__sunucuMaksIhlal = Number(veri.maksIhlal) || 0;
       } catch (_) {
         sessionStorage.removeItem('kiosk_token');
         sessionStorage.removeItem('AKTIF_KIOSK_OTURUM_V1');
@@ -5977,9 +5988,11 @@
     const tamEkranZorunluEl = document.getElementById('online-tam-ekran-zorunlu');
     const tamEkranZorunlu = tamEkranZorunluEl ? Boolean(tamEkranZorunluEl.checked) : true;
     const maksIhlalSecEl = document.getElementById('online-maks-ihlal');
-    const etkinMaksIhlal = maksIhlalSecEl && maksIhlalSecEl.value !== undefined
+    let etkinMaksIhlal = maksIhlalSecEl && maksIhlalSecEl.value !== undefined
       ? (parseInt(maksIhlalSecEl.value, 10) || 0)
       : (Number(onl.maksIhlal) || 0);
+    // Sunucunun bildirdiği sınır esastır (öğrencinin kendi cihazında yerel ayar yoktur)
+    if (onl.__sunucuMaksIhlal !== undefined) { etkinMaksIhlal = onl.__sunucuMaksIhlal; delete onl.__sunucuMaksIhlal; }
 
     if (window.__kioskBroadcastKanal) {
       try {
@@ -6014,6 +6027,11 @@
       sonVisibilityIhlalMs: 0
     };
 
+    try {
+      ekleKioskDelilLog('KURAL_ONAYI', `Öğrenci sınav kurallarını okuyup kabul etti (ihlal sınırı: ${durum.kioskOturum && durum.kioskOturum.maksIhlal > 0 ? durum.kioskOturum.maksIhlal : 'yalnız kayıt'}).`);
+    } catch (_) {}
+    guncelleKioskIhlalSayaci();
+    baslatKioskNabzi();
     document.body.classList.add('kiosk-aktif');
     document.getElementById('kiosk-giris-formu').style.display = 'none';
     document.getElementById('kiosk-soru-sahne').style.display = 'block';
@@ -6316,9 +6334,44 @@
         method: 'POST',
         headers: basliklar,
         body: JSON.stringify(Object.assign({}, logNesnesi, aktifToken ? { token: aktifToken } : {}))
-      }).catch(() => {});
+      }).then((r) => r.json()).then((v) => isleSunucuIhlalYaniti(v)).catch(() => {});
     }
     return logNesnesi;
+  }
+
+  /* Ekrandaki ihlal sayacı: "İhlal 1 / 2" */
+  function guncelleKioskIhlalSayaci() {
+    const ot = durum.kioskOturum;
+    const el = document.getElementById('kiosk-ihlal-sayac');
+    if (!el || !ot) return;
+    el.textContent = ot.maksIhlal > 0 ? `İhlal: ${ot.ihlalSayisi} / ${ot.maksIhlal}` : `İhlal: ${ot.ihlalSayisi}`;
+    el.className = `rozet ${ot.ihlalSayisi === 0 ? 'rozet-yesil' : (ot.maksIhlal > 0 && ot.maksIhlal - ot.ihlalSayisi <= 1 ? 'rozet-kirmizi' : 'rozet-sari')}`;
+  }
+  /* Sunucunun saydığı ihlal esastır; sınır dolmuşsa (öğrenci tarayıcıyı kurcalasa bile) sınav biter */
+  function isleSunucuIhlalYaniti(v) {
+    const ot = durum.kioskOturum;
+    if (!v || !ot || ot.teslimOnaylandi) return;
+    if (v.maksIhlal !== undefined && Number(v.maksIhlal) > 0) ot.maksIhlal = Number(v.maksIhlal);
+    if (Number(v.ihlalSayisi) > ot.ihlalSayisi) ot.ihlalSayisi = Number(v.ihlalSayisi);
+    guncelleKioskIhlalSayaci();
+    if ((v.kilitli || v.ihlalKilidi) && !ot.bitirmeSuruyor) bitirKioskOturumu('İhlal Sınırı Aşıldı (sunucu kararı)');
+  }
+  /* "Buradayım" sinyali: 20 sn'de bir; 1 dakikadan uzun kesinti sunucuda ihlal sayılır */
+  function baslatKioskNabzi() {
+    C.temizleGuvenliInterval('kiosk-nabiz');
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    const gonder = () => {
+      const ot = durum.kioskOturum;
+      const token = sessionStorage.getItem('kiosk_token') || '';
+      if (!ot || ot.teslimOnaylandi || !token) return;
+      fetch('/api/ogrenci-nabiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ token })
+      }).then((r) => r.json()).then((v) => isleSunucuIhlalYaniti(v)).catch(() => {});
+    };
+    gonder();
+    C.kaydetGuvenliInterval('kiosk-nabiz', gonder, 20000);
   }
 
   function gosterKioskKarantinaPerdesi(mesaj) {
@@ -6417,6 +6470,7 @@
 
   async function bitirKioskOturumu(bitisDurumu = 'Tamamlandı', secenek = {}) {
     C.temizleGuvenliInterval('kiosk-sayac');
+    C.temizleGuvenliInterval('kiosk-nabiz');
     const ot = durum.kioskOturum;
     if (!ot || ot.teslimOnaylandi) return;
     if (ot.bitirmeSuruyor && ot.bitirmeSozu) return ot.bitirmeSozu;
@@ -7425,7 +7479,10 @@
       erisimKodu: al('online-erisim-kodu', ''),
       kisiyeOzel: seciliMi('online-kisiye-ozel', true),
       geriDonusKilit: seciliMi('online-geri-donus-kilit', true),
-      tamEkranZorunlu: seciliMi('online-tam-ekran-zorunlu', true)
+      tamEkranZorunlu: seciliMi('online-tam-ekran-zorunlu', true),
+      degisenSalonKodu: seciliMi('online-degisen-salon-kodu', false),
+      sebZorunlu: seciliMi('online-seb-zorunlu', false),
+      izinliAg: al('online-izinli-ag', '')
     };
   }
   const senkronizeOnlineSinavSunucu = senkronizeEtOnlineSinavSunucu;
@@ -8093,6 +8150,45 @@
   function baslatUygulama() {
     kurTelefonBaglaAkisi();
     try {
+      // Projeksiyon: her dakika değişen salon kodu
+      let salonKoduZamanlayici = null;
+      const modalSalon = document.getElementById('modal-salon-kodu');
+      const salonKoduKapat = () => { clearInterval(salonKoduZamanlayici); salonKoduZamanlayici = null; if (modalSalon) modalSalon.style.display = 'none'; };
+      const salonKoduYenile = async () => {
+        const token = sessionStorage.getItem('hoca_token') || '';
+        const deger = document.getElementById('salon-kodu-deger');
+        const sure = document.getElementById('salon-kodu-sure');
+        try {
+          const y = await fetch('/api/online-salon-kodu', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+          const v = await y.json().catch(() => ({}));
+          if (!y.ok) throw new Error(v.hata || `HTTP ${y.status}`);
+          if (!v.aktif) {
+            deger.textContent = '——————';
+            sure.textContent = 'Önce "Her dakika değişen salon kodu" seçili olarak sınavı tanımlayın / kaydedin.';
+            return;
+          }
+          deger.textContent = v.kod;
+          sure.textContent = `Yeni kod ${v.kalanSn} sn sonra`;
+          const baslik = document.getElementById('salon-kodu-baslik');
+          if (baslik && v.baslik) baslik.textContent = v.baslik;
+        } catch (err) {
+          sure.textContent = `Kod alınamadı: ${err.message}`;
+        }
+      };
+      const btnSalonGoster = document.getElementById('btn-online-salon-kodu-goster');
+      if (btnSalonGoster && modalSalon) {
+        btnSalonGoster.addEventListener('click', () => {
+          modalSalon.style.display = 'flex';
+          salonKoduYenile();
+          clearInterval(salonKoduZamanlayici);
+          salonKoduZamanlayici = setInterval(salonKoduYenile, 2000);
+          if (modalSalon.requestFullscreen) modalSalon.requestFullscreen().catch(() => {});
+        });
+      }
+      const btnSalonKapat = document.getElementById('btn-salon-kodu-kapat');
+      if (btnSalonKapat) btnSalonKapat.addEventListener('click', () => { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); salonKoduKapat(); });
+    } catch (_) {}
+    try {
       const secTel = document.getElementById('sec-telefon-sinavi');
       if (secTel) secTel.addEventListener('change', () => cizTelefonSinavlariPaneli());
       const btnTelCsv = document.getElementById('btn-telefon-sinavi-csv');
@@ -8127,7 +8223,11 @@
             aktif: true,
             baslangic: v.baslangic || durum.onlineSinav.baslangic,
             bitis: v.bitis || durum.onlineSinav.bitis,
-            sureDk: Number(v.sureDk) || durum.onlineSinav.sureDk || 40
+            sureDk: Number(v.sureDk) || durum.onlineSinav.sureDk || 40,
+            maksIhlal: v.maksIhlal !== undefined ? Number(v.maksIhlal) || 0 : durum.onlineSinav.maksIhlal,
+            erisimKoduGerekli: Boolean(v.erisimKoduGerekli),
+            degisenSalonKodu: Boolean(v.degisenSalonKodu),
+            sebZorunlu: Boolean(v.sebZorunlu)
           });
           if (!durum.onlineSinavListesi.some((s) => s && s.sinavId === v.sinavId)) {
             durum.onlineSinavListesi.unshift(Object.assign({}, durum.onlineSinav));
@@ -12457,6 +12557,7 @@ Yine de çıktı alınsın mı?`)) {
 
           if (!yanit.ok) {
             if (btnKilitle) btnKilitle.disabled = false;
+            if (veri && veri.ihlalKilidi) { isleSunucuIhlalYaniti(veri); return; }
             const uyariKutu = document.getElementById('kiosk-ihlal-uyari-kutusu');
             if (uyariKutu) {
               uyariKutu.textContent = (veri && veri.hata)
@@ -12502,8 +12603,7 @@ Yine de çıktı alınsın mı?`)) {
       const ot = durum.kioskOturum;
       if (!ot || ot.bitirmeSuruyor || ot.teslimOnaylandi || ot.kioskKasitliCikis) return;
       ot.ihlalSayisi++;
-      const sayacEl = document.getElementById('kiosk-ihlal-sayac');
-      if (sayacEl) sayacEl.textContent = `Sekme İhlali: ${ot.ihlalSayisi}`;
+      guncelleKioskIhlalSayaci();
 
       const logKaydi = ekleKioskDelilLog(olayTuru, aciklama);
 
@@ -12511,6 +12611,9 @@ Yine de çıktı alınsın mı?`)) {
       if (uyariKutu) {
         const sinirBilgi = ot.maksIhlal > 0 ? `${ot.ihlalSayisi} / ${ot.maksIhlal}` : `${ot.ihlalSayisi}`;
         uyariKutu.textContent = `🚨 KİOSK GÜVENLİK İHLALİ KAYDEDİLDİ (${sinirBilgi}): ${aciklama} [Delil Mühür: #${(logKaydi && logKaydi.olayHash ? logKaydi.olayHash.slice(0, 10) : 'KAYIT')}]`;
+        if (ot.maksIhlal > 0 && ot.maksIhlal - ot.ihlalSayisi === 1) {
+          uyariKutu.textContent = `⚠️ ${ot.ihlalSayisi}. UYARI: Sınav ekranından ayrıldınız ve bu kayda geçti. Bir ihlal daha olursa sınavınız otomatik olarak sonlandırılacak.`;
+        }
         uyariKutu.hidden = false;
         uyariKutu.style.display = 'block';
       }

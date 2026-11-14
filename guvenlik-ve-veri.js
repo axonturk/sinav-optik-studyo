@@ -6650,6 +6650,53 @@
   }
 
   /* Bulut kasa verisinden soru metinlerini dışarıda bırakarak mobil OMR için hafif ders bazlı özet üretir */
+  /* ------------------------------------------------------------------------
+     ONLINE SINAV GÜVENLİĞİ (sunucuda uygulanan kurallar — iki sunucu da aynı çekirdeği kullanır)
+     ------------------------------------------------------------------------ */
+  /* Her 60 saniyede değişen 6 haneli salon kodu: projeksiyonda gösterilir; paylaşılsa bile 1-2 dakikada geçersiz olur */
+  function uretDegisenSalonKodu(sirr, zamanMs = Date.now(), pencereSn = 60) {
+    const p = Math.floor(Number(zamanMs) / 1000 / pencereSn);
+    const h = uretDelilLogHash(`${String(sirr || '')}|${p}`, 'DEGISEN-SALON-KODU');
+    return String(parseInt(String(h).replace(/[^0-9a-f]/gi, '').slice(0, 8) || '0', 16) % 1000000).padStart(6, '0');
+  }
+  /* Şimdiki ve bir önceki pencerenin kodu kabul edilir (öğrenci kodu yazarken süre dolabilir) */
+  function dogrulaDegisenSalonKodu(sirr, kod, zamanMs = Date.now(), pencereSn = 60) {
+    const k = String(kod || '').replace(/\D/g, '');
+    if (k.length !== 6 || !sirr) return false;
+    return [0, -1].some((d) => uretDegisenSalonKodu(sirr, Number(zamanMs) + d * pencereSn * 1000, pencereSn) === k);
+  }
+  /* İzinli ağ ön ekleri ("193.140.10." / "10.0." / tam IP); boşsa her ağ serbest */
+  function ipIzinliMi(ip, onekMetni) {
+    const onekler = String(onekMetni || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+    if (!onekler.length) return true;
+    const temizIp = String(ip || '').split(',')[0].trim().replace(/^::ffff:/, '');
+    return onekler.some((o) => temizIp === o || temizIp.startsWith(o.replace(/\*$/, '')));
+  }
+  /* Safe Exam Browser kullanıcı aracısına "SEB/<sürüm>" ekler */
+  function sebIstemcisiMi(kullaniciAraci) {
+    return /\bSEB\/\d/i.test(String(kullaniciAraci || ''));
+  }
+  /* Öğrencinin ihlal kaydına bir ihlal işler; sınır dolunca kilitler (kilitli oturum cevap kabul etmez) */
+  function isleSinavIhlali(kayit, olayTuru, simdiMs = Date.now(), maksIhlal = 0) {
+    const k = kayit && typeof kayit === 'object' ? kayit : {};
+    k.ihlalSayisi = Math.max(0, Number(k.ihlalSayisi) || 0) + 1;
+    k.ihlaller = (Array.isArray(k.ihlaller) ? k.ihlaller : []).concat([{ zamanMs: simdiMs, tur: String(olayTuru || 'IHLAL').slice(0, 40) }]).slice(-60);
+    if (Number(maksIhlal) > 0 && k.ihlalSayisi >= Number(maksIhlal)) k.kilitli = true;
+    return k;
+  }
+  /* "Buradayım" sinyali: iki sinyal arası eşikten uzunsa (sinyal engellendi / ekrandan uzun süre ayrıldı) bir ihlal sayılır */
+  function isleSinavNabzi(kayit, simdiMs = Date.now(), maksIhlal = 0, esikMs = 60000) {
+    const k = kayit && typeof kayit === 'object' ? kayit : {};
+    const son = Number(k.sonNabizMs) || 0;
+    let kesinti = false;
+    if (son && simdiMs - son > esikMs && !k.kilitli) {
+      isleSinavIhlali(k, 'IHLAL_NABIZ_KESINTISI', simdiMs, maksIhlal);
+      kesinti = true;
+    }
+    k.sonNabizMs = simdiMs;
+    return { kayit: k, kesinti };
+  }
+
   /* Doğru cevabı işaretlenmemiş D/Y ve test soruları. Kağıt/anahtar üretimi bunları sessizce "D" ve "A" sayar;
      bu yüzden telefon karekodu ve okuma, bu sayı 0 olmadan güvenilir değildir. */
   function sayAnahtarEksikSorular(sorular = []) {
@@ -10794,6 +10841,12 @@
     maskeleEposta,
     uretOgrenciDogrulamaKodu,
     uretTelefonEslesmeKodu,
+    uretDegisenSalonKodu,
+    dogrulaDegisenSalonKodu,
+    ipIzinliMi,
+    sebIstemcisiMi,
+    isleSinavIhlali,
+    isleSinavNabzi,
     uretSinavKimlikKodu,
     kanonikNoktalariKaynagaCevir,
     sinavKimlikEtiketi,

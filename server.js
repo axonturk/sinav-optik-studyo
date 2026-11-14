@@ -236,6 +236,11 @@ function kontrolZeroTrustYuk(govde, baslangicMi = false) {
 const TELEFON_ESLESME_SURE_MS = 5 * 60 * 1000;
 const telefonEslesmeleri = new Map();
 
+/* Online sınav ihlal kaydı (bellek) — worker.js ile aynı sözleşme */
+const sinavIhlalKayitlari = new Map();
+function okuSinavIhlalKaydi(token) { return Object.assign({}, sinavIhlalKayitlari.get(String(token || '')) || {}); }
+function yazSinavIhlalKaydi(token, kayit) { sinavIhlalKayitlari.set(String(token || ''), kayit); }
+
 function okuJsonGovde(req, maksBayt = 131072) {
   return new Promise((resolve, reject) => {
     let toplam = 0;
@@ -1221,6 +1226,10 @@ function istekIsleyici(req, res) {
           klasikSayisi: Math.max(0, parseInt(sinav.klasikSayisi, 10) || 0),
           erisimKodu: String(sinav.erisimKodu || '').trim().slice(0, 32),
           maksIhlal: Math.max(0, parseInt(sinav.maksIhlal, 10) || 0),
+          degisenSalonKodu: Boolean(sinav.degisenSalonKodu),
+          salonSirri: (sunucuDurumu.aktifSinav && sunucuDurumu.aktifSinav.salonSirri && sunucuDurumu.aktifSinav.sinavId === String(sinav.sinavId || sinav.kod || 'SINAV-2026-GUZ').slice(0, 80)) ? sunucuDurumu.aktifSinav.salonSirri : Cekirdek.uretSinavGizliAnahtari(),
+          izinliAg: String(sinav.izinliAg || '').trim().slice(0, 300),
+          sebZorunlu: Boolean(sinav.sebZorunlu),
           kisiyeOzel: sinav.kisiyeOzel !== false,
           geriDonusKilit: sinav.geriDonusKilit !== false,
           havuzSorulari: Array.isArray(sinav.havuzSorulari) && sinav.havuzSorulari.length > 0
@@ -1264,7 +1273,11 @@ function istekIsleyici(req, res) {
       bitis: s.bitis || '',
       sureDk: s.sureDk,
       soruSayisi: Array.isArray(s.sorular) ? s.sorular.length : 0,
-      erisimKoduGerekli: Boolean(s.erisimKodu)
+      erisimKoduGerekli: Boolean(s.erisimKodu) || Boolean(s.degisenSalonKodu),
+      degisenSalonKodu: Boolean(s.degisenSalonKodu),
+      maksIhlal: Math.max(0, Number(s.maksIhlal) || 0),
+      sebZorunlu: Boolean(s.sebZorunlu),
+      agKisitli: Boolean(s.izinliAg)
     });
   }
 
@@ -1363,7 +1376,18 @@ function istekIsleyici(req, res) {
           }
         }
 
-        if (sunucuDurumu.aktifSinav.erisimKodu) {
+        if (sunucuDurumu.aktifSinav.sebZorunlu && !Cekirdek.sebIstemcisiMi(String(req.headers['user-agent'] || ''))) {
+          return gonderJson(res, 403, { hata: 'Bu sınava yalnız Safe Exam Browser (SEB) ile girilebilir. Laboratuvar bilgisayarındaki SEB kısayolunu kullanın.', sebGerekli: true });
+        }
+        if (sunucuDurumu.aktifSinav.izinliAg && !Cekirdek.ipIzinliMi(String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1'), sunucuDurumu.aktifSinav.izinliAg)) {
+          return gonderJson(res, 403, { hata: 'Bu sınava yalnız sınav salonunun / okulun ağından girilebilir.', agKisitli: true });
+        }
+        if (sunucuDurumu.aktifSinav.degisenSalonKodu) {
+          const girilenDegisen = String(govde.erisimKodu || govde.salonKodu || '').trim();
+          if (!Cekirdek.dogrulaDegisenSalonKodu(sunucuDurumu.aktifSinav.salonSirri, girilenDegisen)) {
+            return gonderJson(res, 403, { hata: 'Salon kodu geçersiz ya da süresi doldu. Tahtadaki güncel 6 haneli kodu girin.', degisenKodHatali: true });
+          }
+        } else if (sunucuDurumu.aktifSinav.erisimKodu) {
           const girilenKod = String(govde.erisimKodu || govde.salonKodu || '').trim();
           if (girilenKod !== String(sunucuDurumu.aktifSinav.erisimKodu).trim()) {
             return gonderJson(res, 403, { hata: 'Sınav salon/giriş kodu doğrulanamadı.' });
@@ -1480,6 +1504,7 @@ function istekIsleyici(req, res) {
           adSoyad: ogr.adSoyad,
           bitisMs,
           soruSayisi: istemciSorulari.length,
+          maksIhlal: Math.max(0, Number(sunucuDurumu.aktifSinav.maksIhlal) || 0),
           sorular: istemciSorulari
         });
       })
@@ -1505,6 +1530,13 @@ function istekIsleyici(req, res) {
           (oturum.sinavSurumId || 'SURUM-BASLANGIC-1') !== aktifSurumId
         ) {
           return gonderJson(res, 403, { hata: 'Oturumunuz aktif sınav tanımıyla eşleşmiyor veya sınav kapatılmış.' });
+        }
+        {
+          const nb = Cekirdek.isleSinavNabzi(okuSinavIhlalKaydi(token), Date.now(), Number(sunucuDurumu.aktifSinav && sunucuDurumu.aktifSinav.maksIhlal) || 0);
+          yazSinavIhlalKaydi(token, nb.kayit);
+          if (nb.kayit.kilitli) {
+            return gonderJson(res, 403, { hata: 'İhlal sınırı aşıldığı için sınavınız sonlandırıldı. Yeni cevap kabul edilmez.', ihlalKilidi: true, ihlalSayisi: nb.kayit.ihlalSayisi });
+          }
         }
         if (Date.now() > oturum.bitisMs || oturum.bitti) {
           return gonderJson(res, 403, { hata: 'Sınav süresi dolmuş veya sınav tamamlanmış.' });
@@ -1537,6 +1569,8 @@ function istekIsleyici(req, res) {
         }
 
         oturum.cevaplar[kanonikSoruId] = secim;
+        if (!oturum.cevapZamanlari || typeof oturum.cevapZamanlari !== 'object') oturum.cevapZamanlari = {};
+        oturum.cevapZamanlari[kanonikSoruId] = Date.now();
         return gonderJson(res, 200, { kaydedildi: true, soruId: kanonikSoruId });
       })
       .catch((err) => gonderJson(res, 400, { hata: err.message }));
@@ -1678,6 +1712,30 @@ function istekIsleyici(req, res) {
   }
 
   // 2b. Delil Niteliğinde Online Sınav Kiosk Log Kaydetme & Sorgulama (Öğrenci veya Hoca Oturumu Zorunlu)
+  if (req.method === 'POST' && yol === '/api/ogrenci-nabiz') {
+    okuJsonGovde(req)
+      .then((govde) => {
+        const token = cozHocaTokenIstekten(req, govde, urlNesne);
+        const oturum = token ? sunucuDurumu.aktifTokenlar.get(token) : null;
+        if (!oturum) return gonderJson(res, 401, { hata: 'Geçersiz veya süresi dolmuş oturum tokenı.' });
+        const maks = Number(sunucuDurumu.aktifSinav && sunucuDurumu.aktifSinav.maksIhlal) || 0;
+        const nb = Cekirdek.isleSinavNabzi(okuSinavIhlalKaydi(token), Date.now(), maks);
+        yazSinavIhlalKaydi(token, nb.kayit);
+        return gonderJson(res, 200, { ihlalSayisi: Number(nb.kayit.ihlalSayisi) || 0, maksIhlal: maks, kilitli: Boolean(nb.kayit.kilitli), kesinti: nb.kesinti, kalanMs: Math.max(0, oturum.bitisMs - Date.now()) });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  if (req.method === 'GET' && yol === '/api/online-salon-kodu') {
+    const token = cozHocaTokenIstekten(req, null, urlNesne);
+    if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token)) return gonderJson(res, 401, { hata: 'Öğretmen oturumu gerekli.' });
+    const s0 = sunucuDurumu.aktifSinav || {};
+    if (!s0.degisenSalonKodu || !s0.salonSirri) return gonderJson(res, 200, { aktif: false });
+    const simdi = Date.now();
+    return gonderJson(res, 200, { aktif: true, kod: Cekirdek.uretDegisenSalonKodu(s0.salonSirri, simdi), kalanSn: 60 - Math.floor(simdi / 1000) % 60, baslik: s0.baslik || '' });
+  }
+
   if (req.method === 'POST' && yol === '/api/kiosk-log-kaydet') {
     okuJsonGovde(req)
       .then((govde) => {
@@ -1692,6 +1750,14 @@ function istekIsleyici(req, res) {
           : 'GENESIS-00000000';
         const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1');
         const sunucuSimdiIso = new Date().toISOString();
+        let sunucuIhlal = null;
+        if (ogrenciOturum && /^IHLAL_/.test(String(govde.olayTuru || ''))) {
+          const ihk = okuSinavIhlalKaydi(token);
+          Cekirdek.isleSinavIhlali(ihk, govde.olayTuru, Date.now(), Number(sunucuDurumu.aktifSinav && sunucuDurumu.aktifSinav.maksIhlal) || 0);
+          yazSinavIhlalKaydi(token, ihk);
+          sunucuIhlal = ihk;
+          govde.ihlalSayisi = ihk.ihlalSayisi;
+        }
         const kayit = Cekirdek.olusturKioskDelilLogKaydi(
           Object.assign({}, govde, {
             ogrNo: ogrenciOturum ? ogrenciOturum.ogrNo : govde.ogrNo,
@@ -1704,7 +1770,7 @@ function istekIsleyici(req, res) {
           oncekiHash
         );
         sunucuDurumu.kioskDelilLoglari.push(kayit);
-        return gonderJson(res, 201, { kaydedildi: true, log: kayit });
+        return gonderJson(res, 201, { kaydedildi: true, log: kayit, ...(sunucuIhlal ? { ihlalSayisi: sunucuIhlal.ihlalSayisi, kilitli: Boolean(sunucuIhlal.kilitli), maksIhlal: Number(sunucuDurumu.aktifSinav && sunucuDurumu.aktifSinav.maksIhlal) || 0 } : {}) });
       })
       .catch((err) => gonderJson(res, 400, { hata: err.message }));
     return;
