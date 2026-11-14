@@ -49,6 +49,8 @@ const [k1, k2] = await Promise.all([
 kontrol('Eşzamanlı iki kayıt başlatıldı', k1.kod === 200 && k2.kod === 200, JSON.stringify([k1, k2]));
 const satirlar = db.prepare("SELECT anahtar FROM sistem_durumu WHERE anahtar LIKE 'ogrenci_%' ORDER BY anahtar").all().map((x) => x.anahtar);
 kontrol('Her öğrenci D1\'de kendi satırında (biri diğerini ezmedi)', satirlar.includes('ogrenci_hesap:2023104015') && satirlar.includes('ogrenci_hesap:2023104024'), satirlar.join(', '));
+const hashSatiri = db.prepare("SELECT deger_json AS deger FROM sistem_durumu WHERE anahtar = 'ogrenci_hesap:2023104015'").get();
+kontrol('Öğrenci şifresi ücretsiz plana uygun (10k iterasyon, <10ms CPU)', hashSatiri && String(hashSatiri.deger).includes('pbkdf2_sha256$10000$'), hashSatiri && String(hashSatiri.deger).slice(0, 200));
 const liste = await istek(B, '/api/ogrenci-hesap/hoca-liste', undefined, HB);
 const kodlar = Object.fromEntries((liste.v.bekleyenKodlar || []).map((k) => [k.ogrNo, k.kod]));
 kontrol('Öğretmen paneli (kopya B) iki kodu da görür', kodlar['2023104015'] && kodlar['2023104024'], JSON.stringify(liste.v.bekleyenKodlar));

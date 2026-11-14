@@ -7331,7 +7331,7 @@
         durum: 'onay-bekliyor',
         eposta: d.eposta,
         telefon: d.telefon,
-        sifreHash: await uretTuzluSifreOzetiWebCrypto(String(govde.sifre)),
+        sifreHash: await uretTuzluSifreOzetiWebCrypto(String(govde.sifre), '', ortam.sifreIterasyon),
         kodOzeti: ogrenciKodOzeti(ogrNo, kod),
         kodAmac: 'kayit',
         kodBitisMs: simdi + OGRENCI_KOD_GECERLILIK_MS,
@@ -7365,7 +7365,7 @@
         if (!kural.tumuGecerli) {
           return sonuc(400, { hata: 'Yeni şifre tüm kuralları sağlamalı (en az 8 karakter, büyük ve küçük harf, rakam, simge) ve tekrarıyla aynı olmalı.' });
         }
-        hesap.sifreHash = await uretTuzluSifreOzetiWebCrypto(String(govde.sifre));
+        hesap.sifreHash = await uretTuzluSifreOzetiWebCrypto(String(govde.sifre), '', ortam.sifreIterasyon);
       }
       hesap.durum = 'aktif';
       delete hesap.kodOzeti;
