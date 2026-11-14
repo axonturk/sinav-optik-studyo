@@ -935,7 +935,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261114d"></script>
+  <script src="guvenlik-ve-veri.js?v=20261114e"></script>
   <script>
     (function () {
       'use strict';
@@ -1313,6 +1313,16 @@
               yapi.kurulumBekliyor = true;
               yapi.kurulumBekliyorImza = anahtarParmakIzi(yapi);
             }
+            // Bilgisayarda doğru cevabı işaretlenmemiş soru varsa anahtar "D/A" dolgusudur: okuma kilitlenir.
+            // Anahtar telefonda elle düzeltilirse ya da bilgisayarda işaretlenip yeniden senkronlanırsa kilit kalkar.
+            const eksikSayi = Number(gelenYapi && gelenYapi.anahtarEksikSayisi) || 0;
+            if (eksikSayi > 0 && (baglanModuMu || !eski.sinavYapisi)) {
+              yapi.anahtarEksikSayisi = eksikSayi;
+              yapi.kurulumBekliyor = true;
+              yapi.kurulumBekliyorImza = anahtarParmakIzi(yapi);
+            } else if (gelenYapi && (baglanModuMu || !eski.sinavYapisi)) {
+              delete yapi.anahtarEksikSayisi;
+            }
             const mevcutOkumalar = aktifMi
               ? (Array.isArray(mobilDurum.okumaSonuclari) ? mobilDurum.okumaSonuclari.slice() : [])
               : (Array.isArray(eski.okumaSonuclari) ? eski.okumaSonuclari.slice() : []);
@@ -1327,9 +1337,10 @@
             };
             if (baglanModuMu && aktifMi) {
               Object.assign(mobilDurum.sinavYapisi, yapi);
-              if (secenek.anahtarlariGuncelle) {
+              if (secenek.anahtarlariGuncelle && !yapi.anahtarEksikSayisi) {
                 delete mobilDurum.sinavYapisi.kurulumBekliyor;
                 delete mobilDurum.sinavYapisi.kurulumBekliyorImza;
+                delete mobilDurum.sinavYapisi.anahtarEksikSayisi;
               }
             }
             if ((baglanModuMu || secenek.anahtarlariGuncelle) && aktifMi && Array.isArray(d.ogrenciler) && d.ogrenciler.length > 0) {
@@ -1413,7 +1424,8 @@
           const paket = mobilDurum.dersPaketleriHaritasi && mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId];
           const ad = (paket && paket.ad) || (mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.dersAd) || '—';
           const sinavAd = mobilDurum.sinavYapisi && (mobilDurum.sinavYapisi.sinavAdi || mobilDurum.sinavYapisi.sinavKodu);
-          dersEl.textContent = `${ad} (${mobilDurum.ogrenciler.length} öğrenci)${sinavAd ? ` · Sınav: ${sinavAd}` : ''}`;
+          const eksikN = Number(mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.anahtarEksikSayisi) || 0;
+          dersEl.textContent = `${ad} (${mobilDurum.ogrenciler.length} öğrenci)${sinavAd ? ` · Sınav: ${sinavAd}` : ''}${eksikN > 0 && kurulumEksikMi() ? ` · ⚠️ ${eksikN} sorunun doğru cevabı eksik` : ''}`;
         }
       }
       function mobilBaglantiyiKaldir() {
@@ -3382,7 +3394,10 @@
             });
           }
           if (!seri) {
-            mobilUyariGoster(`⚠️ "${mobilDurum.sinavYapisi.dersAd || 'Bu ders'}" için cevap anahtarı yok. Bilgisayardaki cevap anahtarı sayfasında bulunan kurulum QR'ını okutun; sonra kağıtları okuyun.`);
+            const eksikN = Number(mobilDurum.sinavYapisi.anahtarEksikSayisi) || 0;
+            mobilUyariGoster(eksikN > 0
+              ? `⚠️ Bilgisayarda bu sınavın ${eksikN} sorusunun doğru cevabı işaretlenmemiş; kağıtlar yanlış puanlanır. Bilgisayarda doğru cevapları işaretleyip "Senkronize Et"e basın (ya da Anahtar sekmesinde düzeltin).`
+              : `⚠️ "${mobilDurum.sinavYapisi.dersAd || 'Bu ders'}" için cevap anahtarı yok. Bilgisayardaki cevap anahtarı sayfasında bulunan kurulum QR'ını okutun; sonra kağıtları okuyun.`);
             bipCal(false);
           }
           return null;

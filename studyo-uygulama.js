@@ -4200,6 +4200,25 @@
         linkBaglanAc.href = baglanti.url;
       }
       const qrSvgAlan = document.getElementById('alan-setup-qr-svg');
+      const eksikAnahtar = C.sayAnahtarEksikSorular(yapi.tumSeciliSorular);
+      if (qrSvgAlan && eksikAnahtar > 0 && !durum.eksikAnahtarQrIzni) {
+        // Doğru cevabı işaretlenmemiş sorular anahtarda "D" / "A" görünür; telefon kağıtları YANLIŞ puanlar.
+        qrSvgAlan.innerHTML = `
+          <div role="alert" style="text-align:left; color:#7f1d1d; background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:10px; font-size:0.82rem; line-height:1.45;">
+            <div style="font-weight:800; font-size:0.9rem; margin-bottom:4px;">⚠️ ${eksikAnahtar} sorunun doğru cevabı işaretlenmemiş</div>
+            Bu sorular cevap anahtarında "D" ya da "A" görünür ve telefon kağıtları <strong>yanlış puanlar</strong>.
+            Önce Soru Bankası'nda bu soruların doğru cevabını işaretleyin; karekod sonra kendiliğinden çıkar.
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button type="button" class="btn btn-birincil btn-kucuk" data-eksik-anahtar-git="1">Doğru cevapları işaretle</button>
+              <button type="button" class="btn btn-kucuk" data-eksik-anahtar-izin="1">Yine de karekodu göster</button>
+            </div>
+          </div>`;
+        const git = qrSvgAlan.querySelector('[data-eksik-anahtar-git]');
+        if (git) git.addEventListener('click', () => { const b = document.querySelector('.sekme-btn[data-sekme="sekme-banka"]'); if (b) b.click(); });
+        const izin = qrSvgAlan.querySelector('[data-eksik-anahtar-izin]');
+        if (izin) izin.addEventListener('click', () => { durum.eksikAnahtarQrIzni = true; uygulayiciSetupQr(kisaToken); });
+        return;
+      }
       if (qrSvgAlan) {
         const svg = uretGercekQrSvg(siniriKoruyanUrl.length <= 1650 ? siniriKoruyanUrl : kompaktSetup.url, 200);
         qrSvgAlan.innerHTML = svg

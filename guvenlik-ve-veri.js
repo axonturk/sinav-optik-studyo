@@ -6556,6 +6556,15 @@
   }
 
   /* Bulut kasa verisinden soru metinlerini dışarıda bırakarak mobil OMR için hafif ders bazlı özet üretir */
+  /* Doğru cevabı işaretlenmemiş D/Y ve test soruları. Kağıt/anahtar üretimi bunları sessizce "D" ve "A" sayar;
+     bu yüzden telefon karekodu ve okuma, bu sayı 0 olmadan güvenilir değildir. */
+  function sayAnahtarEksikSorular(sorular = []) {
+    return (Array.isArray(sorular) ? sorular : []).filter((q) => q && (
+      (q.tur === 'dy' && !['D', 'Y'].includes(String(q.dogruDY || '').toUpperCase())) ||
+      (q.tur === 'test' && !/^[A-E]$/.test(String(q.dogruHarf || '').toUpperCase()))
+    )).length;
+  }
+
   function uretMobilDersPaketleriOzeti(kasaVerisi = {}) {
     const v = kasaVerisi && typeof kasaVerisi === 'object' ? kasaVerisi : {};
     const hamDersler = Array.isArray(v.dersler) ? v.dersler : [];
@@ -6624,7 +6633,8 @@
         testSoruPuan: norm.testSoruPuan,
         klasikSoruPuan: norm.klasikSoruPuan,
         sinavGizliAnahtar: String(yapiKaynak.sinavGizliAnahtar || s.sinavGizliAnahtar || '').trim(),
-        cevapAnahtarlari: temizleAnahtarObj(yapiKaynak.cevapAnahtarlari || s.cevapAnahtarlari)
+        cevapAnahtarlari: temizleAnahtarObj(yapiKaynak.cevapAnahtarlari || s.cevapAnahtarlari),
+        anahtarEksikSayisi: sayAnahtarEksikSorular(s.tumSeciliSorular || yapiKaynak.tumSeciliSorular)
       };
     };
 
@@ -10665,6 +10675,7 @@
     maskeleEposta,
     uretOgrenciDogrulamaKodu,
     uretTelefonEslesmeKodu,
+    sayAnahtarEksikSorular,
     normalizeTelefonEslesmeKodu,
     VARSAYILAN_DAVET_KODU,
     VARSAYILAN_HOCA_HESAP,
