@@ -139,6 +139,18 @@
           <svg class="ui-ikon"><use href="#i-chart"></use></svg>
           <span class="yan-menu-metin">Değerlendirme</span>
         </button>
+        <button type="button" class="sekme-btn" data-sekme="sekme-arsiv" title="Basılan, kaydedilen ve telefondan gelen tüm sınavlar · kopya şüphe raporu">
+          <svg class="ui-ikon"><use href="#i-book"></use></svg>
+          <span class="yan-menu-metin">Sınav Arşivi</span>
+        </button>
+        <button type="button" class="sekme-btn" data-sekme="sekme-ogrenci-dosyasi" title="Öğrenciyi isim veya numarayla ara: tüm sınavlar, şüpheler, kayıtlar">
+          <svg class="ui-ikon"><use href="#i-users"></use></svg>
+          <span class="yan-menu-metin">Öğrenci Dosyası</span>
+        </button>
+        <button type="button" class="sekme-btn" data-sekme="sekme-kayitlar" title="Değiştirilemez işlem ve delil kayıtları">
+          <svg class="ui-ikon"><use href="#i-sheet"></use></svg>
+          <span class="yan-menu-metin">Kayıtlar</span>
+        </button>
       </div>
 
       <div class="yan-menu-ayirici"></div>
@@ -771,6 +783,7 @@
                     <option value="tutanak">Sınav durum tutanağı</option>
                     <option value="yoklama">Sınav yoklama evrakı</option>
                     <option value="tutanak-yoklama">Tutanak + yoklama evrakı</option>
+                    <option value="okunur-yoklama">Okunabilir yoklama (telefonla okunur)</option>
                   </optgroup>
                 </select>
               </div>
@@ -1378,6 +1391,7 @@
           <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
             <select id="sec-telefon-sinavi" aria-label="Telefondan gelen sınav" style="min-width:240px; font-size:0.82rem;"></select>
             <button type="button" class="btn btn-basari btn-kucuk" id="btn-telefon-sinavi-csv">Excel'e aktar (.csv)</button>
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-telefon-sinavi-arsiv">Sınav arşivine kaydet</button>
           </div>
         </div>
         <div id="telefon-sinavlari-kutu"></div>
@@ -1642,6 +1656,40 @@
     <!-- ====================================================================
          SEKME 4: AKADEMİK DEĞERLENDİRME, MADDE ANALİZİ (pj, rjx) & NOT ÇİZELGESİ
          ==================================================================== -->
+    <section class="sekme-panel" id="sekme-arsiv">
+      <div class="kart" style="margin-bottom:0.9rem;">
+        <div class="kart-baslik"><span>📚 Sınav Arşivi</span></div>
+        <p style="font-size:0.82rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">Basılan / kaydedilen sınavlar, telefonla okunan sınavlar ve kopya şüpheleri. Telefondan gelen bir sınavı kalıcı kayda almak için "Arşive kaydet"e basın.</p>
+        <div id="arsiv-liste" class="tablo-sarmal"></div>
+      </div>
+      <div class="kart" id="arsiv-detay"></div>
+    </section>
+
+    <section class="sekme-panel" id="sekme-ogrenci-dosyasi">
+      <div class="kart">
+        <div class="kart-baslik"><span>👤 Öğrenci Dosyası</span></div>
+        <input type="search" id="ogr-dosya-ara" list="ogr-dosya-oneriler" placeholder="Öğrenci adı veya numarası yazın…" style="width:100%; font-size:1rem; margin-bottom:0.7rem;" autocomplete="off" />
+        <datalist id="ogr-dosya-oneriler"></datalist>
+        <div id="ogr-dosya-sonuc"></div>
+      </div>
+    </section>
+
+    <section class="sekme-panel" id="sekme-kayitlar">
+      <div class="kart">
+        <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;"><span>🧾 Kayıtlar</span>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <input type="search" id="kayitlar-ara" placeholder="Öğrenci, sınav veya olay ara…" style="min-width:220px;" />
+            <select id="kayitlar-tur" aria-label="Kayıt türü">
+              <option value="">Tüm kayıtlar</option>
+              <option>Online ihlal</option><option>Online sınav</option><option>Telefon okuma</option><option>Elle atama</option><option>Basım</option><option>Yoklama</option>
+            </select>
+            <button type="button" class="btn btn-basari btn-kucuk" id="btn-kayitlar-csv">Excel (.csv)</button>
+          </div></div>
+        <p style="font-size:0.8rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">Online sınav kayıtları sunucuda hash zinciriyle mühürlüdür; telefon okumaları sunucudaki olay sırası numarasıyla (#) izlenir. Kayıtlar değiştirilemez ve silinemez.</p>
+        <div id="kayitlar-liste" class="tablo-sarmal" style="max-height:70vh; overflow:auto;"></div>
+      </div>
+    </section>
+
     <section class="sekme-panel" id="sekme-analiz" data-alt-sekme="tumu">
       <!-- 4 SADE KPI KARTI + AKADEMİK EK METRİK ŞERİDİ -->
       <div class="kpi-izgara-4 yazdir-gizle">
@@ -2171,6 +2219,21 @@
                 <input type="checkbox" id="online-tam-ekran-zorunlu" checked style="width:auto;" />
                 <span>Zorunlu Tam Ekran + Kopyala/Sağ Tık/Ekran Bölme Kilidi</span>
               </label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;" title="Projeksiyonda her dakika değişen 6 haneli kod; paylaşılsa bile 1-2 dakikada geçersiz olur">
+                <input type="checkbox" id="online-degisen-salon-kodu" style="width:auto;" />
+                <span>Her dakika değişen salon kodu (projeksiyon)</span>
+              </label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;" title="Yalnız Safe Exam Browser ile girilebilir (laboratuvar bilgisayarları)">
+                <input type="checkbox" id="online-seb-zorunlu" style="width:auto;" />
+                <span>Yalnız Safe Exam Browser (laboratuvar)</span>
+              </label>
+            </div>
+            <div style="margin-top:0.45rem;">
+              <label class="etiket" for="online-izinli-ag">Yalnız bu ağlardan giriş (isteğe bağlı, IP ön ekleri, virgülle)</label>
+              <input type="text" id="online-izinli-ag" placeholder="Boş = her yerden · Örn: 193.140.250., 10.12." style="width:100%;" />
+            </div>
+            <div style="margin-top:0.45rem;">
+              <button type="button" class="btn btn-kucuk" id="btn-online-salon-kodu-goster">📺 Değişen salon kodunu tam ekran göster</button>
             </div>
           </div>
 
@@ -2658,7 +2721,9 @@
             <li>Sınav süresince başka bir sekmeye veya uygulamaya geçilmemelidir.</li>
             <li>Sınav tam ekran modunda yürütülür; tam ekrandan çıkıldığında soru içeriği duraklatılır.</li>
             <li>Sorular ve şıklar her öğrenciye özel sırayla gelir; yanıtlanıp geçilen soruya geri dönülmez.</li>
-            <li>Sınav oturumu adımları ve kural ihlalleri denetim kaydına işlenir.</li>
+            <li>Sınav oturumu adımları ve kural ihlalleri denetim kaydına işlenir; kayıtlar değiştirilemez ve disiplin işleminde delil olarak kullanılabilir.</li>
+            <li id="kiosk-kural-ihlal-metni"><strong>Ekrandan her ayrılışınız (başka sekme/uygulama, tam ekrandan çıkma) ihlal sayılır.</strong></li>
+            <li>İnternet bağlantınız 1 dakikadan uzun kesilirse bu da ihlal sayılır.</li>
           </ul>
           <label for="kiosk-okudum-onay" style="display:flex; align-items:flex-start; gap:8px; padding:8px 10px; background:var(--bg-kart); border:1px solid var(--kenar-koyu); border-radius:6px; cursor:pointer; font-weight:500; font-size:var(--yazi-sm); color:var(--metin);">
             <input type="checkbox" id="kiosk-okudum-onay" style="width:18px; height:18px; margin-top:2px; flex-shrink:0;" />
@@ -2842,6 +2907,13 @@
   </div>
   <!-- TEK ORTAK BAŞLANGIÇ GİRİŞ KAPISI (ÖĞRETMENİM | ÖĞRENCİYİM) VE YETKİLENDİRME MODALİ -->
   <!-- TELEFONU BAĞLA: tek karekod → telefon bu hocanın hesabına bağlanır, dersler ve cevap anahtarları telefona iner -->
+  <div id="modal-salon-kodu" role="dialog" aria-modal="true" aria-label="Salon kodu" style="display:none; position:fixed; inset:0; z-index:1200; background:#0b1220; color:#fff; align-items:center; justify-content:center; flex-direction:column; gap:18px; text-align:center; padding:24px;">
+    <div id="salon-kodu-baslik" style="font-size:2rem; font-weight:700; opacity:0.9;">Sınav salon kodu</div>
+    <div id="salon-kodu-deger" class="mono" style="font-size:min(22vw, 16rem); font-weight:900; letter-spacing:0.12em; line-height:1;">——————</div>
+    <div id="salon-kodu-sure" style="font-size:1.6rem; opacity:0.85;"></div>
+    <div style="font-size:1.1rem; opacity:0.7;">Sınava girişte bu kodu yazın · kod her dakika değişir</div>
+    <button type="button" class="btn" id="btn-salon-kodu-kapat" style="position:fixed; top:16px; right:16px;">✕ Kapat</button>
+  </div>
   <div id="modal-telefon-bagla" role="dialog" aria-modal="true" aria-label="Telefonu Bağla" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.75); z-index:1100; align-items:center; justify-content:center; padding:16px;">
     <div class="kart" style="width:100%; max-width:440px; margin:auto; max-height:94vh; overflow-y:auto; text-align:center;">
       <div class="kart-baslik">
@@ -3412,7 +3484,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261114i"></script>
-  <script src="studyo-uygulama.js?v=20261114i"></script>
+  <script src="guvenlik-ve-veri.js?v=20261115a"></script>
+  <script src="studyo-uygulama.js?v=20261115a"></script>
 </body>
 </html>

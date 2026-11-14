@@ -2278,6 +2278,11 @@
         bitler[k] = hucreOrt[k] < esik ? 1 : 0;
       }
       if (belirsiz) continue;
+      if (typeof secenek.cozucu === 'function') {
+        const ozel = secenek.cozucu(bitler);
+        if (ozel) return Object.assign(ozel, { kaymaX: dx, kaymaY: dy });
+        continue;
+      }
       const cozum = cozOptikGeometriMatrisi(bitler);
       if (cozum && cozum.dySayisi <= 30 && cozum.testSayisi <= 40 && (cozum.dySayisi + cozum.testSayisi + cozum.klasikSayisi) > 0) {
         return Object.assign(cozum, { kaymaX: dx, kaymaY: dy });
@@ -3383,6 +3388,261 @@
      Aynı kitapçık grubundaki öğrenci çiftlerinin ortak yanlış cevaplarını (W_AB)
      analiz ederek tesadüf ötesi benzerlikleri raporlar.
      ------------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------------
+     SINAV ARŞİVİ · KOPYA ŞÜPHE RAPORU · ÖĞRENCİ DOSYASI · KAYITLAR (saf hesap fonksiyonları)
+     ------------------------------------------------------------------------ */
+  /* İki okumanın yan yana cevap karşılaştırması (kopya raporu için): her soru için iki cevap ve durum */
+  /* ------------------------------------------------------------------------
+     OKUNABİLİR YOKLAMA ÇİZELGESİ — telefonla okunur
+     Sayfa: 4 köşe karesi + üst ortada kare desen (sayfa no, satır sayısı, listenin parmak izi) + satırlar
+     (sıra, öğrenci no, ad soyad, İMZA KUTUSU, "GELMEDİ" balonu). Telefon imza kutusundaki mürekkebi ölçer.
+     ------------------------------------------------------------------------ */
+  const YOKLAMA_G = 800;
+  const YOKLAMA_Y = 960;
+  const YOKLAMA_SATIR = 20;
+  const YOKLAMA_UST = 110;
+  const YOKLAMA_SATIR_Y = 40;
+  function yoklamaSatirKutusu(i) {
+    const y = YOKLAMA_UST + i * YOKLAMA_SATIR_Y;
+    return { y, imza: { x: 470, y: y + 5, w: 230, h: 30 }, balon: { x: 742, y: y + 20, r: 10 } };
+  }
+  function yoklamaSiraliListe(ogrenciler = []) {
+    return (Array.isArray(ogrenciler) ? ogrenciler : [])
+      .filter((o) => o && String(o.ogrNo || '').trim())
+      .slice()
+      .sort((a, b) => String(a.ogrNo).localeCompare(String(b.ogrNo), 'tr', { numeric: true }));
+  }
+  function yoklamaSayfalari(ogrenciler = []) {
+    const liste = yoklamaSiraliListe(ogrenciler);
+    const sayfalar = [];
+    for (let i = 0; i < liste.length; i += YOKLAMA_SATIR) sayfalar.push(liste.slice(i, i + YOKLAMA_SATIR));
+    return sayfalar;
+  }
+  function yoklamaParmakIzi(sayfaOgrencileri = []) {
+    const h = uretDelilLogHash(sayfaOgrencileri.map((o) => String(o.ogrNo)).join('|'), 'YOKLAMA-SAYFA');
+    return parseInt(String(h).replace(/[^0-9a-f]/gi, '').slice(0, 4) || '0', 16) & 0xFFFF;
+  }
+  function kodlaYoklamaMatrisi(sayfa, satirSayisi, parmakIzi) {
+    const b = [0x5C, sayfa & 0xFF, satirSayisi & 0x1F, (parmakIzi >> 8) & 0xFF, parmakIzi & 0xFF, 0, 0x5C, 0xC5];
+    b[5] = (b[1] ^ b[2] ^ b[3] ^ b[4] ^ 0x33) & 0xFF;
+    const bitler = [];
+    for (const x of b) for (let i = 7; i >= 0; i--) bitler.push((x >> i) & 1);
+    return bitler;
+  }
+  function cozYoklamaMatrisi(bitler) {
+    if (!Array.isArray(bitler) || bitler.length < 64) return null;
+    const b = [];
+    for (let k = 0; k < 8; k++) { let v = 0; for (let i = 0; i < 8; i++) v = (v << 1) | (bitler[k * 8 + i] ? 1 : 0); b.push(v); }
+    if (b[0] !== 0x5C || b[6] !== 0x5C || b[7] !== 0xC5) return null;
+    if (b[5] !== ((b[1] ^ b[2] ^ b[3] ^ b[4] ^ 0x33) & 0xFF)) return null;
+    if (b[1] < 1 || b[2] < 1 || b[2] > YOKLAMA_SATIR) return null;
+    return { sayfa: b[1], satirSayisi: b[2], parmakIzi: (b[3] << 8) | b[4] };
+  }
+  /* Yazdırılacak sayfa SVG'leri (her biri A4 dikey sayfaya sığar) */
+  function uretOkunabilirYoklamaSVG(ogrenciler = [], bilgi = {}) {
+    const kac = (m) => String(m ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const sayfalar = yoklamaSayfalari(ogrenciler);
+    const W = YOKLAMA_G;
+    const H = YOKLAMA_Y;
+    const M = KANONIK_FIDUCIAL_MERKEZ;
+    const fid = (cx, cy, ici) => `<rect x="${cx - 12}" y="${cy - 12}" width="24" height="24" fill="#000"/><rect x="${cx - 6}" y="${cy - 6}" width="12" height="12" fill="#fff"/>${ici ? '' : `<rect x="${cx - 3}" y="${cy - 3}" width="6" height="6" fill="#000"/>`}`;
+    return sayfalar.map((sayfaOgr, si) => {
+      const p = [];
+      p.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`);
+      p.push(fid(M, M, true), fid(W - M, M, false), fid(M, H - M, false), fid(W - M, H - M, false));
+      const bit = kodlaYoklamaMatrisi(si + 1, sayfaOgr.length, yoklamaParmakIzi(sayfaOgr));
+      p.push(`<rect x="${W / 2 - 18}" y="6" width="36" height="36" fill="#fff" stroke="#000" stroke-width="0.6"/>`);
+      for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) if (bit[i * 8 + j]) p.push(`<rect x="${W / 2 - 16 + j * 4}" y="${8 + i * 4}" width="4" height="4" fill="#000"/>`);
+      p.push(`<text x="52" y="30" font-family="Arial" font-size="13" font-weight="700">${kac(String(bilgi.baslik || 'Sınav Yoklama Çizelgesi').slice(0, 44))}</text>`);
+      p.push(`<text x="52" y="48" font-family="Arial" font-size="10">${kac(String(bilgi.alt || '').slice(0, 60))}</text>`);
+      p.push(`<text x="${W - 52}" y="30" font-family="Arial" font-size="11" text-anchor="end">Sayfa ${si + 1}/${sayfalar.length}</text>`);
+      p.push(`<text x="${W - 52}" y="48" font-family="Arial" font-size="10" text-anchor="end">${kac(bilgi.tarih || '')}</text>`);
+      p.push(`<text x="40" y="96" font-family="Arial" font-size="11" font-weight="700">No</text><text x="70" y="96" font-family="Arial" font-size="11" font-weight="700">Öğrenci No</text><text x="200" y="96" font-family="Arial" font-size="11" font-weight="700">Ad Soyad</text><text x="585" y="96" font-family="Arial" font-size="11" font-weight="700" text-anchor="middle">İmza</text><text x="742" y="96" font-family="Arial" font-size="9" font-weight="700" text-anchor="middle">GELMEDİ</text>`);
+      sayfaOgr.forEach((o, i) => {
+        const k = yoklamaSatirKutusu(i);
+        if (i % 2 === 0) p.push(`<rect x="34" y="${k.y + 2}" width="${W - 68}" height="${YOKLAMA_SATIR_Y - 4}" fill="#f4f4f4"/>`);
+        p.push(`<text x="40" y="${k.y + 25}" font-family="Arial" font-size="12">${si * YOKLAMA_SATIR + i + 1}</text>`);
+        p.push(`<text x="70" y="${k.y + 25}" font-family="Courier New, monospace" font-size="13">${kac(o.ogrNo)}</text>`);
+        p.push(`<text x="200" y="${k.y + 25}" font-family="Arial" font-size="12">${kac(String(o.adSoyad || '').slice(0, 30))}</text>`);
+        p.push(`<rect x="${k.imza.x}" y="${k.imza.y}" width="${k.imza.w}" height="${k.imza.h}" fill="#fff" stroke="#000" stroke-width="1.2"/>`);
+        p.push(`<circle cx="${k.balon.x}" cy="${k.balon.y}" r="${k.balon.r}" fill="#fff" stroke="#000" stroke-width="1.2"/>`);
+      });
+      p.push(`<text x="40" y="${H - 52}" font-family="Arial" font-size="9.5">İmza kutusunun içine imza atınız. Gözetmen gelmeyen öğrencinin "GELMEDİ" balonunu doldurabilir. Bu sayfa telefonla okunur; kutuların dışına yazmayınız.</text>`);
+      p.push(`<text x="40" y="${H - 38}" font-family="Arial" font-size="9.5">Gözetmen: ................................................   İmza: ..........................</text>`);
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">${p.join('')}</svg>`;
+    });
+  }
+  /* Telefonla çekilen yoklama sayfasını okur. ogrenciler: telefondaki sınıf listesi (sayfa eşlemesi için) */
+  function okuYoklamaImageData(imageData, ogrenciler = []) {
+    const fb = bulOptikFormKoseleri(imageData, { yukseklik: YOKLAMA_Y });
+    if (!fb.bulundu) return { formBulundu: false, mesaj: fb.neden || 'Sayfanın 4 köşe karesi bulunamadı.' };
+    const koseler = fb.koseler;
+    const gri = griyeCevirImageData(imageData);
+    const duz = perspektifDuzeltGri(gri, imageData.width, imageData.height, koseler, YOKLAMA_G, YOKLAMA_Y);
+    const matris = okuOptikGeometriMatrisiPikselden(duz, YOKLAMA_G, YOKLAMA_Y, { cozucu: cozYoklamaMatrisi });
+    if (!matris) return { formBulundu: true, koseler, kanonikBoyut: { genislik: YOKLAMA_G, yukseklik: YOKLAMA_Y }, hata: 'DESEN_YOK', mesaj: 'Sayfanın üst ortasındaki kare desen okunamadı; sayfayı yaklaştırıp düz tekrar çekin.' };
+    const sayfalar = yoklamaSayfalari(ogrenciler);
+    const sayfaOgr = sayfalar[matris.sayfa - 1] || [];
+    const listeUyumlu = sayfaOgr.length === matris.satirSayisi && yoklamaParmakIzi(sayfaOgr) === matris.parmakIzi;
+    const ikili = adaptifEsiklemeGri(duz, YOKLAMA_G, YOKLAMA_Y, 32, 0.16).ikili;
+    const satirlar = [];
+    const isaretCizimi = [];
+    for (let i = 0; i < matris.satirSayisi; i++) {
+      const k = yoklamaSatirKutusu(i);
+      const ic = { x: k.imza.x + 5, y: k.imza.y + 5, w: k.imza.w - 10, h: k.imza.h - 10 };
+      let koyu = 0;
+      let toplam = 0;
+      for (let yy = ic.y; yy < ic.y + ic.h; yy++) {
+        for (let xx = ic.x; xx < ic.x + ic.w; xx++) {
+          toplam++;
+          if (duz[yy * YOKLAMA_G + xx] < 140) koyu++;
+        }
+      }
+      const murekkep = toplam ? koyu / toplam : 0;
+      const balon = olcBalonDoluluk(duz, ikili, k.balon.x, k.balon.y, k.balon.r);
+      const gelmediIsaretli = balon >= 0.5;
+      let durumSatir = 'belirsiz';
+      if (gelmediIsaretli && murekkep < 0.01) durumSatir = 'gelmedi';
+      else if (gelmediIsaretli) durumSatir = 'belirsiz';
+      else if (murekkep >= 0.02) durumSatir = 'geldi';
+      else if (murekkep <= 0.006) durumSatir = 'gelmedi';
+      const o = sayfaOgr[i] || {};
+      satirlar.push({ sira: (matris.sayfa - 1) * YOKLAMA_SATIR + i + 1, ogrNo: listeUyumlu ? String(o.ogrNo || '') : '', adSoyad: listeUyumlu ? String(o.adSoyad || '') : '', durum: durumSatir, murekkep: Math.round(murekkep * 1000) / 1000, gelmediIsaretli });
+      isaretCizimi.push({ x: k.imza.x + k.imza.w / 2, y: k.imza.y + k.imza.h / 2, r: 18, durum: durumSatir === 'geldi' ? 'net' : (durumSatir === 'gelmedi' ? 'cift' : 'supheli') });
+    }
+    return {
+      formBulundu: true, geometriKaynagi: 'matris', koseler, kanonikBoyut: { genislik: YOKLAMA_G, yukseklik: YOKLAMA_Y },
+      sayfa: matris.sayfa, toplamSayfa: sayfalar.length, satirSayisi: matris.satirSayisi, listeUyumlu, satirlar, isaretCizimi,
+      kagitGeometrisi: { kaymaX: 0, kaymaY: 0 }
+    };
+  }
+  /* Yoklama + okunan kağıtlar çapraz kontrolü */
+  function yoklamaCaprazKontrol(yoklama = [], okunanNolar = []) {
+    const okunan = new Set((okunanNolar || []).map(String));
+    const sonuc = { imzaVarKagitYok: [], kagitVarImzaYok: [], gelmedi: [], belirsiz: [] };
+    (yoklama || []).forEach((y) => {
+      if (!y || !y.ogrNo) return;
+      const kagit = okunan.has(String(y.ogrNo));
+      if (y.durum === 'geldi' && !kagit) sonuc.imzaVarKagitYok.push(y);
+      else if (y.durum === 'gelmedi' && kagit) sonuc.kagitVarImzaYok.push(y);
+      else if (y.durum === 'gelmedi') sonuc.gelmedi.push(y);
+      else if (y.durum === 'belirsiz') sonuc.belirsiz.push(y);
+    });
+    return sonuc;
+  }
+
+  function karsilastirIkiOkuma(a, b) {
+    const satirlar = [];
+    const ekle = (tur, da, db) => {
+      const n = Math.max((da || []).length, (db || []).length);
+      for (let i = 0; i < n; i++) {
+        const x = (da || [])[i] || {};
+        const y = (db || [])[i] || {};
+        const ayni = Boolean(x.verilen) && x.verilen === y.verilen;
+        satirlar.push({
+          soru: `${tur}${i + 1}`, cevap1: x.verilen || '', cevap2: y.verilen || '',
+          ortakYanlis: ayni && x.sonuc === 'YANLIS', ortakDogru: ayni && x.sonuc === 'DOGRU', farkli: Boolean(x.verilen && y.verilen && x.verilen !== y.verilen)
+        });
+      }
+    };
+    ekle('DY', a && a.dyDetay, b && b.dyDetay);
+    ekle('T', a && a.testDetay, b && b.testDetay);
+    return satirlar;
+  }
+
+  /* Online sınav zaman izi: aynı soruları birbirine çok yakın anlarda AYNI cevapla işaretleyen öğrenci çiftleri */
+  function tespitEtZamanBenzerligi(oturumlar = [], secenek = {}) {
+    const esikMs = Number(secenek.esikMs) || 10000;
+    const enAz = Number(secenek.enAzSoru) || 5;
+    const liste = (Array.isArray(oturumlar) ? oturumlar : []).filter((o) => o && o.cevaplar && o.cevapZamanlari);
+    const ciftler = [];
+    for (let i = 0; i < liste.length; i++) {
+      for (let j = i + 1; j < liste.length; j++) {
+        const a = liste[i];
+        const b = liste[j];
+        let yakinAyni = 0;
+        const sorular = [];
+        Object.keys(a.cevaplar).forEach((sid) => {
+          if (!Object.prototype.hasOwnProperty.call(b.cevaplar, sid)) return;
+          const va = String(a.cevaplar[sid] || '');
+          const vb = String(b.cevaplar[sid] || '');
+          const ta = Number(a.cevapZamanlari[sid]) || 0;
+          const tb = Number(b.cevapZamanlari[sid]) || 0;
+          if (va && va === vb && ta && tb && Math.abs(ta - tb) <= esikMs) {
+            yakinAyni++;
+            sorular.push(sid);
+          }
+        });
+        if (yakinAyni >= enAz) {
+          ciftler.push({ ogrenci1No: a.ogrNo, ogrenci1Ad: a.adSoyad || '', ogrenci2No: b.ogrNo, ogrenci2Ad: b.adSoyad || '', yakinAyniCevap: yakinAyni, sorular, riskSeviyesi: yakinAyni >= enAz * 2 ? 'YUKSEK' : 'ORTA' });
+        }
+      }
+    }
+    return ciftler.sort((x, y) => y.yakinAyniCevap - x.yakinAyniCevap);
+  }
+
+  /* Telefon okumalarında aynı kayıt kimliğine farklı öğrenci yazılmışsa "elle atama" kaydı çıkar */
+  function cikarElleAtamalar(olaylar = []) {
+    const sonNo = new Map();
+    const atamalar = [];
+    (Array.isArray(olaylar) ? olaylar : []).slice().sort((a, b) => (Number(a.seqNo) || 0) - (Number(b.seqNo) || 0)).forEach((o) => {
+      if (!o || o.tur !== 'OKUDU_GUNCELLE' || !o.veri) return;
+      const id = String(o.veri.id || '');
+      const no = String(o.veri.ogrNo || '');
+      if (!id || !no) return;
+      const onceki = sonNo.get(id);
+      if (onceki !== undefined && onceki !== no) {
+        atamalar.push({ kayitId: id, sinavKodu: o.sinavKodu || '', eskiNo: onceki, yeniNo: no, adSoyad: String(o.veri.adSoyad || ''), kodlanan: String(o.veri.okunanNoKod || ''), zamanMs: Number(o.zamanMs) || 0 });
+      }
+      sonNo.set(id, no);
+    });
+    return atamalar;
+  }
+
+  /* Öğrenci dosyası: bir öğrencinin tüm sınavları, kopya şüpheleri, ihlalleri ve atamaları */
+  function olusturOgrenciDosyasi(ogrNo, kaynak = {}) {
+    const no = String(ogrNo || '').trim();
+    const sinavlar = [];
+    const supheler = [];
+    (Array.isArray(kaynak.sinavlar) ? kaynak.sinavlar : []).forEach((s) => {
+      const okumalar = Array.isArray(s.okumalar) ? s.okumalar : [];
+      const kendi = okumalar.find((o) => String(o.ogrNo) === no);
+      if (!kendi) return;
+      sinavlar.push({
+        sinavAd: s.ad || s.sinavKodu || '', sinavKodu: s.sinavKodu || '', kaynak: s.kaynak || '', tarihMs: Number(s.tarihMs) || 0,
+        puan: Number(kendi.toplamPuan) || 0, grup: kendi.grup || '', okunanNoKod: kendi.okunanNoKod || '',
+        dyDogru: kendi.dyDogru, dyYanlis: kendi.dyYanlis, testDogru: kendi.testDogru, testYanlis: kendi.testYanlis
+      });
+      tespitEtKopyaBenzerlikCiftleri(okumalar).forEach((c) => {
+        if (String(c.ogrenci1No) === no || String(c.ogrenci2No) === no) {
+          const diger = String(c.ogrenci1No) === no ? { no: c.ogrenci2No, ad: c.ogrenci2Ad } : { no: c.ogrenci1No, ad: c.ogrenci1Ad };
+          supheler.push({ tur: 'ORTAK_YANLIS', sinavAd: s.ad || s.sinavKodu || '', digerNo: diger.no, digerAd: diger.ad, ortakYanlis: c.ortakYanlisSayisi, benzerlik: c.benzerlikYuzde, risk: c.riskSeviyesi, maddeler: c.ortakYanlisMaddeler });
+        }
+      });
+    });
+    (Array.isArray(kaynak.zamanCiftleri) ? kaynak.zamanCiftleri : []).forEach((c) => {
+      if (String(c.ogrenci1No) === no || String(c.ogrenci2No) === no) {
+        const diger = String(c.ogrenci1No) === no ? { no: c.ogrenci2No, ad: c.ogrenci2Ad } : { no: c.ogrenci1No, ad: c.ogrenci1Ad };
+        supheler.push({ tur: 'ZAMAN_IZI', sinavAd: c.sinavAd || 'Online sınav', digerNo: diger.no, digerAd: diger.ad, yakinAyniCevap: c.yakinAyniCevap, risk: c.riskSeviyesi });
+      }
+    });
+    const ihlaller = (Array.isArray(kaynak.loglar) ? kaynak.loglar : []).filter((l) => String(l.ogrNo) === no && /^IHLAL_/.test(String(l.olayTuru || '')));
+    const atamalar = (Array.isArray(kaynak.atamalar) ? kaynak.atamalar : []).filter((a) => String(a.yeniNo) === no || String(a.eskiNo) === no);
+    const yoklama = (Array.isArray(kaynak.yoklamalar) ? kaynak.yoklamalar : []).filter((y) => String(y.ogrNo) === no);
+    // Yoklamada imzası yok (gelmedi) ama aynı sınavın kağıdı okunmuş: kağıdı başkası doldurmuş olabilir
+    yoklama.filter((y) => y.durum === 'gelmedi').forEach((y) => {
+      const s = sinavlar.find((x) => x.sinavKodu && String(x.sinavKodu) === String(y.sinavKodu || ''));
+      if (s) supheler.push({ tur: 'YOKLAMA_UYUMSUZ', sinavAd: s.sinavAd, digerNo: '', digerAd: '', risk: 'YUKSEK' });
+    });
+    const puanlar = sinavlar.map((x) => x.puan);
+    return {
+      ogrNo: no,
+      sinavlar: sinavlar.sort((a, b) => (b.tarihMs || 0) - (a.tarihMs || 0)),
+      ortalama: puanlar.length ? Math.round((puanlar.reduce((a, b) => a + b, 0) / puanlar.length) * 10) / 10 : null,
+      supheler, ihlaller, atamalar, yoklama
+    };
+  }
+
   function tespitEtKopyaBenzerlikCiftleri(okumaSonuclari = []) {
     const ciftler = [];
     if (!Array.isArray(okumaSonuclari) || okumaSonuclari.length < 2) return ciftler;
@@ -6650,6 +6910,53 @@
   }
 
   /* Bulut kasa verisinden soru metinlerini dışarıda bırakarak mobil OMR için hafif ders bazlı özet üretir */
+  /* ------------------------------------------------------------------------
+     ONLINE SINAV GÜVENLİĞİ (sunucuda uygulanan kurallar — iki sunucu da aynı çekirdeği kullanır)
+     ------------------------------------------------------------------------ */
+  /* Her 60 saniyede değişen 6 haneli salon kodu: projeksiyonda gösterilir; paylaşılsa bile 1-2 dakikada geçersiz olur */
+  function uretDegisenSalonKodu(sirr, zamanMs = Date.now(), pencereSn = 60) {
+    const p = Math.floor(Number(zamanMs) / 1000 / pencereSn);
+    const h = uretDelilLogHash(`${String(sirr || '')}|${p}`, 'DEGISEN-SALON-KODU');
+    return String(parseInt(String(h).replace(/[^0-9a-f]/gi, '').slice(0, 8) || '0', 16) % 1000000).padStart(6, '0');
+  }
+  /* Şimdiki ve bir önceki pencerenin kodu kabul edilir (öğrenci kodu yazarken süre dolabilir) */
+  function dogrulaDegisenSalonKodu(sirr, kod, zamanMs = Date.now(), pencereSn = 60) {
+    const k = String(kod || '').replace(/\D/g, '');
+    if (k.length !== 6 || !sirr) return false;
+    return [0, -1].some((d) => uretDegisenSalonKodu(sirr, Number(zamanMs) + d * pencereSn * 1000, pencereSn) === k);
+  }
+  /* İzinli ağ ön ekleri ("193.140.10." / "10.0." / tam IP); boşsa her ağ serbest */
+  function ipIzinliMi(ip, onekMetni) {
+    const onekler = String(onekMetni || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+    if (!onekler.length) return true;
+    const temizIp = String(ip || '').split(',')[0].trim().replace(/^::ffff:/, '');
+    return onekler.some((o) => temizIp === o || temizIp.startsWith(o.replace(/\*$/, '')));
+  }
+  /* Safe Exam Browser kullanıcı aracısına "SEB/<sürüm>" ekler */
+  function sebIstemcisiMi(kullaniciAraci) {
+    return /\bSEB\/\d/i.test(String(kullaniciAraci || ''));
+  }
+  /* Öğrencinin ihlal kaydına bir ihlal işler; sınır dolunca kilitler (kilitli oturum cevap kabul etmez) */
+  function isleSinavIhlali(kayit, olayTuru, simdiMs = Date.now(), maksIhlal = 0) {
+    const k = kayit && typeof kayit === 'object' ? kayit : {};
+    k.ihlalSayisi = Math.max(0, Number(k.ihlalSayisi) || 0) + 1;
+    k.ihlaller = (Array.isArray(k.ihlaller) ? k.ihlaller : []).concat([{ zamanMs: simdiMs, tur: String(olayTuru || 'IHLAL').slice(0, 40) }]).slice(-60);
+    if (Number(maksIhlal) > 0 && k.ihlalSayisi >= Number(maksIhlal)) k.kilitli = true;
+    return k;
+  }
+  /* "Buradayım" sinyali: iki sinyal arası eşikten uzunsa (sinyal engellendi / ekrandan uzun süre ayrıldı) bir ihlal sayılır */
+  function isleSinavNabzi(kayit, simdiMs = Date.now(), maksIhlal = 0, esikMs = 60000) {
+    const k = kayit && typeof kayit === 'object' ? kayit : {};
+    const son = Number(k.sonNabizMs) || 0;
+    let kesinti = false;
+    if (son && simdiMs - son > esikMs && !k.kilitli) {
+      isleSinavIhlali(k, 'IHLAL_NABIZ_KESINTISI', simdiMs, maksIhlal);
+      kesinti = true;
+    }
+    k.sonNabizMs = simdiMs;
+    return { kayit: k, kesinti };
+  }
+
   /* Doğru cevabı işaretlenmemiş D/Y ve test soruları. Kağıt/anahtar üretimi bunları sessizce "D" ve "A" sayar;
      bu yüzden telefon karekodu ve okuma, bu sayı 0 olmadan güvenilir değildir. */
   function sayAnahtarEksikSorular(sorular = []) {
@@ -10357,7 +10664,7 @@
       throw new Error('Senkron olayı geçerli bir nesne olmalıdır.');
     }
     const temiz = derinTemizleNesne(hamOlay, 0);
-    const izinliTurler = ['OKUDU_GUNCELLE', 'ANAHTAR_GUNCELLE', 'OGRENCI_EKLE', 'OKUDU_SIL', 'SINAV_TANIMI'];
+    const izinliTurler = ['OKUDU_GUNCELLE', 'ANAHTAR_GUNCELLE', 'OGRENCI_EKLE', 'OKUDU_SIL', 'SINAV_TANIMI', 'YOKLAMA'];
     const tur = String(temiz.tur || '').trim().toUpperCase();
     if (!izinliTurler.includes(tur)) {
       throw new Error(`Desteklenmeyen senkron olay türü: ${tur || 'BOŞ'}`);
@@ -10432,6 +10739,20 @@
         kimlikModu: String(veriHam.kimlikModu || '').trim().slice(0, 8),
         haneSayisi: sayi(veriHam.haneSayisi, 15),
         cevapAnahtarlari: anahtarlar
+      };
+    } else if (tur === 'YOKLAMA') {
+      // Telefonla okunan yoklama çizelgesinin bir sayfası: öğrenci no + geldi/gelmedi
+      const gecerli = ['geldi', 'gelmedi', 'belirsiz'];
+      veri = {
+        sayfa: Math.max(0, Math.min(99, Number(veriHam.sayfa) || 0)),
+        toplamSayfa: Math.max(0, Math.min(99, Number(veriHam.toplamSayfa) || 0)),
+        satirlar: (Array.isArray(veriHam.satirlar) ? veriHam.satirlar : []).slice(0, 40)
+          .filter((x) => x && typeof x === 'object' && String(x.ogrNo || '').trim())
+          .map((x) => ({
+            ogrNo: String(x.ogrNo).trim().slice(0, 40),
+            durum: gecerli.includes(String(x.durum)) ? String(x.durum) : 'belirsiz',
+            elle: Boolean(x.elle)
+          }))
       };
     } else if (tur === 'OKUDU_SIL') {
       veri = {
@@ -10794,6 +11115,20 @@
     maskeleEposta,
     uretOgrenciDogrulamaKodu,
     uretTelefonEslesmeKodu,
+    karsilastirIkiOkuma,
+    uretOkunabilirYoklamaSVG,
+    okuYoklamaImageData,
+    yoklamaCaprazKontrol,
+    yoklamaSayfalari,
+    tespitEtZamanBenzerligi,
+    cikarElleAtamalar,
+    olusturOgrenciDosyasi,
+    uretDegisenSalonKodu,
+    dogrulaDegisenSalonKodu,
+    ipIzinliMi,
+    sebIstemcisiMi,
+    isleSinavIhlali,
+    isleSinavNabzi,
     uretSinavKimlikKodu,
     kanonikNoktalariKaynagaCevir,
     sinavKimlikEtiketi,

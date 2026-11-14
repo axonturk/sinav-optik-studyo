@@ -674,6 +674,7 @@
       );
     });
     birlesik.okumaSonuclariHaritasi = birlesikOkumaHaritasi;
+    birlesik.sinavArsivi = birlestirIdIle(yerelPaket.sinavArsivi, disPaket.sinavArsivi, (a) => String(a.id));
     return birlesik;
   }
 
@@ -717,6 +718,11 @@
     }
     if (cozulmus.okumaSonuclariHaritasi && typeof cozulmus.okumaSonuclariHaritasi === 'object' && !Array.isArray(cozulmus.okumaSonuclariHaritasi)) {
       durum.okumaSonuclariHaritasi = cozulmus.okumaSonuclariHaritasi;
+    }
+    if (Array.isArray(cozulmus.sinavArsivi)) {
+      const yerelArsiv = sinavArsivi();
+      cozulmus.sinavArsivi.forEach((a) => { if (a && a.id && !yerelArsiv.some((x) => x.id === a.id)) yerelArsiv.push(a); });
+      try { localStorage.setItem(SINAV_ARSIV_DEPO, JSON.stringify(yerelArsiv)); } catch (_) {}
     }
     if (Array.isArray(durum.okumaSonuclari) && durum.okumaSonuclari.length > 0) {
       const aktifKey = durum.aktifDersId || 'genel';
@@ -868,7 +874,8 @@
       aktifKayitliSinavId: durum.aktifKayitliSinavId || '',
       dersTaslakSinavlari: durum.dersTaslakSinavlari || {},
       salonlarHaritasi: durum.salonlarHaritasi || {},
-      okumaSonuclariHaritasi: durum.okumaSonuclariHaritasi || {}
+      okumaSonuclariHaritasi: durum.okumaSonuclariHaritasi || {},
+      sinavArsivi: sinavArsivi()
     };
   }
 
@@ -3750,6 +3757,23 @@
       };
     }
 
+    if (kapsam === 'okunur-yoklama') {
+      const tb = okuTutanakBilgileri();
+      const ders = tb.ders || {};
+      const ogrenciler = Array.isArray(durum.ogrenciler) ? durum.ogrenciler : [];
+      const svgler = ogrenciler.length ? C.uretOkunabilirYoklamaSVG(ogrenciler, {
+        baslik: `${ders.kod || ''} ${ders.ad || ''} · ${String(tb.sinavTuru || '').split(' ')[0]}`.trim(),
+        alt: [tb.fakulte, tb.bolum, tb.salon].filter(Boolean).join(' · '),
+        tarih: tb.tarihSaat || ''
+      }) : [];
+      return {
+        html: svgler.length
+          ? svgler.map((svg, i) => `<div class="a4-sayfa"><div class="a4-sayfa-etiket">OKUNABİLİR YOKLAMA · SAYFA ${i + 1}/${svgler.length}</div><div style="width:100%; max-width:190mm; margin:0 auto;">${svg}</div></div>`).join('')
+          : '<div class="a4-sayfa"><p style="padding:2rem;">Öğrenci listesi boş. Önce öğrenci listesini yükleyin.</p></div>',
+        dosyaAdiTabani: `${dersKodTemiz}_Okunabilir_Yoklama`
+      };
+    }
+
     if (kapsam === 'ayri-optik') {
       return {
         html: uretAyriOptikSayfaHTML(yapi),
@@ -4143,7 +4167,7 @@
     if (!sahne) return;
 
     const baskiKapsamiSecili = (document.getElementById('baski-kapsam-sec') || {}).value || '';
-    if (['tutanak', 'yoklama', 'tutanak-yoklama'].includes(baskiKapsamiSecili)) {
+    if (['tutanak', 'yoklama', 'tutanak-yoklama', 'okunur-yoklama'].includes(baskiKapsamiSecili)) {
       sahne.innerHTML = uretKapsamaGoreBaskiHTML(yapi, baskiKapsamiSecili).html;
     } else if (yapi.onizlemeMod === 'ayri-optik') {
       sahne.innerHTML = uretAyriOptikSayfaHTML(yapi);
@@ -4468,6 +4492,8 @@
         grup: String(k.grup || ''), toplamPuan: Number(k.toplamPuan) || 0,
         dyDogru: Number(k.dyDogru) || 0, dyYanlis: Number(k.dyYanlis) || 0,
         testDogru: Number(k.testDogru) || 0, testYanlis: Number(k.testYanlis) || 0,
+        dyDetay: (Array.isArray(k.dyDetay) ? k.dyDetay : []).map((x) => ({ verilen: x && x.verilen ? String(x.verilen) : '', sonuc: x && x.sonuc ? String(x.sonuc) : '' })),
+        testDetay: (Array.isArray(k.testDetay) ? k.testDetay : []).map((x) => ({ verilen: x && x.verilen ? String(x.verilen) : '', sonuc: x && x.sonuc ? String(x.sonuc) : '' })),
         bekliyor: /^BEKLEYEN/i.test(String(k.ogrNo || '')) || String(k.okunanNoKod || '').includes('?'),
         _zamanMs: zaman
       };
@@ -4545,6 +4571,291 @@
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  /* ========================================================================
+     SINAV ARŞİVİ · KOPYA ŞÜPHE RAPORU · KAYITLAR · ÖĞRENCİ DOSYASI
+     ======================================================================== */
+  const SINAV_ARSIV_DEPO = 'SINAV_ARSIVI_V1';
+  function sinavArsivi() {
+    if (!Array.isArray(durum.sinavArsivi)) {
+      try { durum.sinavArsivi = JSON.parse(localStorage.getItem(SINAV_ARSIV_DEPO) || '[]') || []; } catch (_) { durum.sinavArsivi = []; }
+    }
+    return durum.sinavArsivi;
+  }
+  function sinavArsiviniKaydet() {
+    try { localStorage.setItem(SINAV_ARSIV_DEPO, JSON.stringify(durum.sinavArsivi || [])); } catch (_) {}
+    try { verileriKaydet(); } catch (_) {}
+  }
+  const tarihMetni = (ms) => (ms ? new Date(ms).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
+  const ogrAdiBul = (no, yedek = '') => {
+    const o = (durum.ogrenciKayitlari || []).find((x) => String(x.ogrNo) === String(no));
+    return (o && o.adSoyad) || yedek || '';
+  };
+  /* Telefondan gelen bir sınavı kalıcı arşive al (tanım + okumalar; bulut yedeğine de girer) */
+  function telefonSinaviniArsiveKaydet(kod) {
+    const kova = telefonSinavlariniYukle()[kod];
+    if (!kova) return false;
+    const liste = sinavArsivi();
+    const id = `ARS-${kod}`;
+    const kayit = {
+      id, kaynak: 'telefon', sinavKodu: kod, ad: kova.ad || kod, yapi: kova.yapi || null,
+      okumalar: telefonSinavOkumalari(kod).map((o) => Object.assign({}, o, { adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad) })),
+      tarihMs: kova.sonMs || Date.now(), arsivMs: Date.now()
+    };
+    const i = liste.findIndex((x) => x.id === id);
+    if (i >= 0) liste[i] = kayit; else liste.unshift(kayit);
+    sinavArsiviniKaydet();
+    return true;
+  }
+  /* Arşiv sayfasındaki tüm sınavlar (tek liste) */
+  function tumArsivSinavlari() {
+    const sonuc = [];
+    sinavArsivi().forEach((a) => sonuc.push({ anahtar: a.id, ad: a.ad, sinavKodu: a.sinavKodu, kaynak: a.kaynak === 'telefon' ? 'Telefon (arşivde)' : 'Arşiv', tarihMs: a.tarihMs, okumalar: a.okumalar || [], arsivde: true }));
+    const tum = telefonSinavlariniYukle();
+    Object.keys(tum).forEach((k) => {
+      if (!Object.keys(tum[k].okumalar || {}).length) return;
+      if (sonuc.some((x) => x.sinavKodu === k)) return;
+      sonuc.push({ anahtar: `TEL-${k}`, ad: tum[k].ad || k, sinavKodu: k, kaynak: 'Telefon (arşive alınmadı)', tarihMs: tum[k].sonMs, okumalar: telefonSinavOkumalari(k).map((o) => Object.assign({}, o, { adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad) })), arsivde: false });
+    });
+    (durum.kayitliSinavlar || []).forEach((k) => {
+      sonuc.push({ anahtar: `KS-${k.id}`, ad: k.ad || k.sinavKodu || 'Kayıtlı sınav', sinavKodu: k.sinavKodu || '', kaynak: 'Stüdyo (basılan / kaydedilen)', tarihMs: Number(k.guncellemeMs || k.olusturmaMs) || 0, okumalar: [], arsivde: true, studyo: true, basimSayisi: (k.basimGecmisi || []).length });
+    });
+    if ((durum.okumaSonuclari || []).length) {
+      sonuc.push({ anahtar: 'AKTIF', ad: 'Stüdyodaki açık sınavın okumaları', sinavKodu: '', kaynak: 'Okuma sekmesi', tarihMs: Date.now(), okumalar: durum.okumaSonuclari.map((o) => Object.assign({}, o, { adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad) })), arsivde: false });
+    }
+    return sonuc.sort((a, b) => (b.tarihMs || 0) - (a.tarihMs || 0));
+  }
+  function cizSinavArsivi() {
+    const kutu = document.getElementById('arsiv-liste');
+    if (!kutu) return;
+    const liste = tumArsivSinavlari();
+    kutu.innerHTML = liste.length ? `
+      <table class="veri-tablo"><thead><tr><th>Sınav</th><th>Kaynak</th><th>Tarih</th><th>Kağıt</th><th>Kopya şüphesi</th><th></th></tr></thead><tbody>
+      ${liste.map((s) => {
+        const ciftler = s.okumalar.length > 1 ? C.tespitEtKopyaBenzerlikCiftleri(s.okumalar) : [];
+        return `<tr>
+          <td><strong>${C.kacisHTML(s.ad)}</strong><div class="mono" style="font-size:0.72rem; color:var(--metin-soluk);">${C.kacisHTML(s.sinavKodu)}</div></td>
+          <td>${C.kacisHTML(s.kaynak)}${s.studyo && s.basimSayisi ? ` · ${s.basimSayisi} basım` : ''}</td>
+          <td>${tarihMetni(s.tarihMs)}</td>
+          <td>${s.studyo ? '—' : s.okumalar.length}</td>
+          <td>${s.studyo ? '—' : (ciftler.length ? `<span class="rozet rozet-kirmizi">${ciftler.length} çift</span>` : '<span class="rozet rozet-yesil">yok</span>')}</td>
+          <td style="white-space:nowrap;">${s.studyo ? '' : `<button type="button" class="btn btn-kucuk" data-arsiv-ac="${C.kacisHTML(s.anahtar)}">Aç</button>`}
+            ${!s.arsivde && s.anahtar.startsWith('TEL-') ? `<button type="button" class="btn btn-basari btn-kucuk" data-arsive-kaydet="${C.kacisHTML(s.sinavKodu)}">Arşive kaydet</button>` : ''}</td>
+        </tr>`;
+      }).join('')}</tbody></table>` : '<div style="color:var(--metin-ikincil);">Henüz arşivde sınav yok. Basılan sınavlar ve telefondan gelen okumalar burada görünür.</div>';
+    kutu.querySelectorAll('[data-arsive-kaydet]').forEach((b) => b.addEventListener('click', () => {
+      telefonSinaviniArsiveKaydet(b.getAttribute('data-arsive-kaydet'));
+      cizSinavArsivi();
+    }));
+    kutu.querySelectorAll('[data-arsiv-ac]').forEach((b) => b.addEventListener('click', () => cizArsivDetay(b.getAttribute('data-arsiv-ac'))));
+  }
+  function cizArsivDetay(anahtar) {
+    const s = tumArsivSinavlari().find((x) => x.anahtar === anahtar);
+    const kutu = document.getElementById('arsiv-detay');
+    if (!s || !kutu) return;
+    const okumalar = s.okumalar.slice().sort((a, b) => String(a.ogrNo).localeCompare(String(b.ogrNo), 'tr'));
+    const ciftler = okumalar.length > 1 ? C.tespitEtKopyaBenzerlikCiftleri(okumalar) : [];
+    const puanlar = okumalar.map((o) => Number(o.toplamPuan) || 0);
+    const ort = puanlar.length ? (puanlar.reduce((a, b) => a + b, 0) / puanlar.length).toFixed(1) : '—';
+    kutu.dataset.anahtar = anahtar;
+    kutu.innerHTML = `
+      <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;"><span>${C.kacisHTML(s.ad)}</span>
+        <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+          <button type="button" class="btn btn-basari btn-kucuk" data-arsiv-csv="1">Excel (.csv)</button>
+          ${ciftler.length ? '<button type="button" class="btn btn-tehlike btn-kucuk" data-kopya-tutanak="1">Kopya şüphe tutanağı (yazdır / PDF)</button>' : ''}
+        </div></div>
+      <div style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">${okumalar.length} kağıt · ortalama ${ort} · ${C.kacisHTML(s.kaynak)}</div>
+      <h4 style="margin:0.4rem 0;">🔎 Kopya Şüphe Raporu ${ciftler.length ? `<span class="rozet rozet-kirmizi">${ciftler.length} şüpheli çift</span>` : '<span class="rozet rozet-yesil">şüpheli çift yok</span>'}</h4>
+      <div id="kopya-ciftleri">${ciftler.map((c, i) => {
+        const a = okumalar.find((o) => String(o.ogrNo) === String(c.ogrenci1No));
+        const b = okumalar.find((o) => String(o.ogrNo) === String(c.ogrenci2No));
+        const satir = C.karsilastirIkiOkuma(a, b);
+        return `<div class="kart" style="margin:0.4rem 0; border-left:4px solid ${c.riskSeviyesi === 'YUKSEK' ? 'var(--tehlike)' : 'var(--uyari)'};">
+          <div style="font-weight:700;">${i + 1}. ${C.kacisHTML(ogrAdiBul(c.ogrenci1No, c.ogrenci1Ad))} (${C.kacisHTML(c.ogrenci1No)}) ↔ ${C.kacisHTML(ogrAdiBul(c.ogrenci2No, c.ogrenci2Ad))} (${C.kacisHTML(c.ogrenci2No)}) · Kitapçık ${C.kacisHTML(c.grup)}
+            <span class="rozet ${c.riskSeviyesi === 'YUKSEK' ? 'rozet-kirmizi' : 'rozet-sari'}">${c.riskSeviyesi === 'YUKSEK' ? 'YÜKSEK risk' : 'Orta risk'}</span></div>
+          <div style="font-size:0.8rem; margin:0.25rem 0;"><strong>${c.ortakYanlisSayisi} ortak yanlış</strong> · ${c.ortakDogruSayisi} ortak doğru · ${c.farkliCevapSayisi} farklı cevap · benzerlik %${c.benzerlikYuzde}</div>
+          <div style="display:flex; flex-wrap:wrap; gap:3px; font-size:0.72rem;">${satir.map((r) => `<span class="mono" title="${r.soru}" style="padding:2px 4px; border-radius:4px; border:1px solid var(--kenar); background:${r.ortakYanlis ? 'rgba(220,38,38,0.18)' : (r.ortakDogru ? 'rgba(22,163,74,0.12)' : 'transparent')};">${r.soru}:${C.kacisHTML(r.cevap1 || '-')}/${C.kacisHTML(r.cevap2 || '-')}</span>`).join('')}</div>
+          <div style="font-size:0.72rem; color:var(--metin-soluk); margin-top:0.25rem;">Kırmızı: ikisinin de aynı yanlış şıkkı işaretlediği sorular. Bu istatistik tek başına hüküm değildir; öğretmen kararı ve diğer delillerle birlikte değerlendirilir.</div>
+        </div>`;
+      }).join('')}</div>
+      <h4 style="margin:0.6rem 0 0.3rem;">Sonuçlar</h4>
+      <div class="tablo-sarmal" style="max-height:340px; overflow:auto;"><table class="veri-tablo"><thead><tr><th>Öğr. No</th><th>Ad Soyad</th><th>Kodlanan</th><th>Kitapçık</th><th>D/Y</th><th>Test</th><th>Puan</th></tr></thead><tbody>
+      ${okumalar.map((o) => `<tr><td class="mono">${C.kacisHTML(o.ogrNo)}</td><td>${C.kacisHTML(ogrAdiBul(o.ogrNo, o.adSoyad))}</td><td class="mono">${C.kacisHTML(o.okunanNoKod || '')}</td><td>${C.kacisHTML(o.grup || '')}</td><td>${o.dyDogru ?? '-'}D/${o.dyYanlis ?? '-'}Y</td><td>${o.testDogru ?? '-'}D/${o.testYanlis ?? '-'}Y</td><td><strong>${o.toplamPuan}</strong></td></tr>`).join('')}
+      </tbody></table></div>`;
+    const csvBtn = kutu.querySelector('[data-arsiv-csv]');
+    if (csvBtn) csvBtn.addEventListener('click', () => indirCsvDosyasi(`arsiv-${s.sinavKodu || 'sinav'}.csv`, [['Öğrenci No', 'Ad Soyad', 'Kodlanan', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Puan']].concat(okumalar.map((o) => [o.ogrNo, ogrAdiBul(o.ogrNo, o.adSoyad), o.okunanNoKod || '', o.grup || '', o.dyDogru, o.dyYanlis, o.testDogru, o.testYanlis, o.toplamPuan]))));
+    const tutBtn = kutu.querySelector('[data-kopya-tutanak]');
+    if (tutBtn) tutBtn.addEventListener('click', () => yazdirKopyaTutanagi(s, okumalar, ciftler));
+  }
+  function indirCsvDosyasi(ad, satirlar) {
+    const temiz = (v) => (C.temizleCsvFormulEnjeksiyon ? C.temizleCsvFormulEnjeksiyon(String(v ?? '')) : String(v ?? ''));
+    const csv = '﻿' + satirlar.map((r) => r.map((h) => `"${temiz(h).replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = ad;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  /* Resmi tutanağa eklenebilir, yazdırılabilir kopya şüphe raporu */
+  function uretKopyaTutanakHTML(s, okumalar, ciftler) {
+    const k = C.kacisHTML;
+    return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Kopya Şüphe Raporu</title>
+      <style>body{font-family:Arial,sans-serif;margin:18mm;color:#000;font-size:11pt}h1{font-size:15pt;margin:0 0 4px}table{border-collapse:collapse;width:100%;margin:6px 0}td,th{border:1px solid #444;padding:3px 5px;font-size:9.5pt;text-align:center}.ky{background:#f6c4c4}.imza{margin-top:28px;display:flex;justify-content:space-between}.imza div{width:45%;border-top:1px solid #000;padding-top:4px;text-align:center}</style></head><body>
+      <h1>Sınav Kopya Şüphe Raporu (Tutanak Eki)</h1>
+      <div>Sınav: <strong>${k(s.ad)}</strong> · Kod: ${k(s.sinavKodu || '-')} · Rapor tarihi: ${k(new Date().toLocaleString('tr-TR'))}</div>
+      <p style="font-size:9.5pt">Yöntem: Aynı kitapçıktaki öğrenci çiftlerinde aynı yanlış şıkkın işaretlenme sayısı (Harpp-Hogan yaklaşımı) ve cevap benzerliği. Rastlantıyla çok sayıda aynı yanlış şıkkın işaretlenmesi düşük olasılıklıdır; bu rapor tek başına hüküm değildir, öğretmen değerlendirmesi ve diğer delillerle birlikte kullanılır.</p>
+      ${ciftler.map((c, i) => {
+        const a = okumalar.find((o) => String(o.ogrNo) === String(c.ogrenci1No));
+        const b = okumalar.find((o) => String(o.ogrNo) === String(c.ogrenci2No));
+        const satir = C.karsilastirIkiOkuma(a, b);
+        return `<h3 style="font-size:11.5pt;margin:12px 0 2px">${i + 1}. ${k(ogrAdiBul(c.ogrenci1No, c.ogrenci1Ad))} (${k(c.ogrenci1No)}) — ${k(ogrAdiBul(c.ogrenci2No, c.ogrenci2Ad))} (${k(c.ogrenci2No)}) · Kitapçık ${k(c.grup)} · Risk: ${c.riskSeviyesi === 'YUKSEK' ? 'YÜKSEK' : 'ORTA'}</h3>
+          <div>Ortak yanlış: <strong>${c.ortakYanlisSayisi}</strong> · Ortak doğru: ${c.ortakDogruSayisi} · Farklı: ${c.farkliCevapSayisi} · Benzerlik: %${c.benzerlikYuzde} · Ortak yanlış maddeler: ${k((c.ortakYanlisMaddeler || []).join(', '))}</div>
+          <table><tr><th>Soru</th>${satir.map((r) => `<th>${r.soru}</th>`).join('')}</tr>
+          <tr><td>${k(c.ogrenci1No)}</td>${satir.map((r) => `<td class="${r.ortakYanlis ? 'ky' : ''}">${k(r.cevap1 || '-')}</td>`).join('')}</tr>
+          <tr><td>${k(c.ogrenci2No)}</td>${satir.map((r) => `<td class="${r.ortakYanlis ? 'ky' : ''}">${k(r.cevap2 || '-')}</td>`).join('')}</tr></table>`;
+      }).join('')}
+      <div class="imza"><div>Sınav Sorumlusu (Ad Soyad / İmza)</div><div>Gözetmen (Ad Soyad / İmza)</div></div>
+      </body></html>`;
+  }
+  function yazdirKopyaTutanagi(s, okumalar, ciftler) {
+    const html = uretKopyaTutanakHTML(s, okumalar, ciftler);
+    window.__sonKopyaTutanakHTML = html;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch (_) {} }, 300);
+  }
+
+  /* ---- KAYITLAR: değiştirilemez işlem ve delil kayıtları (tek zaman çizelgesi) ---- */
+  let sunucuKioskLoglari = [];
+  async function yukleSunucuKioskLoglari() {
+    const token = sessionStorage.getItem('hoca_token') || '';
+    if (!token || !location.protocol.startsWith('http')) return;
+    try {
+      const y = await fetch('/api/kiosk-log-indir?format=json&sinavId=TUMU', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      const v = await y.json().catch(() => null);
+      const liste = Array.isArray(v) ? v : (v && (v.loglar || v.kayitlar)) || [];
+      if (Array.isArray(liste)) sunucuKioskLoglari = liste;
+    } catch (_) {}
+  }
+  function tumKayitlar() {
+    const kayitlar = [];
+    const loglar = sunucuKioskLoglari.length ? sunucuKioskLoglari : (durum.kioskDelilLoglari || []);
+    loglar.forEach((l) => kayitlar.push({ zamanMs: Date.parse(l.zamanIso || l.zamanDamgasi) || 0, tur: /^IHLAL_/.test(l.olayTuru) ? 'Online ihlal' : 'Online sınav', ogrNo: l.ogrNo || '', ad: l.adSoyad || '', sinav: l.sinavId || '', aciklama: `${l.olayTuru}: ${l.aciklama || ''}`, muhur: (l.olayHash || '').slice(0, 12) }));
+    (durum.telefonOlaylari || []).forEach((o) => kayitlar.push({ zamanMs: o.zamanMs, tur: 'Telefon okuma', ogrNo: o.veri.ogrNo || '', ad: o.veri.adSoyad || '', sinav: o.sinavKodu, aciklama: `Kağıt okundu · kodlanan ${o.veri.okunanNoKod || '?'} · kitapçık ${o.veri.grup || '?'} · ${o.veri.toplamPuan} puan`, muhur: `#${o.seqNo}` }));
+    C.cikarElleAtamalar(durum.telefonOlaylari || []).forEach((a) => kayitlar.push({ zamanMs: a.zamanMs, tur: 'Elle atama', ogrNo: a.yeniNo, ad: a.adSoyad, sinav: a.sinavKodu, aciklama: `Kağıtta ${a.kodlanan || a.eskiNo} kodlu kağıt öğretmen tarafından ${a.yeniNo} numaralı öğrenciye atandı (önceki: ${a.eskiNo})`, muhur: '' }));
+    (durum.kayitliSinavlar || []).forEach((k) => (k.basimGecmisi || []).forEach((b) => kayitlar.push({ zamanMs: Number(b.zamanMs || b.tarihMs) || Date.parse(b.zaman || '') || 0, tur: 'Basım', ogrNo: '', ad: '', sinav: k.ad || k.sinavKodu, aciklama: `Sınav basıldı (${b.kapsam || ''} · ${b.format || ''})`, muhur: '' })));
+    (durum.yoklamalar || []).forEach((y) => kayitlar.push({ zamanMs: y.zamanMs, tur: 'Yoklama', ogrNo: y.ogrNo, ad: ogrAdiBul(y.ogrNo), sinav: y.sinavKodu || '', aciklama: y.durum === 'geldi' ? 'İmzası var (geldi)' : (y.durum === 'gelmedi' ? 'İmzası yok (gelmedi)' : 'İmza belirsiz'), muhur: '' }));
+    return kayitlar.sort((a, b) => (b.zamanMs || 0) - (a.zamanMs || 0));
+  }
+  function cizKayitlar() {
+    const kutu = document.getElementById('kayitlar-liste');
+    if (!kutu) return;
+    const ara = String((document.getElementById('kayitlar-ara') || {}).value || '').trim().toLocaleLowerCase('tr-TR');
+    const tur = String((document.getElementById('kayitlar-tur') || {}).value || '');
+    const liste = tumKayitlar().filter((k) => (!tur || k.tur === tur) && (!ara || `${k.ogrNo} ${k.ad} ${k.sinav} ${k.aciklama}`.toLocaleLowerCase('tr-TR').includes(ara)));
+    window.__sonKayitlarListesi = liste;
+    kutu.innerHTML = liste.length ? `<table class="veri-tablo"><thead><tr><th>Zaman</th><th>Tür</th><th>Öğrenci</th><th>Sınav</th><th>Açıklama</th><th>Mühür</th></tr></thead><tbody>
+      ${liste.slice(0, 1500).map((k) => `<tr><td style="white-space:nowrap;">${tarihMetni(k.zamanMs)}</td><td>${C.kacisHTML(k.tur)}</td><td>${C.kacisHTML(k.ogrNo)} ${C.kacisHTML(k.ad)}</td><td class="mono" style="font-size:0.75rem;">${C.kacisHTML(k.sinav)}</td><td style="font-size:0.8rem;">${C.kacisHTML(k.aciklama)}</td><td class="mono" style="font-size:0.72rem;">${C.kacisHTML(k.muhur)}</td></tr>`).join('')}
+      </tbody></table>` : '<div style="color:var(--metin-ikincil);">Kayıt yok.</div>';
+  }
+
+  /* ---- ÖĞRENCİ DOSYASI ---- */
+  let sonZamanCiftleri = [];
+  async function yukleZamanAnalizi() {
+    const token = sessionStorage.getItem('hoca_token') || '';
+    if (!token || !location.protocol.startsWith('http')) return;
+    try {
+      const y = await fetch('/api/online-zaman-analizi', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      const v = await y.json().catch(() => null);
+      if (v && Array.isArray(v.ciftler)) sonZamanCiftleri = v.ciftler;
+    } catch (_) {}
+  }
+  function cizOgrenciDosyasi() {
+    const girdi = document.getElementById('ogr-dosya-ara');
+    const kutu = document.getElementById('ogr-dosya-sonuc');
+    const liste = document.getElementById('ogr-dosya-oneriler');
+    if (!girdi || !kutu) return;
+    const tumOgr = durum.ogrenciKayitlari || [];
+    if (liste && !liste.childElementCount) liste.innerHTML = tumOgr.map((o) => `<option value="${C.kacisHTML(o.ogrNo)}">${C.kacisHTML(o.adSoyad)}</option>`).join('');
+    const ara = String(girdi.value || '').trim().toLocaleLowerCase('tr-TR');
+    if (!ara) { kutu.innerHTML = '<div style="color:var(--metin-ikincil);">Öğrencinin adını ya da numarasını yazın.</div>'; return; }
+    const eslesen = tumOgr.filter((o) => String(o.ogrNo).includes(ara) || String(o.adSoyad || '').toLocaleLowerCase('tr-TR').includes(ara));
+    const okunanNolar = new Set();
+    tumArsivSinavlari().forEach((s) => s.okumalar.forEach((o) => okunanNolar.add(String(o.ogrNo))));
+    if (/^\d{3,}$/.test(ara) && !eslesen.some((o) => String(o.ogrNo) === ara) && okunanNolar.has(ara)) eslesen.push({ ogrNo: ara, adSoyad: '' });
+    if (!eslesen.length) { kutu.innerHTML = '<div style="color:var(--metin-ikincil);">Eşleşen öğrenci yok.</div>'; return; }
+    if (eslesen.length > 1 && !eslesen.some((o) => String(o.ogrNo) === ara)) {
+      kutu.innerHTML = `<div style="margin-bottom:0.4rem;">${eslesen.length} öğrenci bulundu, birini seçin:</div>` + eslesen.slice(0, 30).map((o) => `<button type="button" class="btn btn-kucuk" style="margin:2px;" data-ogr-sec="${C.kacisHTML(o.ogrNo)}">${C.kacisHTML(o.adSoyad)} (${C.kacisHTML(o.ogrNo)})</button>`).join('');
+      kutu.querySelectorAll('[data-ogr-sec]').forEach((b) => b.addEventListener('click', () => { girdi.value = b.getAttribute('data-ogr-sec'); cizOgrenciDosyasi(); }));
+      return;
+    }
+    const ogr = eslesen.find((o) => String(o.ogrNo) === ara) || eslesen[0];
+    const dosya = C.olusturOgrenciDosyasi(ogr.ogrNo, {
+      sinavlar: tumArsivSinavlari().filter((s) => !s.studyo).map((s) => ({ ad: s.ad, sinavKodu: s.sinavKodu, kaynak: s.kaynak, tarihMs: s.tarihMs, okumalar: s.okumalar })),
+      zamanCiftleri: sonZamanCiftleri,
+      loglar: sunucuKioskLoglari.length ? sunucuKioskLoglari : (durum.kioskDelilLoglari || []),
+      atamalar: C.cikarElleAtamalar(durum.telefonOlaylari || []),
+      yoklamalar: durum.yoklamalar || []
+    });
+    window.__sonOgrenciDosyasi = dosya;
+    const ad = ogrAdiBul(ogr.ogrNo, ogr.adSoyad);
+    kutu.innerHTML = `
+      <div class="kart" style="margin-bottom:0.6rem;"><div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem;">
+        <div><div style="font-size:1.1rem; font-weight:800;">${C.kacisHTML(ad || 'Öğrenci')}</div><div class="mono">${C.kacisHTML(ogr.ogrNo)}</div></div>
+        <div style="display:flex; gap:0.4rem; align-items:center;"><span class="rozet rozet-mavi">${dosya.sinavlar.length} sınav · ort. ${dosya.ortalama ?? '—'}</span>
+          ${dosya.supheler.length ? `<span class="rozet rozet-kirmizi">${dosya.supheler.length} şüphe</span>` : '<span class="rozet rozet-yesil">şüphe yok</span>'}
+          <button type="button" class="btn btn-kucuk" id="btn-ogr-dosya-yazdir">Yazdır / PDF</button></div></div></div>
+      <h4 style="margin:0.4rem 0;">Sınavlar</h4>
+      ${dosya.sinavlar.length ? `<table class="veri-tablo"><thead><tr><th>Sınav</th><th>Kaynak</th><th>Kodlanan</th><th>Kitapçık</th><th>D/Y</th><th>Test</th><th>Puan</th></tr></thead><tbody>${dosya.sinavlar.map((x) => `<tr><td>${C.kacisHTML(x.sinavAd)}</td><td>${C.kacisHTML(x.kaynak)}</td><td class="mono">${C.kacisHTML(x.okunanNoKod)}</td><td>${C.kacisHTML(x.grup)}</td><td>${x.dyDogru ?? '-'}D/${x.dyYanlis ?? '-'}Y</td><td>${x.testDogru ?? '-'}D/${x.testYanlis ?? '-'}Y</td><td><strong>${x.puan}</strong></td></tr>`).join('')}</tbody></table>` : '<div style="color:var(--metin-ikincil);">Okunmuş sınav yok.</div>'}
+      <h4 style="margin:0.6rem 0 0.3rem;">Şüpheler ve deliller</h4>
+      ${dosya.supheler.length ? dosya.supheler.map((x) => `<div class="kart" style="margin:0.3rem 0; border-left:4px solid ${x.risk === 'YUKSEK' ? 'var(--tehlike)' : 'var(--uyari)'};">${x.tur === 'YOKLAMA_UYUMSUZ' ? `🚩 Yoklama uyuşmazlığı · <strong>${C.kacisHTML(x.sinavAd)}</strong> · yoklamada imzası yok (gelmedi) ama sınav kağıdı okundu — kağıdı başkası doldurmuş olabilir · YÜKSEK risk</div>` : `${x.tur === 'ZAMAN_IZI' ? '⏱ Zaman izi' : '📄 Ortak yanlış'} · <strong>${C.kacisHTML(x.sinavAd)}</strong> · ${C.kacisHTML(ogrAdiBul(x.digerNo, x.digerAd))} (${C.kacisHTML(x.digerNo)}) ile ${x.tur === 'ZAMAN_IZI' ? `${x.yakinAyniCevap} soruda saniyeler içinde aynı cevap` : `<strong>${x.ortakYanlis} ortak yanlış</strong> (benzerlik %${x.benzerlik}${x.maddeler && x.maddeler.length ? ` · ${C.kacisHTML(x.maddeler.join(', '))}` : ''})`} · ${x.risk === 'YUKSEK' ? 'YÜKSEK' : 'Orta'} risk</div>`}`).join('') : '<div style="color:var(--metin-ikincil);">Kopya şüphesi yok.</div>'}
+      <h4 style="margin:0.6rem 0 0.3rem;">Online sınav ihlalleri</h4>
+      ${dosya.ihlaller.length ? `<ul style="margin:0; padding-left:1.1rem; font-size:0.82rem;">${dosya.ihlaller.map((l) => `<li>${tarihMetni(Date.parse(l.zamanIso || l.zamanDamgasi))} · ${C.kacisHTML(l.olayTuru)} · ${C.kacisHTML(l.aciklama || '')} · ihlal ${l.ihlalSayisi ?? ''}</li>`).join('')}</ul>` : '<div style="color:var(--metin-ikincil);">İhlal yok.</div>'}
+      <h4 style="margin:0.6rem 0 0.3rem;">Elle atamalar (numara düzeltmeleri)</h4>
+      ${dosya.atamalar.length ? `<ul style="margin:0; padding-left:1.1rem; font-size:0.82rem;">${dosya.atamalar.map((a) => `<li>${tarihMetni(a.zamanMs)} · kağıtta ${C.kacisHTML(a.kodlanan || a.eskiNo)} kodlu kağıt ${C.kacisHTML(a.yeniNo)} numarasına atandı</li>`).join('')}</ul>` : '<div style="color:var(--metin-ikincil);">Elle atama yok.</div>'}
+      <h4 style="margin:0.6rem 0 0.3rem;">Yoklama</h4>
+      ${dosya.yoklama.length ? `<ul style="margin:0; padding-left:1.1rem; font-size:0.82rem;">${dosya.yoklama.map((y) => `<li>${tarihMetni(y.zamanMs)} · ${C.kacisHTML(y.sinavKodu || '')} · ${y.durum === 'geldi' ? '✅ geldi' : (y.durum === 'gelmedi' ? '❌ gelmedi' : '⚠️ belirsiz')}</li>`).join('')}</ul>` : '<div style="color:var(--metin-ikincil);">Yoklama kaydı yok.</div>'}`;
+    const yz = document.getElementById('btn-ogr-dosya-yazdir');
+    if (yz) yz.addEventListener('click', () => {
+      const w = window.open('', '_blank');
+      if (!w) return;
+      w.document.write(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Öğrenci Dosyası</title><style>body{font-family:Arial,sans-serif;margin:16mm;font-size:10.5pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #555;padding:3px 5px}.kart{border:1px solid #999;padding:5px;margin:4px 0}button{display:none}</style></head><body><h2>Öğrenci Dosyası</h2>${kutu.innerHTML}</body></html>`);
+      w.document.close();
+      setTimeout(() => { try { w.focus(); w.print(); } catch (_) {} }, 300);
+    });
+  }
+  /* Sayfa açılınca güncel veriyi çiz */
+  function kurArsivKayitDosyaSayfalari() {
+    const bagla = (sekmeId, fn) => {
+      const b = document.querySelector(`.sekme-btn[data-sekme="${sekmeId}"]`);
+      if (b) b.addEventListener('click', fn);
+    };
+    bagla('sekme-arsiv', () => { cizSinavArsivi(); });
+    bagla('sekme-kayitlar', async () => { cizKayitlar(); await yukleSunucuKioskLoglari(); cizKayitlar(); });
+    bagla('sekme-ogrenci-dosyasi', async () => { cizOgrenciDosyasi(); await Promise.all([yukleSunucuKioskLoglari(), yukleZamanAnalizi()]); cizOgrenciDosyasi(); });
+    const ara = document.getElementById('kayitlar-ara');
+    if (ara) ara.addEventListener('input', () => cizKayitlar());
+    const tur = document.getElementById('kayitlar-tur');
+    if (tur) tur.addEventListener('change', () => cizKayitlar());
+    const csv = document.getElementById('btn-kayitlar-csv');
+    if (csv) csv.addEventListener('click', () => indirCsvDosyasi('kayitlar.csv', [['Zaman', 'Tür', 'Öğrenci No', 'Ad Soyad', 'Sınav', 'Açıklama', 'Mühür']].concat((window.__sonKayitlarListesi || tumKayitlar()).map((k) => [tarihMetni(k.zamanMs), k.tur, k.ogrNo, k.ad, k.sinav, k.aciklama, k.muhur]))));
+    const og = document.getElementById('ogr-dosya-ara');
+    if (og) og.addEventListener('input', () => cizOgrenciDosyasi());
+  }
+  /* Okuma sayacı: stüdyodaki okumalar + telefondan gelenler */
+  function guncelleOkumaSayaci() {
+    const el = document.getElementById('rozet-okunan-kagit');
+    if (!el) return;
+    let tel = 0;
+    const tum = telefonSinavlariniYukle();
+    Object.keys(tum).forEach((k) => { tel += Object.keys(tum[k].okumalar || {}).length; });
+    el.textContent = String((durum.okumaSonuclari || []).length + tel);
+    el.title = tel ? `${(durum.okumaSonuclari || []).length} stüdyo + ${tel} telefondan gelen` : '';
   }
 
   /* Gerçek (okunabilir) Vektörel QR SVG üretici — qrcode-generator kütüphanesi (MIT) */
@@ -5052,6 +5363,7 @@
 
   function guncelleOmrTabloVeKuyruk() {
     document.getElementById('rozet-okunan-kagit').textContent = String(durum.okumaSonuclari.length);
+    try { guncelleOkumaSayaci(); } catch (_) {}
     const tbody = document.getElementById('tablo-omr-okunanlar');
     if (tbody) {
       tbody.innerHTML = durum.okumaSonuclari
@@ -5815,7 +6127,11 @@
         kalanSureRozet.textContent = `${String(varsayilanSecili.sureDk || 40).padStart(2, '0')}:00`;
       }
       if (salonSatir) {
-        salonSatir.style.display = varsayilanSecili.erisimKodu ? 'block' : 'none';
+        const kodGerekli = Boolean(varsayilanSecili.erisimKodu || varsayilanSecili.erisimKoduGerekli || varsayilanSecili.degisenSalonKodu ||
+          (durum.onlineSinav && durum.onlineSinav.sinavId === varsayilanSecili.sinavId && (durum.onlineSinav.erisimKoduGerekli || durum.onlineSinav.degisenSalonKodu)));
+        salonSatir.style.display = kodGerekli ? 'block' : 'none';
+        const kodEtiket = salonSatir.querySelector('label');
+        if (kodEtiket) kodEtiket.textContent = (varsayilanSecili.degisenSalonKodu || (durum.onlineSinav && durum.onlineSinav.degisenSalonKodu)) ? 'Salon Kodu (tahtadaki güncel 6 haneli kod)' : 'Salon Giriş Kodu';
       }
       if (dinamikKuralRozet) {
         const maksIhlalSecEl = document.getElementById('online-maks-ihlal');
@@ -5825,6 +6141,12 @@
         dinamikKuralRozet.textContent = mIhlal === 1
           ? '🛑 1 İhlalde Anında Sınav Bitirilir (Sıfır Tolerans)'
           : (mIhlal > 1 ? `🚨 ${mIhlal} İhlalde Sınav Otomatik Bitirilir` : '⚠️ Tüm İhlaller Delil Loguna Raporlanır');
+        const kuralMetni = document.getElementById('kiosk-kural-ihlal-metni');
+        if (kuralMetni) {
+          kuralMetni.innerHTML = mIhlal > 0
+            ? `<strong>Ekrandan her ayrılışınız (başka sekme/uygulama, tam ekrandan çıkma) ihlal sayılır. ${mIhlal === 1 ? 'İlk ihlalde' : `${mIhlal}. ihlalde`} sınavınız otomatik sonlandırılır</strong> ve o ana kadar verdiğiniz cevaplar teslim edilir.`
+            : '<strong>Ekrandan her ayrılışınız (başka sekme/uygulama, tam ekrandan çıkma) ihlal olarak kaydedilir</strong> ve öğretmeniniz tarafından değerlendirilir.';
+        }
       }
     }
   }
@@ -5896,7 +6218,7 @@
 
     const yapi = okuAktifSinavYapisi();
     const onl = durum.onlineSinav || {};
-    if (onl.erisimKodu) {
+    if (onl.erisimKodu && !onl.degisenSalonKodu) {
       const girilenSalonKodu = ((document.getElementById('kiosk-salon-kodu') && document.getElementById('kiosk-salon-kodu').value) || '').trim();
       if (girilenSalonKodu !== String(onl.erisimKodu).trim()) {
         hataKutu.textContent = '🔑 Girdiğiniz Salon / Sınav Giriş Kodu hatalı. Lütfen gözetmenin paylaştığı kodu kontrol ediniz.';
@@ -5964,6 +6286,7 @@
         if (Array.isArray(veri.sorular) && veri.sorular.length > 0) {
           kisiyeOzelSorular = veri.sorular;
         }
+        if (veri.maksIhlal !== undefined) onl.__sunucuMaksIhlal = Number(veri.maksIhlal) || 0;
       } catch (_) {
         sessionStorage.removeItem('kiosk_token');
         sessionStorage.removeItem('AKTIF_KIOSK_OTURUM_V1');
@@ -5977,9 +6300,11 @@
     const tamEkranZorunluEl = document.getElementById('online-tam-ekran-zorunlu');
     const tamEkranZorunlu = tamEkranZorunluEl ? Boolean(tamEkranZorunluEl.checked) : true;
     const maksIhlalSecEl = document.getElementById('online-maks-ihlal');
-    const etkinMaksIhlal = maksIhlalSecEl && maksIhlalSecEl.value !== undefined
+    let etkinMaksIhlal = maksIhlalSecEl && maksIhlalSecEl.value !== undefined
       ? (parseInt(maksIhlalSecEl.value, 10) || 0)
       : (Number(onl.maksIhlal) || 0);
+    // Sunucunun bildirdiği sınır esastır (öğrencinin kendi cihazında yerel ayar yoktur)
+    if (onl.__sunucuMaksIhlal !== undefined) { etkinMaksIhlal = onl.__sunucuMaksIhlal; delete onl.__sunucuMaksIhlal; }
 
     if (window.__kioskBroadcastKanal) {
       try {
@@ -6014,6 +6339,11 @@
       sonVisibilityIhlalMs: 0
     };
 
+    try {
+      ekleKioskDelilLog('KURAL_ONAYI', `Öğrenci sınav kurallarını okuyup kabul etti (ihlal sınırı: ${durum.kioskOturum && durum.kioskOturum.maksIhlal > 0 ? durum.kioskOturum.maksIhlal : 'yalnız kayıt'}).`);
+    } catch (_) {}
+    guncelleKioskIhlalSayaci();
+    baslatKioskNabzi();
     document.body.classList.add('kiosk-aktif');
     document.getElementById('kiosk-giris-formu').style.display = 'none';
     document.getElementById('kiosk-soru-sahne').style.display = 'block';
@@ -6316,9 +6646,44 @@
         method: 'POST',
         headers: basliklar,
         body: JSON.stringify(Object.assign({}, logNesnesi, aktifToken ? { token: aktifToken } : {}))
-      }).catch(() => {});
+      }).then((r) => r.json()).then((v) => isleSunucuIhlalYaniti(v)).catch(() => {});
     }
     return logNesnesi;
+  }
+
+  /* Ekrandaki ihlal sayacı: "İhlal 1 / 2" */
+  function guncelleKioskIhlalSayaci() {
+    const ot = durum.kioskOturum;
+    const el = document.getElementById('kiosk-ihlal-sayac');
+    if (!el || !ot) return;
+    el.textContent = ot.maksIhlal > 0 ? `İhlal: ${ot.ihlalSayisi} / ${ot.maksIhlal}` : `İhlal: ${ot.ihlalSayisi}`;
+    el.className = `rozet ${ot.ihlalSayisi === 0 ? 'rozet-yesil' : (ot.maksIhlal > 0 && ot.maksIhlal - ot.ihlalSayisi <= 1 ? 'rozet-kirmizi' : 'rozet-sari')}`;
+  }
+  /* Sunucunun saydığı ihlal esastır; sınır dolmuşsa (öğrenci tarayıcıyı kurcalasa bile) sınav biter */
+  function isleSunucuIhlalYaniti(v) {
+    const ot = durum.kioskOturum;
+    if (!v || !ot || ot.teslimOnaylandi) return;
+    if (v.maksIhlal !== undefined && Number(v.maksIhlal) > 0) ot.maksIhlal = Number(v.maksIhlal);
+    if (Number(v.ihlalSayisi) > ot.ihlalSayisi) ot.ihlalSayisi = Number(v.ihlalSayisi);
+    guncelleKioskIhlalSayaci();
+    if ((v.kilitli || v.ihlalKilidi) && !ot.bitirmeSuruyor) bitirKioskOturumu('İhlal Sınırı Aşıldı (sunucu kararı)');
+  }
+  /* "Buradayım" sinyali: 20 sn'de bir; 1 dakikadan uzun kesinti sunucuda ihlal sayılır */
+  function baslatKioskNabzi() {
+    C.temizleGuvenliInterval('kiosk-nabiz');
+    if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+    const gonder = () => {
+      const ot = durum.kioskOturum;
+      const token = sessionStorage.getItem('kiosk_token') || '';
+      if (!ot || ot.teslimOnaylandi || !token) return;
+      fetch('/api/ogrenci-nabiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ token })
+      }).then((r) => r.json()).then((v) => isleSunucuIhlalYaniti(v)).catch(() => {});
+    };
+    gonder();
+    C.kaydetGuvenliInterval('kiosk-nabiz', gonder, 20000);
   }
 
   function gosterKioskKarantinaPerdesi(mesaj) {
@@ -6417,6 +6782,7 @@
 
   async function bitirKioskOturumu(bitisDurumu = 'Tamamlandı', secenek = {}) {
     C.temizleGuvenliInterval('kiosk-sayac');
+    C.temizleGuvenliInterval('kiosk-nabiz');
     const ot = durum.kioskOturum;
     if (!ot || ot.teslimOnaylandi) return;
     if (ot.bitirmeSuruyor && ot.bitirmeSozu) return ot.bitirmeSozu;
@@ -7425,7 +7791,10 @@
       erisimKodu: al('online-erisim-kodu', ''),
       kisiyeOzel: seciliMi('online-kisiye-ozel', true),
       geriDonusKilit: seciliMi('online-geri-donus-kilit', true),
-      tamEkranZorunlu: seciliMi('online-tam-ekran-zorunlu', true)
+      tamEkranZorunlu: seciliMi('online-tam-ekran-zorunlu', true),
+      degisenSalonKodu: seciliMi('online-degisen-salon-kodu', false),
+      sebZorunlu: seciliMi('online-seb-zorunlu', false),
+      izinliAg: al('online-izinli-ag', '')
     };
   }
   const senkronizeOnlineSinavSunucu = senkronizeEtOnlineSinavSunucu;
@@ -8093,10 +8462,59 @@
   function baslatUygulama() {
     kurTelefonBaglaAkisi();
     try {
+      // Projeksiyon: her dakika değişen salon kodu
+      let salonKoduZamanlayici = null;
+      const modalSalon = document.getElementById('modal-salon-kodu');
+      const salonKoduKapat = () => { clearInterval(salonKoduZamanlayici); salonKoduZamanlayici = null; if (modalSalon) modalSalon.style.display = 'none'; };
+      const salonKoduYenile = async () => {
+        const token = sessionStorage.getItem('hoca_token') || '';
+        const deger = document.getElementById('salon-kodu-deger');
+        const sure = document.getElementById('salon-kodu-sure');
+        try {
+          const y = await fetch('/api/online-salon-kodu', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+          const v = await y.json().catch(() => ({}));
+          if (!y.ok) throw new Error(v.hata || `HTTP ${y.status}`);
+          if (!v.aktif) {
+            deger.textContent = '——————';
+            sure.textContent = 'Önce "Her dakika değişen salon kodu" seçili olarak sınavı tanımlayın / kaydedin.';
+            return;
+          }
+          deger.textContent = v.kod;
+          sure.textContent = `Yeni kod ${v.kalanSn} sn sonra`;
+          const baslik = document.getElementById('salon-kodu-baslik');
+          if (baslik && v.baslik) baslik.textContent = v.baslik;
+        } catch (err) {
+          sure.textContent = `Kod alınamadı: ${err.message}`;
+        }
+      };
+      const btnSalonGoster = document.getElementById('btn-online-salon-kodu-goster');
+      if (btnSalonGoster && modalSalon) {
+        btnSalonGoster.addEventListener('click', () => {
+          modalSalon.style.display = 'flex';
+          salonKoduYenile();
+          clearInterval(salonKoduZamanlayici);
+          salonKoduZamanlayici = setInterval(salonKoduYenile, 2000);
+          if (modalSalon.requestFullscreen) modalSalon.requestFullscreen().catch(() => {});
+        });
+      }
+      const btnSalonKapat = document.getElementById('btn-salon-kodu-kapat');
+      if (btnSalonKapat) btnSalonKapat.addEventListener('click', () => { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); salonKoduKapat(); });
+    } catch (_) {}
+    try {
       const secTel = document.getElementById('sec-telefon-sinavi');
       if (secTel) secTel.addEventListener('change', () => cizTelefonSinavlariPaneli());
       const btnTelCsv = document.getElementById('btn-telefon-sinavi-csv');
       if (btnTelCsv) btnTelCsv.addEventListener('click', () => indirTelefonSinaviCsv());
+      const btnTelArsiv = document.getElementById('btn-telefon-sinavi-arsiv');
+      if (btnTelArsiv) btnTelArsiv.addEventListener('click', () => {
+        const sec = document.getElementById('sec-telefon-sinavi');
+        if (sec && sec.value && telefonSinaviniArsiveKaydet(sec.value)) {
+          btnTelArsiv.textContent = 'Arşive kaydedildi ✓';
+          setTimeout(() => { btnTelArsiv.textContent = 'Sınav arşivine kaydet'; }, 2500);
+        }
+      });
+      kurArsivKayitDosyaSayfalari();
+      guncelleOkumaSayaci();
       cizTelefonSinavlariPaneli();
     } catch (_) {}
     verileriYukle();
@@ -8127,7 +8545,11 @@
             aktif: true,
             baslangic: v.baslangic || durum.onlineSinav.baslangic,
             bitis: v.bitis || durum.onlineSinav.bitis,
-            sureDk: Number(v.sureDk) || durum.onlineSinav.sureDk || 40
+            sureDk: Number(v.sureDk) || durum.onlineSinav.sureDk || 40,
+            maksIhlal: v.maksIhlal !== undefined ? Number(v.maksIhlal) || 0 : durum.onlineSinav.maksIhlal,
+            erisimKoduGerekli: Boolean(v.erisimKoduGerekli),
+            degisenSalonKodu: Boolean(v.degisenSalonKodu),
+            sebZorunlu: Boolean(v.sebZorunlu)
           });
           if (!durum.onlineSinavListesi.some((s) => s && s.sinavId === v.sinavId)) {
             durum.onlineSinavListesi.unshift(Object.assign({}, durum.onlineSinav));
@@ -10284,7 +10706,7 @@ Yine de çıktı alınsın mı?`)) {
       return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
     };
     const kapsamDegeri = () => (document.getElementById('baski-kapsam-sec') || {}).value || 'sinif-aktif';
-    const TUTANAK_KAPSAMLARI = ['tutanak', 'yoklama', 'tutanak-yoklama'];
+    const TUTANAK_KAPSAMLARI = ['tutanak', 'yoklama', 'tutanak-yoklama', 'okunur-yoklama'];
     const guncelleKapsamPanelleri = () => {
       const k = kapsamDegeri();
       const ogrPanel = document.getElementById('panel-ogrenci-ozel');
@@ -12457,6 +12879,7 @@ Yine de çıktı alınsın mı?`)) {
 
           if (!yanit.ok) {
             if (btnKilitle) btnKilitle.disabled = false;
+            if (veri && veri.ihlalKilidi) { isleSunucuIhlalYaniti(veri); return; }
             const uyariKutu = document.getElementById('kiosk-ihlal-uyari-kutusu');
             if (uyariKutu) {
               uyariKutu.textContent = (veri && veri.hata)
@@ -12502,8 +12925,7 @@ Yine de çıktı alınsın mı?`)) {
       const ot = durum.kioskOturum;
       if (!ot || ot.bitirmeSuruyor || ot.teslimOnaylandi || ot.kioskKasitliCikis) return;
       ot.ihlalSayisi++;
-      const sayacEl = document.getElementById('kiosk-ihlal-sayac');
-      if (sayacEl) sayacEl.textContent = `Sekme İhlali: ${ot.ihlalSayisi}`;
+      guncelleKioskIhlalSayaci();
 
       const logKaydi = ekleKioskDelilLog(olayTuru, aciklama);
 
@@ -12511,6 +12933,9 @@ Yine de çıktı alınsın mı?`)) {
       if (uyariKutu) {
         const sinirBilgi = ot.maksIhlal > 0 ? `${ot.ihlalSayisi} / ${ot.maksIhlal}` : `${ot.ihlalSayisi}`;
         uyariKutu.textContent = `🚨 KİOSK GÜVENLİK İHLALİ KAYDEDİLDİ (${sinirBilgi}): ${aciklama} [Delil Mühür: #${(logKaydi && logKaydi.olayHash ? logKaydi.olayHash.slice(0, 10) : 'KAYIT')}]`;
+        if (ot.maksIhlal > 0 && ot.maksIhlal - ot.ihlalSayisi === 1) {
+          uyariKutu.textContent = `⚠️ ${ot.ihlalSayisi}. UYARI: Sınav ekranından ayrıldınız ve bu kayda geçti. Bir ihlal daha olursa sınavınız otomatik olarak sonlandırılacak.`;
+        }
         uyariKutu.hidden = false;
         uyariKutu.style.display = 'block';
       }
@@ -15319,12 +15744,32 @@ Yine de çıktı alınsın mı?`)) {
         // sunucudan silinen eski olaylar tarayıcıda kalıp görünmeye devam etmez.
         if (sinceSeq === 0) {
           durum.telefonSinavlari = {};
+          durum.telefonOlaylari = [];
+          durum.yoklamalar = [];
           telefonKovasiDegisti = true;
         }
+        if (!Array.isArray(durum.yoklamalar)) durum.yoklamalar = [];
+        if (!Array.isArray(durum.telefonOlaylari)) durum.telefonOlaylari = [];
 
         olaylar.forEach((olay) => {
           if (!olay) return;
           if (Number(olay.seqNo) > maksSeq) maksSeq = Number(olay.seqNo);
+          if (olay.tur === 'OKUDU_GUNCELLE' && olay.kaynakCihaz !== 'masaustu' && olay.veri) {
+            durum.telefonOlaylari.push({ seqNo: Number(olay.seqNo) || 0, sinavKodu: olay.sinavKodu || '', zamanMs: Number(olay.zamanMs) || 0, tur: 'OKUDU_GUNCELLE', veri: { id: olay.veri.id, ogrNo: olay.veri.ogrNo, adSoyad: olay.veri.adSoyad, okunanNoKod: olay.veri.okunanNoKod, grup: olay.veri.grup, toplamPuan: olay.veri.toplamPuan } });
+            if (durum.telefonOlaylari.length > 5000) durum.telefonOlaylari = durum.telefonOlaylari.slice(-5000);
+          }
+          if (olay.tur === 'YOKLAMA') {
+            // Telefonla okunan yoklama: Kayıtlar ve Öğrenci Dosyası'nda görünür (aynı öğrenci için en son okuma geçerli)
+            const satirlar = olay.veri && Array.isArray(olay.veri.satirlar) ? olay.veri.satirlar : [];
+            satirlar.forEach((x) => {
+              if (!x || !x.ogrNo) return;
+              const yeni = { ogrNo: String(x.ogrNo), durum: String(x.durum || 'belirsiz'), elle: Boolean(x.elle), sinavKodu: olay.sinavKodu || '', zamanMs: Number(olay.zamanMs) || 0, seqNo: Number(olay.seqNo) || 0, sayfa: Number(olay.veri.sayfa) || 0 };
+              const i = durum.yoklamalar.findIndex((y) => y.ogrNo === yeni.ogrNo && y.sinavKodu === yeni.sinavKodu);
+              if (i < 0) durum.yoklamalar.push(yeni);
+              else if ((durum.yoklamalar[i].seqNo || 0) <= yeni.seqNo) durum.yoklamalar[i] = yeni;
+            });
+            return;
+          }
           const kodUygun = !olay.sinavKodu || olay.sinavKodu === 'GENEL' || !aktifKod || aktifKod === 'GENEL' || olay.sinavKodu === aktifKod;
           // Açık sınavla aynı kodu taşımayan telefon olayı artık atlanmaz: "Telefondan gelen sınavlar"a konur
           if (!kodUygun || olay.tur === 'SINAV_TANIMI') {
@@ -15364,6 +15809,7 @@ Yine de çıktı alınsın mı?`)) {
         if (telefonKovasiDegisti) {
           telefonSinavlariniKaydet();
           cizTelefonSinavlariPaneli();
+          guncelleOkumaSayaci();
         }
         if (birlesenSayi > 0 || anahtarDegistiMi) {
           if (durum.okumaSonuclari.length > 0 && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {

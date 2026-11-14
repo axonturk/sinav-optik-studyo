@@ -528,6 +528,7 @@
           </div>
           <div style="display:flex; gap:0.6rem; margin-top:0.3rem; font-size:0.74rem;">
             <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-mobil-ders-degistir" style="padding:2px 6px; min-height:28px;">Sınavı değiştir</button>
+            <label class="btn btn-hayalet btn-kucuk" id="btn-mobil-yoklama-okut" style="padding:2px 6px; min-height:28px; cursor:pointer;" title="İmzalı yoklama çizelgesini fotoğraflayın: gelmeyenler bulunur">📝 Yoklama okut<input type="file" id="input-mobil-yoklama" accept="image/*" capture="environment" style="display:none;" /></label>
             <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-mobil-baglanti-kaldir" style="padding:2px 6px; min-height:28px;">Bağlantıyı kaldır</button>
           </div>
         </div>
@@ -545,6 +546,21 @@
           <button type="button" class="btn btn-birincil" id="btn-mobil-dogrulama-ogrenci" hidden style="flex:1 1 100%;">👤 Öğrenciyi seç</button>
           <button type="button" class="btn" id="btn-mobil-dogrulama-sil" style="flex:1;">↺ Sil ve tekrar çek</button>
           <button type="button" class="btn btn-basari" id="btn-mobil-dogrulama-tamam" style="flex:1;">✓ Tamam</button>
+        </div>
+      </div>
+      <div id="mobil-yoklama" hidden role="dialog" aria-modal="true" aria-label="Yoklama okuma" style="display:none; position:fixed; inset:0; z-index:445; background:rgba(2,6,23,0.94); flex-direction:column; padding:10px; gap:8px; overflow-y:auto;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <strong style="font-size:1rem;">📝 Yoklama çizelgesi</strong>
+          <span style="font-size:0.72rem; color:#cbd5e1;"><span style="color:#22c55e;">◯</span> geldi · <span style="color:#ef4444;">◯</span> gelmedi · <span style="color:#eab308;">◯</span> emin değil</span>
+        </div>
+        <canvas id="mobil-yoklama-canvas" style="width:100%; max-height:46vh; object-fit:contain; background:#111; border-radius:8px;"></canvas>
+        <div id="mobil-yoklama-ozet" role="status" style="font-size:0.86rem; font-weight:700;"></div>
+        <div id="mobil-yoklama-capraz" style="font-size:0.8rem; line-height:1.45;"></div>
+        <div style="font-size:0.72rem; color:#cbd5e1;">Yanlış okunan satıra dokunarak Geldi / Gelmedi olarak düzeltin.</div>
+        <div id="mobil-yoklama-liste" style="display:flex; flex-direction:column; gap:4px;"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; position:sticky; bottom:0; padding-top:6px; background:rgba(2,6,23,0.94);">
+          <button type="button" class="btn" id="btn-mobil-yoklama-kapat" style="flex:1;">✕ Vazgeç</button>
+          <button type="button" class="btn btn-basari" id="btn-mobil-yoklama-kaydet" style="flex:2;">✓ Kaydet ve gönder</button>
         </div>
       </div>
       <div id="mobil-sinav-olustur" hidden role="dialog" aria-modal="true" aria-label="Bu kağıttan sınav oluştur" style="display:none; position:fixed; inset:0; z-index:420; background:rgba(2,6,23,0.78); align-items:flex-end; justify-content:center; padding:12px;">
@@ -1007,7 +1023,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261114i"></script>
+  <script src="guvenlik-ve-veri.js?v=20261115a"></script>
   <script>
     (function () {
       'use strict';
@@ -1820,6 +1836,150 @@
         kutu.hidden = false;
         kutu.style.display = 'flex';
       }
+      /* ── YOKLAMA OKUTMA: imzalı "okunabilir yoklama" çizelgesinin fotoğrafı → geldi / gelmedi ── */
+      let mobilYoklamaSonuc = null;
+      let mobilYoklamaKaynak = null;
+      const esc = (m) => String(m ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[c]);
+      function yoklamaFotografiniOku(dosya) {
+        const ogrenciler = Array.isArray(mobilDurum.ogrenciler) ? mobilDurum.ogrenciler : [];
+        if (!ogrenciler.length) {
+          mobilHesapDurumYaz('Öğrenci listesi yok. Önce "Senkronize Et" ile sınavın öğrenci listesini alın.', 'hata');
+          return;
+        }
+        const url = URL.createObjectURL(dosya);
+        const img = new Image();
+        img.onload = () => {
+          const cv = document.createElement('canvas');
+          const olc = Math.min(1, 2200 / Math.max(img.naturalWidth, img.naturalHeight));
+          cv.width = Math.round(img.naturalWidth * olc);
+          cv.height = Math.round(img.naturalHeight * olc);
+          const cx = cv.getContext('2d', { willReadFrequently: true });
+          cx.drawImage(img, 0, 0, cv.width, cv.height);
+          URL.revokeObjectURL(url);
+          let sonuc;
+          try {
+            sonuc = C.okuYoklamaImageData(cx.getImageData(0, 0, cv.width, cv.height), ogrenciler);
+          } catch (err) {
+            sonuc = { formBulundu: false, mesaj: err.message };
+          }
+          window.__sonYoklamaOkumasi = sonuc;
+          if (!sonuc || !sonuc.formBulundu || !Array.isArray(sonuc.satirlar)) {
+            mobilHesapDurumYaz(`Yoklama okunamadı: ${(sonuc && sonuc.mesaj) || 'çizelge bulunamadı'}. Sayfanın 4 köşesi görünecek şekilde düz çekin.`, 'hata');
+            return;
+          }
+          gosterMobilYoklama(sonuc, cv);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); mobilHesapDurumYaz('Fotoğraf açılamadı.', 'hata'); };
+        img.src = url;
+      }
+      function okunanKagitNumaralari() {
+        return (mobilDurum.okumaSonuclari || [])
+          .filter((s) => s && s.ogrNo && !s.numaraEslesmediMi && !/^BEKLEYEN/i.test(String(s.ogrNo)))
+          .map((s) => String(s.ogrNo));
+      }
+      function gosterMobilYoklama(sonuc, kaynakCanvas) {
+        mobilYoklamaSonuc = sonuc;
+        if (kaynakCanvas) mobilYoklamaKaynak = kaynakCanvas;
+        const kutu = document.getElementById('mobil-yoklama');
+        const cv = document.getElementById('mobil-yoklama-canvas');
+        if (!kutu || !cv || !mobilYoklamaKaynak) return;
+        cv.width = mobilYoklamaKaynak.width;
+        cv.height = mobilYoklamaKaynak.height;
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(mobilYoklamaKaynak, 0, 0);
+        const k = sonuc.koseler;
+        const KG = sonuc.kanonikBoyut.genislik;
+        const KY = sonuc.kanonikBoyut.yukseklik;
+        const sayim = { kose: 0, net: 0, supheli: 0, cift: 0 };
+        if (k && k.tl && k.tr && k.bl && k.br) {
+          const olcek = Math.hypot(k.tr.x - k.tl.x, k.tr.y - k.tl.y) / Math.max(1, KG - 52);
+          const cizgi = Math.max(2, Math.round(cv.width / 260));
+          [k.tl, k.tr, k.br, k.bl].forEach((p) => {
+            ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(7, 12 * olcek), 0, Math.PI * 2);
+            ctx.lineWidth = cizgi + 1; ctx.strokeStyle = '#16a34a'; ctx.stroke(); sayim.kose++;
+          });
+          const renk = { net: '#16a34a', supheli: '#eab308', cift: '#dc2626' };
+          const noktalar = (sonuc.satirlar || []).map((s, i) => {
+            const c = (sonuc.isaretCizimi || [])[i] || {};
+            const d = s.durum === 'geldi' ? 'net' : (s.durum === 'gelmedi' ? 'cift' : 'supheli');
+            return { x: c.x, y: c.y, r: c.r || 18, durum: d };
+          }).filter((p) => Number.isFinite(p.x));
+          C.kanonikNoktalariKaynagaCevir(k, KG, KY, noktalar).forEach((p) => {
+            ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(6, p.r * olcek), 0, Math.PI * 2);
+            ctx.lineWidth = cizgi; ctx.strokeStyle = renk[p.durum] || '#dc2626'; ctx.stroke();
+            if (sayim[p.durum] !== undefined) sayim[p.durum]++;
+          });
+        }
+        window.__sonYoklamaCizimi = sayim;
+        const satirlar = sonuc.satirlar || [];
+        const geldi = satirlar.filter((s) => s.durum === 'geldi').length;
+        const gelmedi = satirlar.filter((s) => s.durum === 'gelmedi').length;
+        const belirsiz = satirlar.filter((s) => s.durum === 'belirsiz').length;
+        const ozet = document.getElementById('mobil-yoklama-ozet');
+        if (ozet) {
+          ozet.innerHTML = sonuc.listeUyumlu
+            ? `Sayfa ${sonuc.sayfa}/${sonuc.toplamSayfa} · <span style="color:#22c55e;">${geldi} geldi</span> · <span style="color:#ef4444;">${gelmedi} gelmedi</span>${belirsiz ? ` · <span style="color:#eab308;">${belirsiz} emin değil (dokunup düzeltin)</span>` : ''}`
+            : '<span style="color:#ef4444;">⚠️ Bu çizelge telefondaki öğrenci listesiyle uyuşmuyor (liste değişmiş olabilir). Çizelgeyi bilgisayardan yeniden yazdırın veya "Senkronize Et" yapın.</span>';
+        }
+        const capraz = document.getElementById('mobil-yoklama-capraz');
+        if (capraz) {
+          const nolar = okunanKagitNumaralari();
+          if (!sonuc.listeUyumlu) capraz.innerHTML = '';
+          else if (!nolar.length) capraz.innerHTML = '<span style="color:#cbd5e1;">Sınav kağıtları okutulunca imza ile kağıtlar karşılaştırılır.</span>';
+          else {
+            const ck = C.yoklamaCaprazKontrol(satirlar, nolar);
+            const ad = (x) => esc(`${x.ogrNo} ${x.adSoyad || ''}`.trim());
+            const parcalar = [];
+            if (ck.kagitVarImzaYok.length) parcalar.push(`<div style="color:#f87171;">🚩 Kağıdı okundu ama imzası yok: ${ck.kagitVarImzaYok.map(ad).join(', ')}</div>`);
+            if (ck.imzaVarKagitYok.length) {
+              const kalan = ck.imzaVarKagitYok.length - 5;
+              parcalar.push(`<div style="color:#fbbf24;">⚠️ İmzası var ama kağıdı okunmadı (${ck.imzaVarKagitYok.length}): ${ck.imzaVarKagitYok.slice(0, 5).map(ad).join(', ')}${kalan > 0 ? ` … ve ${kalan} kişi daha` : ''}</div>`);
+            }
+            if (!parcalar.length) parcalar.push('<div style="color:#4ade80;">✓ İmzalar ile okunan kağıtlar uyumlu.</div>');
+            capraz.innerHTML = parcalar.join('');
+          }
+        }
+        const liste = document.getElementById('mobil-yoklama-liste');
+        if (liste) {
+          const etiket = { geldi: ['✓ Geldi', '#16a34a'], gelmedi: ['✕ Gelmedi', '#dc2626'], belirsiz: ['? Emin değil', '#ca8a04'] };
+          liste.innerHTML = sonuc.listeUyumlu ? satirlar.map((s, i) => {
+            const [m, r] = etiket[s.durum] || etiket.belirsiz;
+            return `<button type="button" class="btn" data-yoklama-satir="${i}" style="display:flex; justify-content:space-between; align-items:center; gap:8px; text-align:left; min-height:38px; border-left:5px solid ${r};"><span style="font-size:0.8rem;">${s.sira}. ${esc(s.ogrNo)} · ${esc(s.adSoyad)}${s.elle ? ' ✎' : ''}</span><strong style="color:${r}; white-space:nowrap; font-size:0.8rem;">${m}</strong></button>`;
+          }).join('') : '';
+          liste.querySelectorAll('[data-yoklama-satir]').forEach((b) => b.addEventListener('click', () => {
+            const s = mobilYoklamaSonuc.satirlar[Number(b.dataset.yoklamaSatir)];
+            s.durum = s.durum === 'geldi' ? 'gelmedi' : 'geldi';
+            s.elle = true;
+            gosterMobilYoklama(mobilYoklamaSonuc);
+          }));
+        }
+        const btnKaydet = document.getElementById('btn-mobil-yoklama-kaydet');
+        if (btnKaydet) btnKaydet.disabled = !sonuc.listeUyumlu;
+        kutu.hidden = false;
+        kutu.style.display = 'flex';
+      }
+      function kapatMobilYoklama() {
+        const kutu = document.getElementById('mobil-yoklama');
+        if (kutu) { kutu.hidden = true; kutu.style.display = 'none'; }
+        mobilYoklamaSonuc = null;
+        mobilYoklamaKaynak = null;
+      }
+      function kaydetMobilYoklama() {
+        const sonuc = mobilYoklamaSonuc;
+        if (!sonuc || !sonuc.listeUyumlu) return;
+        const belirsiz = sonuc.satirlar.filter((s) => s.durum === 'belirsiz');
+        if (belirsiz.length) {
+          const ozet = document.getElementById('mobil-yoklama-ozet');
+          if (ozet) ozet.innerHTML = `<span style="color:#eab308;">Önce "emin değil" olan ${belirsiz.length} satıra dokunup Geldi / Gelmedi seçin.</span>`;
+          return;
+        }
+        const satirlar = sonuc.satirlar.map((s) => ({ ogrNo: s.ogrNo, durum: s.durum, elle: Boolean(s.elle) }));
+        kuyrugaAlMobilSenkronOlayi('YOKLAMA', { sayfa: sonuc.sayfa, toplamSayfa: sonuc.toplamSayfa, satirlar });
+        const gelmedi = satirlar.filter((s) => s.durum === 'gelmedi').length;
+        kapatMobilYoklama();
+        mobilHesapDurumYaz(`✓ Yoklama sayfa ${sonuc.sayfa}/${sonuc.toplamSayfa} kaydedildi: ${satirlar.length - gelmedi} geldi, ${gelmedi} gelmedi. Bilgisayara gönderiliyor.`, 'basari');
+      }
+
       function kapatMobilDogrulama() {
         const kutu = document.getElementById('mobil-dogrulama');
         if (!kutu) return;
@@ -4535,7 +4695,7 @@
       /* Etkinlik Bağlantıları */
       document.addEventListener('DOMContentLoaded', () => {
         // Pencereler hangi sekmede olursak olalım görünsün: sekme panelinden çıkarılıp sayfanın üst katmanına taşınır
-        ['mobil-dogrulama', 'mobil-sinav-olustur', 'mobil-sinav-secici'].forEach((id) => {
+        ['mobil-dogrulama', 'mobil-sinav-olustur', 'mobil-sinav-secici', 'mobil-yoklama'].forEach((id) => {
           const el = document.getElementById(id);
           if (el && el.parentElement !== document.body) document.body.appendChild(el);
         });
@@ -4587,6 +4747,16 @@
             img.src = url;
           });
         }
+        const inpYoklama = document.getElementById('input-mobil-yoklama');
+        if (inpYoklama) inpYoklama.addEventListener('change', () => {
+          const dosya = inpYoklama.files && inpYoklama.files[0];
+          if (dosya) yoklamaFotografiniOku(dosya);
+          inpYoklama.value = '';
+        });
+        const btnYokKapat = document.getElementById('btn-mobil-yoklama-kapat');
+        if (btnYokKapat) btnYokKapat.addEventListener('click', () => kapatMobilYoklama());
+        const btnYokKaydet = document.getElementById('btn-mobil-yoklama-kaydet');
+        if (btnYokKaydet) btnYokKaydet.addEventListener('click', () => kaydetMobilYoklama());
         const btnDogTamam = document.getElementById('btn-mobil-dogrulama-tamam');
         if (btnDogTamam) btnDogTamam.addEventListener('click', () => kapatMobilDogrulama());
         const btnDogOgr = document.getElementById('btn-mobil-dogrulama-ogrenci');
