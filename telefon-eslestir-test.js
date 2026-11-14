@@ -203,11 +203,58 @@ const kasaVerisi = (testA) => ({
     kontrol('"Senkronize Et" bilgisayardaki yeni anahtarı getirdi', sonra.b === 'ADCBA', sonra.b);
     kontrol('Okunmuş kağıt yeni anahtarla yeniden puanlandı, kayıt kaybolmadı', sonra.adet === 1 && Number(sonra.puan) < 100, JSON.stringify(sonra));
 
+    // 8b) Bilgisayarda doğru cevabı İŞARETLENMEMİŞ sorulu sınav → telefon okumayı kilitler ve nedenini söyler
+    const eksikli = kasaVerisi(['A', 'D', 'C', 'B', 'A']);
+    eksikli.kayitliSinavlar.push({
+      id: 'S2', dersId: 'DERS-GUV', sinavKodu: 'GUV305-5-5-0', sinavAdi: 'GUV305 Vize',
+      tumSeciliSorular: [
+        { id: 'q1', tur: 'dy', dogruDY: 'D' }, { id: 'q2', tur: 'dy' }, { id: 'q3', tur: 'test' }, { id: 'q4', tur: 'test', dogruHarf: 'C' }
+      ],
+      sinavYapisi: {
+        dySayisi: 5, testSayisi: 5, klasikSayisi: 0, sikSayisi: 5, kimlikModu: 'son3', haneSayisi: 3,
+        dyToplamPuan: 40, testToplamPuan: 60, klasikToplamPuan: 0,
+        cevapAnahtarlari: { A: { dy: ['D', 'D', 'D', 'D', 'D'], test: ['A', 'A', 'A', 'A', 'A'], klasik: [] } }
+      }
+    });
+    await kasaYaz(eksikli);
+    await tel.click('#btn-mobil-senkronize');
+    await bekleKosul(() => tel.$eval('#mobil-hesap-durum', (e) => /güncel/.test(e.textContent) && !/Senkronize ediliyor/.test(e.textContent)), 8000);
+    await tel.evaluate(() => {
+      const m = window.__mobilDurumOku();
+      const guvId = Object.keys(m.dersPaketleriHaritasi).find((k) => /DERS-GUV/i.test(k));
+      const sel = document.getElementById('mobil-aktif-ders-sec');
+      sel.value = guvId;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await bekle(400);
+    const guvKart = await tel.$eval('#mobil-hesap-aktif-ders', (e) => e.textContent);
+    kontrol('Kart, doğru cevabı eksik soru sayısını gösterir', /2 sorunun doğru cevabı eksik/.test(guvKart), guvKart);
+    const onceAdet = await tel.evaluate(() => window.__mobilDurumOku().okumaSonuclari.length);
+    const url2 = await tel.evaluate(() => {
+      const C = window.SinavOptikCekirdek;
+      const m = window.__mobilDurumOku();
+      const cv = document.createElement('canvas');
+      C.cizSentetikOptikFormCanvas(cv, m.sinavYapisi, { grup: 'A', ogrNoKod: '005', dyCevaplar: ['D', 'D', 'D', 'D', 'D'], testCevaplar: ['A', 'A', 'A', 'A', 'A'], klasikPuanlar: [] });
+      return cv.toDataURL('image/png');
+    });
+    fs.writeFileSync(girdiYolu, Buffer.from(url2.split(',')[1], 'base64'));
+    await (await tel.$('#input-mobil-foto')).uploadFile(girdiYolu);
+    await bekle(1500);
+    const sonrakiAdet = await tel.evaluate(() => window.__mobilDurumOku().okumaSonuclari.length);
+    const kilitMesaj = await tel.$eval('#m-uyari', (e) => e.textContent);
+    kontrol('Doğru cevabı eksik sınavda kağıt puanlanmaz, neden açıkça yazılır', sonrakiAdet === onceAdet && /2 sorusunun doğru cevabı işaretlenmemiş/.test(kilitMesaj), `${onceAdet}->${sonrakiAdet} · ${kilitMesaj}`);
+    const cekirdekSayim = await tel.evaluate(() => window.SinavOptikCekirdek.sayAnahtarEksikSorular([{ tur: 'dy' }, { tur: 'test', dogruHarf: 'b' }, { tur: 'test', dogruHarf: '' }, { tur: 'klasik' }]));
+    kontrol('Çekirdek sayaç klasik soruları saymaz, küçük harfi kabul eder', cekirdekSayim === 2, String(cekirdekSayim));
+
     // 9) Bağlantıyı kaldır
     await tel.click('#btn-mobil-baglanti-kaldir');
     await bekle(300);
     const kaldirildi = await tel.evaluate(() => !localStorage.getItem('MOBIL_OMR_HOCA_TOKEN_V1') && !document.getElementById('mobil-hesap-bagli-degil').hidden);
-    const okumalarDuruyor = await tel.evaluate(() => window.__mobilDurumOku().okumaSonuclari.length === 1);
+    const okumalarDuruyor = await tel.evaluate(() => {
+      const m = window.__mobilDurumOku();
+      const agId = Object.keys(m.dersPaketleriHaritasi).find((k) => /DERS-AG/i.test(k));
+      return ((m.dersPaketleriHaritasi[agId] || {}).okumaSonuclari || []).length === 1;
+    });
     kontrol('"Bağlantıyı kaldır" oturumu siler, okunmuş kağıtlar telefonda kalır', kaldirildi && okumalarDuruyor);
 
     // 10) Giriş yapmamış biri kod üretemez
