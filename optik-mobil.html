@@ -785,6 +785,28 @@
         </div>
       </div>
 
+      <div class="kart" id="mobil-ders-ogrenci-listesi-kart" style="margin-bottom:0.75rem;">
+        <div class="kart-baslik" style="flex-wrap:wrap; gap:0.35rem;">
+          <span>👥 Ders Öğrenci Listesi</span>
+          <span class="rozet rozet-yesil" id="mobil-yoklama-ozet-rozet">0 / 0 Okundu</span>
+        </div>
+        <div style="margin-bottom:0.45rem;">
+          <input type="text" id="girdi-mobil-sinif-ara" placeholder="Ders listesinde numara veya ad ara..." style="width:100%; font-size:0.8rem; box-sizing:border-box;" />
+        </div>
+        <div class="tablo-sarmal" style="overflow-x:auto; max-width:100%; max-height:260px; overflow-y:auto;">
+          <table class="veri-tablo" id="mobil-tablo-sinif-yoklama-el">
+            <thead>
+              <tr>
+                <th>Öğr. No</th>
+                <th>Ad Soyad</th>
+                <th>Durum / Puan</th>
+              </tr>
+            </thead>
+            <tbody id="mobil-tablo-sinif-yoklama"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="kart">
         <div class="kart-baslik">
           <span>Sınıf Özeti</span>
@@ -832,28 +854,6 @@
               </tr>
             </thead>
             <tbody id="mobil-tablo-okunanlar"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="kart" id="mobil-ders-ogrenci-listesi-kart" style="margin-top:0.75rem;">
-        <div class="kart-baslik" style="flex-wrap:wrap; gap:0.35rem;">
-          <span>👥 Ders Öğrenci Listesi</span>
-          <span class="rozet rozet-yesil" id="mobil-yoklama-ozet-rozet">0 / 0 Okundu</span>
-        </div>
-        <div style="margin-bottom:0.45rem;">
-          <input type="text" id="girdi-mobil-sinif-ara" placeholder="Ders listesinde numara veya ad ara..." style="width:100%; font-size:0.8rem; box-sizing:border-box;" />
-        </div>
-        <div class="tablo-sarmal" style="overflow-x:auto; max-width:100%;">
-          <table class="veri-tablo" id="mobil-tablo-sinif-yoklama-el">
-            <thead>
-              <tr>
-                <th>Öğr. No</th>
-                <th>Ad Soyad</th>
-                <th>Durum / Puan</th>
-              </tr>
-            </thead>
-            <tbody id="mobil-tablo-sinif-yoklama"></tbody>
           </table>
         </div>
       </div>
@@ -1224,6 +1224,7 @@
           if (yanit.status === 401 || yanit.status === 403) {
             mobilDurum.omrYetkiToken = '';
             try { sessionStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
+            try { localStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
             if (durumEl) durumEl.textContent = '🔒 Oturum süresi doldu (401). Lütfen yeniden giriş yapın.';
             if (hataEl) {
               hataEl.textContent = 'Oturum doğrulanamadı (401/403). Tekrar giriş yapın.';
@@ -1328,6 +1329,7 @@
         if (!temiz) return;
         mobilDurum.omrYetkiToken = temiz;
         try { sessionStorage.setItem('MOBIL_OMR_HOCA_TOKEN_V1', temiz); } catch (_) {}
+        try { localStorage.setItem('MOBIL_OMR_HOCA_TOKEN_V1', temiz); } catch (_) {}
       }
 
       function alAktifMobilHocaToken() {
@@ -1335,6 +1337,8 @@
         try {
           const mTok = sessionStorage.getItem('MOBIL_OMR_HOCA_TOKEN_V1');
           if (mTok) return mTok;
+          const lTok = localStorage.getItem('MOBIL_OMR_HOCA_TOKEN_V1');
+          if (lTok) return lTok;
           const hOturum = JSON.parse(sessionStorage.getItem('HOCA_AKTIF_OTURUM_V1') || 'null');
           if (hOturum && hOturum.token) return hOturum.token;
         } catch (_) {}
@@ -1715,7 +1719,7 @@
         const klTop = Number((y.klasikToplamPuan !== undefined ? y.klasikToplamPuan : (y.klasikSayisi * (y.klasikSoruPuan || 0))).toFixed(1));
         const genelTop = Number((dyTop + testTop + klTop).toFixed(1));
         document.getElementById('mobil-aktif-sinav-ozet').textContent =
-          `${y.dySayisi} D/Y (${dyTop}p) + ${y.testSayisi} Test (${testTop}p)${y.klasikSayisi > 0 ? ` + ${y.klasikSayisi} Klasik (${klTop}p)` : ''} = ${genelTop}p`;
+          `${y.dersAd ? y.dersAd + ' · ' : ''}${y.dySayisi} D/Y (${dyTop}p) + ${y.testSayisi} Test (${testTop}p)${y.klasikSayisi > 0 ? ` + ${y.klasikSayisi} Klasik (${klTop}p)` : ''} = ${genelTop}p`;
         const ogrRozet = document.getElementById('mobil-tara-ogr-rozet');
         if (ogrRozet) ogrRozet.textContent = `${mobilDurum.ogrenciler.length} Öğrenci`;
         const ogrSayacEl = document.getElementById('mobil-ogr-sayac');
@@ -2698,6 +2702,9 @@
           return;
         }
 
+        const beklenenHane = (mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.kimlikModu === 'son3')
+          ? 3
+          : ((mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.kimlikModu === 'tam') ? 12 : 2);
         const adaylar = mobilDurum.ogrenciler
           .filter((o) => {
             if (!aranan) return true;
@@ -2705,13 +2712,13 @@
               String(o.adSoyad || '').toLocaleLowerCase('tr-TR').includes(aranan);
           })
           .map((o) => {
-            const son2 = String(o.ogrNo || '').slice(-2);
+            const sonHane = String(o.ogrNo || '').slice(-beklenenHane);
             const okundu = okunmusSet.has(String(o.ogrNo));
             let eslesmePuan = 0;
             if (Array.isArray(kayit && kayit.cakisanAdaylar) && kayit.cakisanAdaylar.some((c) => String(c.ogrNo) === String(o.ogrNo))) eslesmePuan += 100;
-            if (bilinenRakamlar && son2 === bilinenRakamlar) eslesmePuan += 80;
-            else if (okunanSonRakam && son2.endsWith(okunanSonRakam)) eslesmePuan += 50;
-            else if (okunanIlkRakam && son2.startsWith(okunanIlkRakam)) eslesmePuan += 40;
+            if (bilinenRakamlar && sonHane === bilinenRakamlar) eslesmePuan += 80;
+            else if (okunanSonRakam && sonHane.endsWith(okunanSonRakam)) eslesmePuan += 50;
+            else if (okunanIlkRakam && sonHane.startsWith(okunanIlkRakam)) eslesmePuan += 40;
             if (!okundu) eslesmePuan += 15;
             return { ogr: o, okundu, oncelikli: eslesmePuan >= 40, eslesmePuan };
           })
@@ -2838,6 +2845,11 @@
       /* Okuma Sonucunu Ekranda Göster ve Kaydet (Mükerrer ?0/00 Engelleyici + Canlı HUD + Öğrenci Eşleştirici) */
       function isleMobilOkumaSonucu(sonuc, secenekler = {}) {
         if (!sonuc || sonuc.formBulundu === false) return;
+        const gercekCevapVarMi = ((sonuc.dyDetay || []).some((d) => d.verilen) || (sonuc.testDetay || []).some((t) => t.verilen));
+        const okunanNoTumuBelirsiz = !sonuc.okunanNoKod || /^[?]+$/.test(String(sonuc.okunanNoKod).trim());
+        if (!sonuc.kagitQrIleOkunduMu && okunanNoTumuBelirsiz && !gercekCevapVarMi) {
+          return;
+        }
         if (!sonuc.id) sonuc.id = 'MOB-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
 
         const cakismaVar = Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1;
@@ -2857,7 +2869,6 @@
         }
 
         const cevapImza = imzaHesaplaMobilKagit(sonuc);
-        const gercekCevapVarMi = ((sonuc.dyDetay || []).some((d) => d.verilen) || (sonuc.testDetay || []).some((t) => t.verilen));
         sonuc.cevapImza = cevapImza;
         if (typeof C.ayiklaHamOmrBalonCevaplari === 'function') {
           sonuc.hamCevaplar = C.ayiklaHamOmrBalonCevaplari(sonuc);
@@ -3180,15 +3191,20 @@
           return null;
         }
         if (vizorDisKutu) vizorDisKutu.classList.add('vizor-kilitlendi');
-        // Kağıttaki optik kutudan soru sayıları (örn. 15 D/Y + 10 Test + 0 Klasik) otomatik algılandıysa sınav yapısını DERHAL 100 puana normalize et ve bu kağıdı da 100 üzerinden puanla!
+        // Kağıttaki optik kutudan soru sayıları ve kimlik hane modu otomatik algılandıysa sınav yapısını DERHAL 100 puana normalize et ve bu kağıdı da 100 üzerinden puanla!
         if (!standart && sonuc.algilananYapi && sonuc.algilananYapi.otomatikAlgilandiMi) {
           const degistiMi =
             mobilDurum.sinavYapisi.dySayisi !== sonuc.algilananYapi.dySayisi ||
             mobilDurum.sinavYapisi.testSayisi !== sonuc.algilananYapi.testSayisi ||
-            mobilDurum.sinavYapisi.klasikSayisi !== sonuc.algilananYapi.klasikSayisi;
+            mobilDurum.sinavYapisi.klasikSayisi !== sonuc.algilananYapi.klasikSayisi ||
+            mobilDurum.sinavYapisi.kimlikModu !== sonuc.algilananYapi.kimlikModu ||
+            Number(mobilDurum.sinavYapisi.haneSayisi || 2) !== Number(sonuc.algilananYapi.haneSayisi || 2);
           mobilDurum.sinavYapisi.dySayisi = sonuc.algilananYapi.dySayisi;
           mobilDurum.sinavYapisi.testSayisi = sonuc.algilananYapi.testSayisi;
           mobilDurum.sinavYapisi.klasikSayisi = sonuc.algilananYapi.klasikSayisi;
+          if (sonuc.algilananYapi.sikSayisi) mobilDurum.sinavYapisi.sikSayisi = sonuc.algilananYapi.sikSayisi;
+          if (sonuc.algilananYapi.kimlikModu) mobilDurum.sinavYapisi.kimlikModu = sonuc.algilananYapi.kimlikModu;
+          if (sonuc.algilananYapi.haneSayisi) mobilDurum.sinavYapisi.haneSayisi = sonuc.algilananYapi.haneSayisi;
           document.getElementById('m-ayar-dy').value = String(mobilDurum.sinavYapisi.dySayisi);
           document.getElementById('m-ayar-test').value = String(mobilDurum.sinavYapisi.testSayisi);
           document.getElementById('m-ayar-klasik').value = String(mobilDurum.sinavYapisi.klasikSayisi);
@@ -3204,6 +3220,17 @@
           }
           guncelleUstOzet();
           cizDokunmatikAnahtarEditoru();
+        }
+        if (!standart && !masterAnahtarModu) {
+          const okunanNoTumuBelirsiz = !sonuc.okunanNoKod || /^[?]+$/.test(String(sonuc.okunanNoKod).trim());
+          const isaretliCevapVarMi = (sonuc.dyDetay || []).some((d) => d.verilen) || (sonuc.testDetay || []).some((t) => t.verilen);
+          if (!sonuc.kagitQrIleOkunduMu && okunanNoTumuBelirsiz && !isaretliCevapVarMi) {
+            if (!seri) {
+              mobilUyariGoster('⚠️ Kağıt tam okunamadı — 4 siyah köşe karesini kadraja sığdırıp tekrar deneyin.');
+              bipCal(false);
+            }
+            return null;
+          }
         }
         if (!standart && bekleyenKagitOqv2) {
           uygulaKagitSifreliQrSonuca(sonuc, bekleyenKagitOqv2, { bekleyenden: true });
@@ -3646,6 +3673,7 @@
               if (!res.ok || !v || !v.basarili || !v.token) {
                 mobilDurum.omrYetkiToken = '';
                 try { sessionStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
+                try { localStorage.removeItem('MOBIL_OMR_HOCA_TOKEN_V1'); } catch (_) {}
                 if (hataEl) {
                   hataEl.textContent = (v && v.hata) || `Giriş başarısız (${res.status}).`;
                   hataEl.hidden = false;
@@ -3679,6 +3707,16 @@
             document.querySelectorAll('.sekme-panel').forEach((p) => p.classList.remove('aktif'));
             btn.classList.add('aktif');
             const hedefId = btn.getAttribute('data-msekme') || 'm-panel-tara';
+            if (hedefId !== 'm-panel-tara' && seriTaramaAktif) {
+              seriTaramaAktif = false;
+              C.temizleGuvenliInterval('mobil-seri');
+              const otoBtn = document.getElementById('btn-mobil-seri-tara');
+              if (otoBtn) {
+                otoBtn.classList.remove('aktif');
+                const sp = otoBtn.querySelector('span');
+                if (sp) sp.textContent = 'Oto: Kapalı';
+              }
+            }
             document.body.setAttribute('data-aktif-msekme', hedefId);
             const hedef = document.getElementById(hedefId);
             if (hedef) hedef.classList.add('aktif');
@@ -3955,10 +3993,10 @@
               btnMobilFener.hidden = !(yetenekler && yetenekler.torch);
             }
 
-            // 400ms kararlı 4-köşe kilidi için 240ms örnekleme döngüsü başlat
-            seriTaramaAktif = true;
+            // Kamera açıldığında manuel tekil okuma (Oto: Kapalı) ile başla; arka planda izinsiz kayıt birikmesini önle
+            seriTaramaAktif = false;
+            C.temizleGuvenliInterval('mobil-seri');
             guncelleSeriButonMetin();
-            C.kurGuvenliInterval('mobil-seri', taraAktifKareVeyaSimuleEt, 240);
           } catch (err) {
             mobilUyariGoster('Kamera açılamadı; vizör üzerindeki Fotoğraf Seç düğmesini kullanabilirsiniz (' + (err && err.message ? err.message : 'Kamera yok') + ').');
           }

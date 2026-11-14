@@ -2303,68 +2303,6 @@
           KG = harita.genislik;
           KY = harita.yukseklik;
           aktifKanonikYukseklik = KY;
-        } else if (Math.abs(tahminiKY - KY) > 22 && tahminiKY >= 165 && tahminiKY <= 295) {
-          const tahminiSatir = Math.max(3, Math.min(13, Math.round((tahminiKY - 94) / 20)));
-          const maksAdaySoru = tahminiSatir * 2;
-          const denemeYapi = Object.assign({}, etkinYapi, {
-            dySayisi: maksAdaySoru,
-            testSayisi: maksAdaySoru,
-            klasikSayisi: 0
-          });
-          const denemeHarita = hesaplaKanonikBalonHaritasi(denemeYapi);
-          const dKY = denemeHarita.yukseklik;
-          const dGri = perspektifDuzeltGri(kaynakGri, imageData.width, imageData.height, koseler, KG, dKY);
-          const dIkili = adaptifEsiklemeGri(dGri, KG, dKY, 32, 0.16).ikili;
-          const satirBasiliMi = (balonlar) => {
-            let toplamSiyah = 0;
-            for (const b of balonlar) {
-              const r = Math.ceil(b.r + 1);
-              for (let dy = -r; dy <= r; dy++) {
-                const py = Math.round(b.y + dy);
-                if (py < 0 || py >= dKY) continue;
-                for (let dx = -r; dx <= r; dx++) {
-                  const px = Math.round(b.x + dx);
-                  if (px < 0 || px >= KG) continue;
-                  if (dx * dx + dy * dy <= (b.r + 1.2) * (b.r + 1.2)) {
-                    toplamSiyah += dIkili[py * KG + px];
-                  }
-                }
-              }
-            }
-            return (toplamSiyah / Math.max(1, balonlar.length)) >= 11;
-          };
-          let algilananDy = 0;
-          for (let i = 0; i < denemeHarita.dySatirlari.length; i++) {
-            if (satirBasiliMi(denemeHarita.dySatirlari[i].balonlar)) algilananDy = i + 1;
-          }
-          let algilananTest = 0;
-          for (let i = 0; i < denemeHarita.testSatirlari.length; i++) {
-            if (satirBasiliMi(denemeHarita.testSatirlari[i].balonlar)) algilananTest = i + 1;
-          }
-          if (algilananDy > 0 || algilananTest > 0) {
-            const normPuan = normalizeSinav100PuanYapisi({
-              ...etkinYapi,
-              dySayisi: algilananDy || etkinYapi.dySayisi,
-              testSayisi: algilananTest || etkinYapi.testSayisi,
-              klasikSayisi: 0
-            });
-            etkinYapi = Object.assign({}, etkinYapi, {
-              dySayisi: algilananDy || etkinYapi.dySayisi,
-              testSayisi: algilananTest || etkinYapi.testSayisi,
-              klasikSayisi: 0,
-              dyToplamPuan: normPuan.dyToplamPuan,
-              testToplamPuan: normPuan.testToplamPuan,
-              klasikToplamPuan: normPuan.klasikToplamPuan,
-              dySoruPuan: normPuan.dySoruPuan,
-              testSoruPuan: normPuan.testSoruPuan,
-              klasikSoruPuan: normPuan.klasikSoruPuan,
-              otomatikAlgilandiMi: true
-            });
-            harita = hesaplaKanonikBalonHaritasi(etkinYapi);
-            KG = harita.genislik;
-            KY = harita.yukseklik;
-            aktifKanonikYukseklik = KY;
-          }
         }
       }
     }
