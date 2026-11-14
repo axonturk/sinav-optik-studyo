@@ -20,3 +20,9 @@ d1-sema.sql
 .yerel-bulut-kasa.json
 .yerel-bulut-kasa.json.tmp
 *.log
+*-testi.js
+*-test.mjs
+baslat.bat
+.gitignore
+.cfignore
+.nojekyll

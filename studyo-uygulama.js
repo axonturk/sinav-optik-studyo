@@ -1935,25 +1935,68 @@
     }
   }
 
-  function kaydetSinavSnapshot() {
+  /* Sınav bilgisi alanlarından (tutanak / antet) tür, tarih ve saat */
+  function okuSinavKimlikBilgisi(yapi) {
+    const turSec = document.getElementById('tut-sinav-turu');
+    const tur = (turSec && turSec.selectedOptions && turSec.selectedOptions[0] && turSec.selectedOptions[0].textContent.trim())
+      || (yapi && yapi.sinavAd) || 'Sınav';
+    const tarihHam = ((document.getElementById('tut-tarih') || {}).value || '').trim();
+    let tarih = '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(tarihHam)) {
+      const [yy, aa, gg] = tarihHam.split('-');
+      tarih = `${gg}.${aa}.${yy}`;
+    } else {
+      tarih = String((document.getElementById('antet-tarih') || {}).value || (yapi && yapi.tarih) || '').trim();
+    }
+    const saat = ((document.getElementById('tut-saat') || {}).value || '').trim();
+    return { tur, tarih, saat };
+  }
+
+  /* Basılan içeriğin parmak izi: kod, anahtar, yapı, kitapçık soru sıraları ve cevap anahtarları */
+  function sinavIcerikImzasi(yapi) {
+    const kitapcikOzet = {};
+    Object.keys(yapi.kitapciklar || {}).forEach((g) => {
+      const k = yapi.kitapciklar[g] || {};
+      kitapcikOzet[g] = ['dy', 'test', 'klasik'].map((t) => (Array.isArray(k[t]) ? k[t].map((s) => (s && s.id) || '').join(',') : '')).join('|');
+    });
+    return C.uretDelilLogHash(JSON.stringify([
+      yapi.sinavKodu, yapi.sinavGizliAnahtar, yapi.dySayisi, yapi.testSayisi, yapi.klasikSayisi,
+      yapi.dyToplamPuan, yapi.testToplamPuan, yapi.klasikToplamPuan, kitapcikOzet, yapi.cevapAnahtarlari || {},
+      yapi.ogrenciyeOzelAnahtarlar || {}
+    ]), 'SINAV-ICERIK');
+  }
+
+  function kaydetSinavSnapshot(secenek = {}) {
     kaydetAktifDersIzoleDurumu(durum.aktifDersId);
     const onAktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || durum.dersler[0] || varsayilanBosDers();
     const onDy = Math.max(0, Math.min(25, parseInt((document.getElementById('ayar-dy-sayisi') && document.getElementById('ayar-dy-sayisi').value) || '0', 10) || 0));
     const onTest = Math.max(0, Math.min(35, parseInt((document.getElementById('ayar-test-sayisi') && document.getElementById('ayar-test-sayisi').value) || '0', 10) || 0));
     const onKlasik = Math.max(0, Math.min(5, parseInt((document.getElementById('ayar-klasik-sayisi') && document.getElementById('ayar-klasik-sayisi').value) || '0', 10) || 0));
-    const yeniId = `KS-${Date.now().toString(36).toUpperCase()}`;
-    const yeniSinavKodu = `${onAktifDers.kod}-${yeniId.slice(-4)}-${onDy}-${onTest}-${onKlasik}`;
-    const yeniSinavGizliAnahtar = C.uretSinavGizliAnahtari();
+    const yeniId = `KS-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 4).toUpperCase()}`;
+    // Taslaktan kaydederken taslağın KENDİ sınav kodu ve gizli anahtarı korunur: kitapçık karıştırma sınav koduna bağlı olduğu için
+    // yeni kod üretmek B/C/D kitapçıklarının sırasını ve cevap anahtarını basılı kağıttan farklı yapıyordu ("önce bastım, sonra
+    // kaydettim" durumunda B kitapçığı yanlış anahtarla okunuyordu). Kayıtlı bir sınav açıkken "kaydet" ise yeni bir sınavdır.
+    const taslaktanMi = !durum.aktifKayitliSinavId;
+    const hazirTaslak = taslaktanMi && secenek.hazirYapi && !secenek.hazirYapi.aktifKayitliSinavId ? secenek.hazirYapi : null;
+    const taslakYapi = taslaktanMi ? (hazirTaslak || okuAktifSinavYapisi({ zorlaTaslak: true })) : null;
+    const yeniSinavKodu = taslakYapi && taslakYapi.sinavKodu
+      ? taslakYapi.sinavKodu
+      : `${onAktifDers.kod}-${yeniId.slice(-4)}-${onDy}-${onTest}-${onKlasik}`;
+    const yeniSinavGizliAnahtar = taslakYapi && taslakYapi.sinavGizliAnahtar
+      ? taslakYapi.sinavGizliAnahtar
+      : C.uretSinavGizliAnahtari();
 
     // Nihai sinavKodu ve 128-bit CSPRNG gizli anahtar ile tek seferde üretip dondur
-    const yapi = okuAktifSinavYapisi({
+    // (taslak kimliği korunuyorsa hazır taslak yapısı aynı kod/anahtarla üretilmiştir: yeniden hesaplanmaz)
+    const yapi = hazirTaslak || okuAktifSinavYapisi({
       zorlaTaslak: true,
       ozelSinavKodu: yeniSinavKodu,
       ozelSinavGizliAnahtar: yeniSinavGizliAnahtar
     });
     const adInput = document.getElementById('girdi-kayitli-sinav-ad') || document.getElementById('girdi-kayitli-sinav-adi');
     const girilenAd = adInput && adInput.value ? adInput.value.trim() : '';
-    const sinavAdi = girilenAd || `${yapi.sinavAd || 'Sınav'} (${yapi.tarih || new Date().toLocaleDateString('tr-TR')})`;
+    const kimlik = okuSinavKimlikBilgisi(yapi);
+    const sinavAdi = girilenAd || secenek.ad || `${yapi.sinavAd || 'Sınav'} (${yapi.tarih || new Date().toLocaleDateString('tr-TR')})`;
 
     const kompaktAnahtarlar = {};
     ['A', 'B', 'C', 'D'].forEach((g) => {
@@ -2008,17 +2051,70 @@
       havuzSorulari: JSON.parse(JSON.stringify(birlesikHavuz)),
       kitapciklar: JSON.parse(JSON.stringify(yapi.kitapciklar || {})),
       cevapAnahtarlari: kompaktAnahtarlar,
-      ogrenciyeOzelAnahtarlar: JSON.parse(JSON.stringify(yapi.ogrenciyeOzelAnahtarlar || {}))
+      ogrenciyeOzelAnahtarlar: JSON.parse(JSON.stringify(yapi.ogrenciyeOzelAnahtarlar || {})),
+      sinavTuru: kimlik.tur,
+      sinavTarihi: kimlik.tarih,
+      sinavSaati: kimlik.saat,
+      surum: Number(secenek.surum) || 1,
+      otomatikKayit: Boolean(secenek.otomatik),
+      icerikImzasi: sinavIcerikImzasi(yapi),
+      basimGecmisi: []
     };
 
     if (!Array.isArray(durum.kayitliSinavlar)) durum.kayitliSinavlar = [];
     durum.kayitliSinavlar.unshift(snapshot);
-    durum.aktifKayitliSinavId = snapshot.id;
+    // Çıktı anında otomatik kayıtta hoca taslakta çalışmaya devam eder (ekran ve kilit değişmez)
+    if (!secenek.aktifYapma) durum.aktifKayitliSinavId = snapshot.id;
     if (adInput) adInput.value = '';
     verileriKaydet();
     guncelleKayitliSinavlarCubuguUI();
-    guncelleA4Onizleme();
+    if (!secenek.aktifYapma) guncelleA4Onizleme();
     return snapshot;
+  }
+
+  /* Çıktı = kayıt: soru / anahtar / optik içeren her gerçek çıktıda basılan sınav dondurulur.
+     - Kayıtlı sınav açıksa yalnız basım geçmişine satır eklenir.
+     - Taslaktan basılıyorsa: aynı içerik (aynı kod, anahtar, kitapçık sıraları) daha önce kaydedildiyse o kayıt kullanılır;
+       değilse taslağın kendi kodu ve anahtarıyla yeni kayıt açılır. İçerik değiştiyse sürüm numarası artar.
+     Ad: "DERSKODU Ders Adı · Vize · 07.11.2026 10:00 · Sürüm 2". */
+  function basimIcinOtomatikKaydet(kapsam, format, hazirYapi = null) {
+    try {
+      const satir = { zaman: new Date().toLocaleString('tr-TR').slice(0, 16), kapsam: String(kapsam || ''), format: String(format || '') };
+      if (durum.aktifKayitliSinavId) {
+        const aktif = (durum.kayitliSinavlar || []).find((k) => k && k.id === durum.aktifKayitliSinavId);
+        if (aktif) {
+          aktif.basimGecmisi = Array.isArray(aktif.basimGecmisi) ? aktif.basimGecmisi : [];
+          aktif.basimGecmisi.push(satir);
+          verileriKaydet();
+        }
+        return aktif || null;
+      }
+      const yapi = hazirYapi && !hazirYapi.aktifKayitliSinavId ? hazirYapi : okuAktifSinavYapisi({ zorlaTaslak: true });
+      const imza = sinavIcerikImzasi(yapi);
+      const ayniIcerik = (durum.kayitliSinavlar || []).find((k) => k && k.dersId === yapi.ders.id && k.icerikImzasi === imza);
+      if (ayniIcerik) {
+        ayniIcerik.basimGecmisi = Array.isArray(ayniIcerik.basimGecmisi) ? ayniIcerik.basimGecmisi : [];
+        ayniIcerik.basimGecmisi.push(satir);
+        verileriKaydet();
+        guncelleKayitDurumCubuguUI('kaydedildi', `📌 Basılan sınav zaten kayıtlı: "${ayniIcerik.ad}" · basım geçmişine eklendi`);
+        return ayniIcerik;
+      }
+      const kimlik = okuSinavKimlikBilgisi(yapi);
+      const ayniGun = (durum.kayitliSinavlar || []).filter((k) => k && k.dersId === yapi.ders.id && k.sinavTuru === kimlik.tur && k.sinavTarihi === kimlik.tarih);
+      const surum = ayniGun.reduce((m, k) => Math.max(m, Number(k.surum) || 1), 0) + 1;
+      const dersMetni = [yapi.ders.kod, yapi.ders.ad].filter(Boolean).join(' ');
+      const ad = [dersMetni, kimlik.tur, [kimlik.tarih || 'tarih yok', kimlik.saat].filter(Boolean).join(' '), surum > 1 ? `Sürüm ${surum}` : '']
+        .filter(Boolean).join(' · ');
+      const snap = kaydetSinavSnapshot({ otomatik: true, aktifYapma: true, ad, surum: surum > 1 ? surum : 1, hazirYapi: yapi });
+      if (snap) {
+        snap.basimGecmisi.push(satir);
+        verileriKaydet();
+        guncelleKayitDurumCubuguUI('kaydedildi', `📌 Basılan sınav otomatik kaydedildi: "${snap.ad}"${kimlik.tarih ? '' : ' — sınav tarihini girmeniz önerilir'}`);
+      }
+      return snap;
+    } catch (_) {
+      return null;
+    }
   }
 
   function yukleKayitliSinavSnapshot(sinavId) {
@@ -9784,12 +9880,22 @@
         kilitleVeyaAcKayitliSinav(true);
       }
 
+      let ciktiSozu = null;
       if (formatSecimi === 'word-indir') {
-        indirWordBelgesiOlarak(paket.html, paket.dosyaAdiTabani);
+        ciktiSozu = indirWordBelgesiOlarak(paket.html, paket.dosyaAdiTabani);
       } else if (formatSecimi === 'pdf-indir') {
-        cizDomSayfalariniPdfOlarakIndir(paket.html, paket.dosyaAdiTabani);
+        ciktiSozu = cizDomSayfalariniPdfOlarakIndir(paket.html, paket.dosyaAdiTabani);
       } else {
         window.print();
+      }
+
+      // Çıktı = kayıt: soru, cevap anahtarı veya optik içeren çıktıda basılan sınav dondurulur (kaydetmeyi unutma kopukluğu biter).
+      // Word/PDF üretimi eşzamansızdır; kayıt çıktı TAMAMEN bittikten sonra yapılır ki çıktıyı geciktirmesin.
+      // Çıktıda kullanılan yapı yeniden hesaplanmadan kullanılır.
+      if (sinavKagidiKapsamiMi || ['ayri-optik', 'anahtar'].includes(kapsamSecimi)) {
+        Promise.resolve(ciktiSozu)
+          .catch(() => null)
+          .then(() => setTimeout(() => basimIcinOtomatikKaydet(kapsamSecimi, formatSecimi, yapi), 0));
       }
     };
 
@@ -14585,8 +14691,12 @@
         }
         if (parcalar.length === 0) return;
 
+        // Sınav günü paketi de bir çıktıdır: basılan sınav otomatik dondurulur (aynı içerik tekrar kaydedilmez)
+        const otomatikKayit = basimIcinOtomatikKaydet('sinav-gunu-paketi', 'pdf-indir');
         if ((document.getElementById('chk-paket-sonrasi-kilitle') || {}).checked) {
-          if (!durum.aktifKayitliSinavId) {
+          if (!durum.aktifKayitliSinavId && otomatikKayit) {
+            yukleKayitliSinavSnapshot(otomatikKayit.id);
+          } else if (!durum.aktifKayitliSinavId) {
             kaydetSinavSnapshot();
           }
           if (durum.aktifKayitliSinavId) {

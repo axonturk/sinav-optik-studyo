@@ -2131,11 +2131,12 @@
     const medyanDoluluk = sirali[medyanIdx] ? sirali[medyanIdx].doluluk : 0;
     const kontrastOrani = enKoyu ? enKoyu.doluluk / Math.max(0.04, ikinciKoyu.doluluk) : 0;
 
-    // Soluk iz üst sınırı: Sınıf ölçeğinde okuma testinde (36 kağıt, 1.392 satır; eğik/ters/gölgeli/bulanık/uzak çekim, JPEG)
-    // gerçek kalem işaretleri en az %72 dolu (açık bastırılmış kurşun kalem dahil), boş balonlar ve silinti izleri en çok %26 çıktı.
-    // %34 altındaki tek iz cevap SAYILMAZ (eskiden kontrastı yüksekse işaret sayılıyor, silinmiş cevabı puanlıyordu);
-    // belirgin bir soluk iz varsa boş sayılır ama öğretmen incelemesine düşer.
-    const SOLUK_UST_ESIK = 0.34;
+    // Soluk iz üst sınırı (ölçümle belirlendi):
+    // - Sentetik sınıf testi (36 kağıt, 1.392 satır; eğik/ters/gölgeli/bulanık/uzak, JPEG): işaretler >= %72, boş/silinti <= %26.
+    // - GERÇEK taranmış sınav (18 kağıt, CamScanner): işaretler %87-99; boş balonlar içindeki basılı "D"/"Y" harfi yüzünden
+    //   %13-44'e kadar çıkıyor. %34 sınırında boş D/Y'ler "D" okunuyordu; %50 ile 18 kağıtta yalnız o hata düzeldi.
+    // Sınırın altındaki tek iz cevap SAYILMAZ; belirgin bir soluk iz varsa boş sayılır ama öğretmen incelemesine düşer.
+    const SOLUK_UST_ESIK = 0.50;
     if (!enKoyu || enKoyu.doluluk < SOLUK_UST_ESIK) {
       const soluk = Boolean(enKoyu && enKoyu.doluluk >= BOS_ESIK && (enKoyu.doluluk - medyanDoluluk) >= 0.09);
       return {
