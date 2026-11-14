@@ -4,6 +4,9 @@
    ========================================================================== */
 
 import Cekirdek from './guvenlik-ve-veri.js';
+// Cloudflare ücretsiz planı istek başına 10ms CPU verir; 100k PBKDF2 ≈16ms tutar ve 1102 hatası verir.
+// Sunucuda yeni üretilen tüm şifre özetleri 10k iterasyonla (≈1.6ms) üretilir.
+const WORKER_SIFRE_ITERASYON = 10000;
 
 const GUVENLIK_BASLIKLARI = {
   'X-Frame-Options': 'DENY',
@@ -113,7 +116,7 @@ async function hazirlaHashliHocaKaydiAsync(kayit) {
     // ~16 ms işlemci yakar ve ücretsiz plandaki 10 ms sınırını aşıp Worker'ı 1102 döngüsüne sokuyordu.
     // Bu bilinen şifre en düşük turla özetlenir; gerçek (değiştirilmiş) şifreler 100.000 turla özetlenmeye devam eder.
     const varsayilanMi = Cekirdek.VARSAYILAN_HOCA_HESAP && kopya.sifre === Cekirdek.VARSAYILAN_HOCA_HESAP.sifre;
-    kopya.sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(kopya.sifre, '', varsayilanMi ? 10000 : 100000);
+    kopya.sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(kopya.sifre, '', WORKER_SIFRE_ITERASYON);
   }
   delete kopya.sifre;
   delete kopya.sifreTekrar;
@@ -1391,7 +1394,7 @@ export default {
           const kod = String(dogrulama.hata || '').includes('davet kodu') ? 403 : 400;
           return gonderJson(kod, { hata: dogrulama.hata });
         }
-        const sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.sifre));
+        const sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.sifre), '', WORKER_SIFRE_ITERASYON);
         const yeniKayit = {
           kullaniciAdi: dogrulama.kullaniciAdi,
           adSoyad: dogrulama.adSoyad,
@@ -1441,7 +1444,7 @@ export default {
         if (!sonuc.basarili) {
           return gonderJson(sonuc.kod || 403, { hata: sonuc.hata });
         }
-        const yeniHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.yeniSifre));
+        const yeniHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.yeniSifre), '', WORKER_SIFRE_ITERASYON);
         const guncelKayit = havuz.find((h) => String(h.kullaniciAdi || '').toLowerCase() === String(sonuc.kullaniciAdi).toLowerCase());
         if (guncelKayit) {
           guncelKayit.sifreHash = yeniHash;
@@ -1506,7 +1509,7 @@ export default {
           kayit.adSoyad = dogrulama.adSoyad;
           kayit.eposta = dogrulama.eposta;
           kayit.telefon = dogrulama.telefon;
-          kayit.sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.sifre));
+          kayit.sifreHash = await Cekirdek.uretTuzluSifreOzetiWebCrypto(String(govde.sifre), '', WORKER_SIFRE_ITERASYON);
           delete kayit.sifre;
           oturum.kullaniciAdi = dogrulama.kullaniciAdi;
           oturum.adSoyad = dogrulama.adSoyad;
@@ -1681,7 +1684,7 @@ export default {
           return gonderJson(401, { hata: 'Öğretmen oturumu gerekli.' });
         }
         const eylem = yol.endsWith('hoca-liste') ? 'hoca-liste' : 'hoca-sifirla';
-        const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler });
+        const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler, sifreIterasyon: WORKER_SIFRE_ITERASYON });
         if (r.degisti) await kaydetOgrenciHesabiD1(env, govde && govde.ogrNo);
         if (eylem === 'hoca-liste') {
           r.veri.epostaHazir = epostaServisiHazirMi(env);
@@ -1713,7 +1716,7 @@ export default {
           const s2 = await kontrolHizSiniri(env, `ogr-kod-gonder:${ogrNo}`, 4, 15 * 60 * 1000);
           if (!s2.izinli) return gonderJson(429, { hata: `Çok sık kod istendi. ${Math.ceil(s2.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(s2.tekrarSn) });
         }
-        const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler });
+        const r = await Cekirdek.isleOgrenciHesapIstegi(eylem, govde || {}, { hesaplar: sunucuDurumu.ogrenciHesaplari, kayitliOgrenciler: sunucuDurumu.kayitliOgrenciler, sifreIterasyon: WORKER_SIFRE_ITERASYON });
         if (eylem === 'giris') {
           if (r.kod === 401) await kontrolHizSiniri(env, girisSinirAnahtar, 8);
           if (r.kod === 200) await hizSiniriSifirla(env, girisSinirAnahtar);
