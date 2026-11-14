@@ -288,7 +288,16 @@ async function arayuzTestleri(tarayici, taban) {
   const hatalar = [];
   mobil.on('pageerror', (e) => hatalar.push('pageerror: ' + e.message));
   mobil.on('dialog', async (d) => { hatalar.push('dialog: ' + d.message()); await d.dismiss(); });
-  await mobil.goto(taban + '/optik-mobil.html', { waitUntil: 'networkidle0' });
+  // Gerçek akış: öğretmen önce sınavı telefona yükler (kurulum karekodu). Sınavsız telefon kağıt okumaz.
+  const Cn = require('./guvenlik-ve-veri.js');
+  const kur = Cn.uretKompaktSetupQrPaketi(Object.assign({}, YAPILAR[0].yapi, {
+    sinavKodu: 'BIL304-10-10-2', dersAd: 'BİL304 Vize',
+    cevapAnahtarlari: {
+      A: { dy: 'DYDYDYDYDY'.split(''), test: 'ABCDEABCDE'.split('') }, B: { dy: 'YDYDYDYDYD'.split(''), test: 'EDCBAEDCBA'.split('') },
+      C: { dy: 'DDYYDDYYDD'.split(''), test: 'BCDEABCDEA'.split('') }, D: { dy: 'YYDDYYDDYY'.split(''), test: 'CDEABCDEAB'.split('') }
+    }
+  }), [], taban);
+  await mobil.goto(taban + '/' + kur.hashHref, { waitUntil: 'networkidle0' });
   const sayac = () => mobil.$eval('#mobil-alt-sayac', (e) => Number(e.textContent));
   const once = await sayac();
   const girdi = await mobil.$('#input-mobil-foto');

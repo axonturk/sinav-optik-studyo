@@ -10029,6 +10029,18 @@
         return;
       }
 
+      // Hazır kontrolü: doğru cevabı işaretlenmemiş soru, cevap anahtarında sessizce "D"/"A" görünür ve
+      // telefon kağıtları yanlış puanlar. Öğretmen bilerek onaylamadıkça sınav kağıdı basılmaz.
+      const eksikAnahtarBaski = sinavKagidiKapsamiMi ? C.sayAnahtarEksikSorular(yapi.tumSeciliSorular) : 0;
+      if (eksikAnahtarBaski > 0 && !window.confirm(`${eksikAnahtarBaski} sorunun doğru cevabı işaretlenmemiş.
+
+Bu sorular cevap anahtarında "D" ya da "A" görünür; telefon bu sınavın kağıtlarını okumaz (yanlış puanlamamak için).
+
+Yine de çıktı alınsın mı?`)) {
+        guncelleKayitDurumCubuguUI('hata', `⚠️ ${eksikAnahtarBaski} sorunun doğru cevabı işaretlenmemiş. Soru Bankası'nda işaretleyip yeniden deneyin.`);
+        return;
+      }
+
       const paket = uretKapsamaGoreBaskiHTML(yapi, kapsamSecimi);
       const sahne = document.getElementById('a4-onizleme-sahne');
       if (sahne) {
