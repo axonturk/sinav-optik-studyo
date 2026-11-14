@@ -72,5 +72,16 @@ kontrol('Girişsiz oturum reddedilir', izinsiz.kod === 401);
 const sifirla = await istek(B, '/api/ogrenci-hesap/hoca-sifirla', { ogrNo: '2023104024' }, HB);
 const kalan = db.prepare("SELECT anahtar FROM sistem_durumu WHERE anahtar = 'ogrenci_hesap:2023104024'").all();
 kontrol('Öğretmen sıfırlayınca öğrencinin satırı silinir', sifirla.kod === 200 && kalan.length === 0);
+// Telefon eşleştirme: kod A kopyasında üretilir, telefon B kopyasında kullanır, A durumu görür
+const es = await istek(A, '/api/telefon-eslestir/olustur', {}, HB);
+kontrol('Telefon eşleştirme kodu üretildi (kopya A)', es.kod === 200 && /^[A-Z2-9]{8}$/.test(es.v.kod || ''), JSON.stringify(es.v));
+const esTam = await istek(B, '/api/telefon-eslestir/tamamla', { kod: es.v.kod, cihaz: 'Android' });
+kontrol('Telefon kodu başka kopyada kullanıp oturum aldı (kopya B)', esTam.kod === 200 && Boolean(esTam.v.token), JSON.stringify(esTam.v).slice(0, 160));
+const esDurum = await istek(A, `/api/telefon-eslestir/durum?kod=${es.v.kod}`, undefined, HB);
+kontrol('Bilgisayar (kopya A) telefonun bağlandığını görür', esDurum.v.durum === 'tamamlandi', JSON.stringify(esDurum.v));
+const telPaket = await istek(A, '/api/mobil-ders-paketleri', undefined, { authorization: `Bearer ${esTam.v.token}` });
+kontrol('Telefonun oturumu ders paketlerini çekebilir (kopya A)', telPaket.kod === 200 && telPaket.v.basarili === true, String(telPaket.kod));
+const esTekrar = await istek(A, '/api/telefon-eslestir/tamamla', { kod: es.v.kod });
+kontrol('Kullanılmış kod ikinci kez kullanılamaz', esTekrar.kod === 410);
 console.log(hata === 0 ? '\n=== WORKER + D1: TÜM KONTROLLER GEÇTİ ===' : `\n=== WORKER + D1: ${hata} HATA ===`);
 process.exit(hata ? 1 : 0);

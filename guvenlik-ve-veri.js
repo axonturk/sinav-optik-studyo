@@ -7270,6 +7270,21 @@
     return String(sayi % 1000000).padStart(6, '0');
   }
 
+  /* Telefon eşleştirme kodu: 8 karakter, karışabilecek harfler yok (0/O, 1/I/L) — elle de yazılabilir */
+  const TELEFON_KOD_ALFABESI = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  function uretTelefonEslesmeKodu() {
+    const b = kriptografikRastgeleBaytUret(8);
+    let kod = '';
+    for (let i = 0; i < 8; i++) kod += TELEFON_KOD_ALFABESI[b[i] % TELEFON_KOD_ALFABESI.length];
+    return kod;
+  }
+  function normalizeTelefonEslesmeKodu(ham) {
+    const k = String(ham || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (k.length !== 8) return '';
+    for (const c of k) if (!TELEFON_KOD_ALFABESI.includes(c)) return '';
+    return k;
+  }
+
   function maskeleEposta(eposta = '') {
     const e = String(eposta || '');
     const at = e.indexOf('@');
@@ -10649,6 +10664,8 @@
     isleOgrenciHesapIstegi,
     maskeleEposta,
     uretOgrenciDogrulamaKodu,
+    uretTelefonEslesmeKodu,
+    normalizeTelefonEslesmeKodu,
     VARSAYILAN_DAVET_KODU,
     VARSAYILAN_HOCA_HESAP,
     uretYeniDavetKodu,

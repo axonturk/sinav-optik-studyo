@@ -458,6 +458,45 @@ async function dogrulaOmrVeyaHocaToken(env, token, hedefOturumKodu = '') {
   }
 }
 
+/* ── Telefon eşleştirme yardımcıları ── */
+const TELEFON_ESLESME_SURE_MS = 5 * 60 * 1000;
+const telefonEslesmeBellek = new Map();
+function telefonEslesmeAnahtari(kod) {
+  return `telefon_eslesme:${Cekirdek.uretDelilLogHash(String(kod), 'TELEFON-ESLESME')}`;
+}
+async function okuTelefonEslesme(env, kod) {
+  const anahtar = telefonEslesmeAnahtari(kod);
+  if (env && env.SINAV_DB) {
+    try {
+      const sat = await env.SINAV_DB.prepare('SELECT deger_json FROM sistem_durumu WHERE anahtar = ?1').bind(anahtar).first();
+      return sat && sat.deger_json ? JSON.parse(sat.deger_json) : null;
+    } catch (_) { return null; }
+  }
+  return telefonEslesmeBellek.get(anahtar) || null;
+}
+/* Hoca oturumu üretir (girişle ve telefon eşleştirmeyle ortak) */
+async function olusturHocaOturumu(env, bilgi) {
+  const hocaToken = uretRastgeleToken(24);
+  const simdi = Date.now();
+  const ot = { kullaniciAdi: bilgi.kullaniciAdi, adSoyad: bilgi.adSoyad, rol: bilgi.rol || 'hoca' };
+  if (bilgi.cihaz) ot.cihaz = bilgi.cihaz;
+  // Başka bir kopyanın yeni yazdığı oturumları ezmemek için önce güncel listeyi oku
+  if (env && env.SINAV_DB) { sistemDurumuOnbellek.delete(env.SINAV_DB); await yukleSistemDurumuD1(env); }
+  sunucuDurumu.aktifHocaTokenlar.add(hocaToken);
+  sunucuDurumu.aktifHocaOturumlari.set(hocaToken, ot);
+  await kaydetSistemAnahtariD1(env, 'hoca_oturumlari', Array.from(sunucuDurumu.aktifHocaOturumlari.entries()));
+  if (env && env.SINAV_DB) {
+    try {
+      const tokenHash = Cekirdek.uretDelilLogHash(hocaToken, 'HOCA-OTURUM');
+      const bitisMs = simdi + (bilgi.cihaz === 'telefon' ? 180 : 1) * 24 * 60 * 60 * 1000;
+      await env.SINAV_DB.prepare(
+        'INSERT OR REPLACE INTO hoca_oturumlari (token_hash, kullanici_adi, ad_soyad, rol, olusturma_ms, son_erisim_ms, bitis_ms, iptal) VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, 0)'
+      ).bind(tokenHash, ot.kullaniciAdi, ot.adSoyad, ot.rol, simdi, bitisMs).run();
+    } catch (_) {}
+  }
+  return hocaToken;
+}
+
 /* Yalnız HATALI denemeleri sayan sınır (giriş / doğrulama kodu): sayaç artırmadan durumu okur */
 async function hizSiniriDurumu(env, anahtar, maksDeneme = 8, pencereMs = 15 * 60 * 1000) {
   const simdi = Date.now();
@@ -1119,24 +1158,7 @@ export default {
           return gonderJson(sonuc.kod, { hata: sonuc.hata, durum: sonuc.durum || 'reddedildi' });
         }
         await hizSiniriSifirla(env, sinirAnahtar);
-        const hocaToken = uretRastgeleToken(24);
-        const simdi = Date.now();
-        sunucuDurumu.aktifHocaTokenlar.add(hocaToken);
-        sunucuDurumu.aktifHocaOturumlari.set(hocaToken, {
-          kullaniciAdi: sonuc.kullaniciAdi,
-          adSoyad: sonuc.adSoyad,
-          rol: sonuc.rol || 'hoca'
-        });
-        await kaydetSistemAnahtariD1(env, 'hoca_oturumlari', Array.from(sunucuDurumu.aktifHocaOturumlari.entries()));
-        if (env && env.SINAV_DB) {
-          try {
-            const tokenHash = Cekirdek.uretDelilLogHash(hocaToken, 'HOCA-OTURUM');
-            const bitisMs = simdi + (24 * 60 * 60 * 1000);
-            await env.SINAV_DB.prepare(
-              'INSERT OR REPLACE INTO hoca_oturumlari (token_hash, kullanici_adi, ad_soyad, rol, olusturma_ms, son_erisim_ms, bitis_ms, iptal) VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6, 0)'
-            ).bind(tokenHash, sonuc.kullaniciAdi, sonuc.adSoyad, sonuc.rol || 'hoca', simdi, bitisMs).run();
-          } catch (_) {}
-        }
+        const hocaToken = await olusturHocaOturumu(env, { kullaniciAdi: sonuc.kullaniciAdi, adSoyad: sonuc.adSoyad, rol: sonuc.rol || 'hoca' });
         return gonderJson(200, {
           token: hocaToken,
           kullaniciAdi: sonuc.kullaniciAdi,
@@ -1145,6 +1167,70 @@ export default {
           rol: sonuc.rol || 'hoca',
           durum: sonuc.durum || 'aktif'
         });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
+    /* ── Telefon Eşleştirme: masaüstündeki karekod → telefona hoca oturumu ──
+       1) Masaüstü (hoca girişi yapılmış) tek kullanımlık, 5 dakikalık kod üretir: POST /api/telefon-eslestir/olustur
+       2) Telefon kodu (karekoddan) gönderir, kendi hoca oturumunu alır:            POST /api/telefon-eslestir/tamamla
+       3) Masaüstü telefonun bağlandığını görür:                                    GET  /api/telefon-eslestir/durum?kod= */
+    if (metot === 'POST' && yol === '/api/telefon-eslestir/olustur') {
+      try {
+        const govde = await okuJsonGovde(request);
+        const token = cozHocaTokenIstekten(request, govde, urlNesne);
+        const oturum = token && sunucuDurumu.aktifHocaTokenlar.has(token) ? sunucuDurumu.aktifHocaOturumlari.get(token) : null;
+        if (!oturum) return gonderJson(401, { hata: 'Telefon eşleştirmek için önce öğretmen girişi yapın.' });
+        const kod = Cekirdek.uretTelefonEslesmeKodu();
+        const bitisMs = Date.now() + TELEFON_ESLESME_SURE_MS;
+        const kayit = { kullaniciAdi: oturum.kullaniciAdi, adSoyad: oturum.adSoyad, rol: oturum.rol || 'hoca', bitisMs, durum: 'bekliyor' };
+        await kaydetSistemAnahtariD1(env, telefonEslesmeAnahtari(kod), kayit);
+        telefonEslesmeBellek.set(telefonEslesmeAnahtari(kod), kayit);
+        return gonderJson(200, { basarili: true, kod, bitisMs, gecerlilikSn: Math.round(TELEFON_ESLESME_SURE_MS / 1000) });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+
+    if (metot === 'GET' && yol === '/api/telefon-eslestir/durum') {
+      const token = cozHocaTokenIstekten(request, null, urlNesne);
+      const oturum = token && sunucuDurumu.aktifHocaTokenlar.has(token) ? sunucuDurumu.aktifHocaOturumlari.get(token) : null;
+      if (!oturum) return gonderJson(401, { hata: 'Öğretmen oturumu gerekli.' });
+      const kod = Cekirdek.normalizeTelefonEslesmeKodu(urlNesne.searchParams.get('kod'));
+      const kayit = kod ? await okuTelefonEslesme(env, kod) : null;
+      if (!kayit || kayit.kullaniciAdi !== oturum.kullaniciAdi) return gonderJson(404, { durum: 'yok' });
+      if (kayit.durum === 'tamamlandi') return gonderJson(200, { durum: 'tamamlandi', cihaz: kayit.cihaz || 'Telefon', tamamlanmaMs: kayit.tamamlanmaMs || 0 });
+      if (Date.now() >= Number(kayit.bitisMs)) return gonderJson(200, { durum: 'suresi-doldu' });
+      return gonderJson(200, { durum: 'bekliyor', bitisMs: kayit.bitisMs });
+    }
+
+    if (metot === 'POST' && yol === '/api/telefon-eslestir/tamamla') {
+      try {
+        const govde = await okuJsonGovde(request);
+        const ip = String(request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || '127.0.0.1').split(',')[0].trim();
+        const sinirAnahtar = `telefon-eslestir-hata:${ip}`;
+        const sinir = await hizSiniriDurumu(env, sinirAnahtar, 10);
+        if (sinir.asildi) {
+          return gonderJson(429, { hata: `Çok fazla hatalı deneme. ${Math.ceil(sinir.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(sinir.tekrarSn) });
+        }
+        const kod = Cekirdek.normalizeTelefonEslesmeKodu(govde && govde.kod);
+        const kayit = kod ? await okuTelefonEslesme(env, kod) : null;
+        if (!kayit || kayit.durum !== 'bekliyor' || Date.now() >= Number(kayit.bitisMs)) {
+          await kontrolHizSiniri(env, sinirAnahtar, 10);
+          const neden = kayit && kayit.durum === 'tamamlandi'
+            ? 'Bu karekod zaten kullanıldı. Bilgisayarda "Telefonu Bağla"ya basıp yeni karekod alın.'
+            : 'Karekodun süresi dolmuş ya da kod yanlış. Bilgisayarda "Telefonu Bağla"ya basıp yeni karekod alın.';
+          return gonderJson(410, { hata: neden });
+        }
+        await hizSiniriSifirla(env, sinirAnahtar);
+        const cihaz = String((govde && govde.cihaz) || 'Telefon').replace(/[<>]/g, '').slice(0, 60);
+        // Kod tek kullanımlıktır: oturum üretilmeden önce "tamamlandi" yazılır
+        const yeniKayit = Object.assign({}, kayit, { durum: 'tamamlandi', cihaz, tamamlanmaMs: Date.now() });
+        await kaydetSistemAnahtariD1(env, telefonEslesmeAnahtari(kod), yeniKayit);
+        telefonEslesmeBellek.set(telefonEslesmeAnahtari(kod), yeniKayit);
+        const hocaToken = await olusturHocaOturumu(env, { kullaniciAdi: kayit.kullaniciAdi, adSoyad: kayit.adSoyad, rol: kayit.rol, cihaz: 'telefon' });
+        return gonderJson(200, { basarili: true, token: hocaToken, kullaniciAdi: kayit.kullaniciAdi, adSoyad: kayit.adSoyad, rol: kayit.rol || 'hoca' });
       } catch (err) {
         return gonderJson(400, { hata: err.message });
       }

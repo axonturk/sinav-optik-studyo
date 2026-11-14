@@ -232,6 +232,10 @@ function kontrolZeroTrustYuk(govde, baslangicMi = false) {
   return null;
 }
 
+/* Telefon eşleştirme kodları (tek kullanımlık, 5 dk) */
+const TELEFON_ESLESME_SURE_MS = 5 * 60 * 1000;
+const telefonEslesmeleri = new Map();
+
 function okuJsonGovde(req, maksBayt = 131072) {
   return new Promise((resolve, reject) => {
     let toplam = 0;
@@ -652,6 +656,64 @@ function istekIsleyici(req, res) {
           rol: sonuc.rol || 'hoca',
           durum: sonuc.durum || 'aktif'
         });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  // 0a-1a. Telefon Eşleştirme (masaüstü karekodu → telefona hoca oturumu) — worker.js ile aynı sözleşme
+  if (req.method === 'POST' && yol === '/api/telefon-eslestir/olustur') {
+    okuJsonGovde(req)
+      .then((govde) => {
+        const token = cozHocaTokenIstekten(req, govde, urlNesne);
+        const oturum = token && sunucuDurumu.aktifHocaTokenlar.has(token) ? sunucuDurumu.aktifHocaOturumlari.get(token) : null;
+        if (!oturum) return gonderJson(res, 401, { hata: 'Telefon eşleştirmek için önce öğretmen girişi yapın.' });
+        const kod = Cekirdek.uretTelefonEslesmeKodu();
+        const bitisMs = Date.now() + TELEFON_ESLESME_SURE_MS;
+        telefonEslesmeleri.set(kod, { kullaniciAdi: oturum.kullaniciAdi, adSoyad: oturum.adSoyad, rol: oturum.rol || 'hoca', bitisMs, durum: 'bekliyor' });
+        return gonderJson(res, 200, { basarili: true, kod, bitisMs, gecerlilikSn: Math.round(TELEFON_ESLESME_SURE_MS / 1000) });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
+  if (req.method === 'GET' && yol === '/api/telefon-eslestir/durum') {
+    const token = cozHocaTokenIstekten(req, null, urlNesne);
+    const oturum = token && sunucuDurumu.aktifHocaTokenlar.has(token) ? sunucuDurumu.aktifHocaOturumlari.get(token) : null;
+    if (!oturum) return gonderJson(res, 401, { hata: 'Öğretmen oturumu gerekli.' });
+    const kod = Cekirdek.normalizeTelefonEslesmeKodu(urlNesne.searchParams.get('kod'));
+    const kayit = kod ? telefonEslesmeleri.get(kod) : null;
+    if (!kayit || kayit.kullaniciAdi !== oturum.kullaniciAdi) return gonderJson(res, 404, { durum: 'yok' });
+    if (kayit.durum === 'tamamlandi') return gonderJson(res, 200, { durum: 'tamamlandi', cihaz: kayit.cihaz || 'Telefon', tamamlanmaMs: kayit.tamamlanmaMs || 0 });
+    if (Date.now() >= Number(kayit.bitisMs)) return gonderJson(res, 200, { durum: 'suresi-doldu' });
+    return gonderJson(res, 200, { durum: 'bekliyor', bitisMs: kayit.bitisMs });
+  }
+
+  if (req.method === 'POST' && yol === '/api/telefon-eslestir/tamamla') {
+    okuJsonGovde(req)
+      .then((govde) => {
+        const sinirAnahtar = `telefon-eslestir-hata:${istemciIpAl(req)}`;
+        const sinir = hizSiniriDurumu(sinirAnahtar, 10);
+        if (sinir.asildi) {
+          return gonderJson(res, 429, { hata: `Çok fazla hatalı deneme. ${Math.ceil(sinir.tekrarSn / 60)} dakika sonra tekrar deneyin.` }, { 'Retry-After': String(sinir.tekrarSn) });
+        }
+        const kod = Cekirdek.normalizeTelefonEslesmeKodu(govde && govde.kod);
+        const kayit = kod ? telefonEslesmeleri.get(kod) : null;
+        if (!kayit || kayit.durum !== 'bekliyor' || Date.now() >= Number(kayit.bitisMs)) {
+          kontrolHizSiniri(sinirAnahtar, 10);
+          const neden = kayit && kayit.durum === 'tamamlandi'
+            ? 'Bu karekod zaten kullanıldı. Bilgisayarda "Telefonu Bağla"ya basıp yeni karekod alın.'
+            : 'Karekodun süresi dolmuş ya da kod yanlış. Bilgisayarda "Telefonu Bağla"ya basıp yeni karekod alın.';
+          return gonderJson(res, 410, { hata: neden });
+        }
+        hizSiniriSifirla(sinirAnahtar);
+        kayit.durum = 'tamamlandi';
+        kayit.cihaz = String((govde && govde.cihaz) || 'Telefon').replace(/[<>]/g, '').slice(0, 60);
+        kayit.tamamlanmaMs = Date.now();
+        const hocaToken = crypto.randomBytes(24).toString('hex');
+        sunucuDurumu.aktifHocaTokenlar.add(hocaToken);
+        sunucuDurumu.aktifHocaOturumlari.set(hocaToken, { kullaniciAdi: kayit.kullaniciAdi, adSoyad: kayit.adSoyad, rol: kayit.rol || 'hoca', cihaz: 'telefon' });
+        return gonderJson(res, 200, { basarili: true, token: hocaToken, kullaniciAdi: kayit.kullaniciAdi, adSoyad: kayit.adSoyad, rol: kayit.rol || 'hoca' });
       })
       .catch((err) => gonderJson(res, 400, { hata: err.message }));
     return;
@@ -2285,7 +2347,9 @@ function istekIsleyici(req, res) {
     res.end('Dosya bulunamadi');
     return;
   }
-  const tamDosyaYolu = path.normalize(path.join(KOK_DIZIN, temizYol));
+  // Cloudflare ile aynı: uzantısız adres (ör. /optik-mobil) aynı adlı .html dosyasını sunar
+  let tamDosyaYolu = path.normalize(path.join(KOK_DIZIN, temizYol));
+  if (!path.extname(tamDosyaYolu) && !fs.existsSync(tamDosyaYolu) && fs.existsSync(tamDosyaYolu + '.html')) tamDosyaYolu += '.html';
   if (!tamDosyaYolu.startsWith(KOK_DIZIN)) {
     res.writeHead(403, GUVENLIK_BASLIKLARI);
     res.end('Erisim engellendi');

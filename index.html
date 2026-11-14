@@ -93,6 +93,9 @@
         </button>
       </div>
 
+      <button type="button" class="btn btn-basari" id="btn-telefon-bagla" title="Telefonu tek karekodla bu hesaba bağla; dersler ve cevap anahtarları telefona iner" style="margin:0.35rem 0.6rem 0.2rem; justify-content:center; gap:0.4rem; font-weight:800;">
+        <span aria-hidden="true">📱</span><span data-telefon-bagla-etiket>Telefonu Bağla</span>
+      </button>
       <div class="yan-menu-grup-baslik">Sınav</div>
       <div class="yan-menu-liste">
         <button type="button" class="sekme-btn aktif" data-sekme="sekme-stüdyo" title="A4 Kağıt Stüdyosu ve Optik Kurgu">
@@ -2828,6 +2831,34 @@
     </div>
   </div>
   <!-- TEK ORTAK BAŞLANGIÇ GİRİŞ KAPISI (ÖĞRETMENİM | ÖĞRENCİYİM) VE YETKİLENDİRME MODALİ -->
+  <!-- TELEFONU BAĞLA: tek karekod → telefon bu hocanın hesabına bağlanır, dersler ve cevap anahtarları telefona iner -->
+  <div id="modal-telefon-bagla" role="dialog" aria-modal="true" aria-label="Telefonu Bağla" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.75); z-index:1100; align-items:center; justify-content:center; padding:16px;">
+    <div class="kart" style="width:100%; max-width:440px; margin:auto; max-height:94vh; overflow-y:auto; text-align:center;">
+      <div class="kart-baslik">
+        <span style="font-size:var(--yazi-lg); font-weight:700;">📱 Telefonu Bağla</span>
+        <button type="button" class="btn btn-kucuk" id="btn-telefon-bagla-kapat" aria-label="Kapat">✕</button>
+      </div>
+      <div id="telefon-bagla-govde">
+        <ol style="text-align:left; margin:0 0 0.6rem; padding-left:1.2rem; font-size:0.86rem; line-height:1.55;">
+          <li>Telefonun <strong>kamerasıyla</strong> bu karekodu okutun.</li>
+          <li>Açılan sayfada telefon kendiliğinden bağlanır, dersleriniz ve cevap anahtarlarınız telefona iner.</li>
+        </ol>
+        <div id="telefon-bagla-qr" style="display:flex; justify-content:center; min-height:240px; align-items:center; background:#fff; border-radius:10px; padding:8px;">
+          <span style="color:#475569; font-size:0.85rem;">Karekod hazırlanıyor…</span>
+        </div>
+        <div style="margin-top:0.55rem; font-size:0.8rem; color:var(--metin-ikincil);">
+          Kamera okumazsa telefondaki uygulamada <strong>"Bağlan"</strong>a basıp bu kodu yazın:
+        </div>
+        <div id="telefon-bagla-kod" class="mono" style="font-size:1.6rem; font-weight:900; letter-spacing:0.18em; margin:0.2rem 0;">— — — —</div>
+        <div id="telefon-bagla-durum" role="status" aria-live="polite" style="font-size:0.82rem; color:var(--metin-ikincil); min-height:1.2em;"></div>
+      </div>
+      <div style="display:flex; gap:0.5rem; justify-content:center; margin-top:0.7rem; flex-wrap:wrap;">
+        <button type="button" class="btn btn-kucuk" id="btn-telefon-bagla-yenile">🔄 Yeni karekod</button>
+        <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-telefon-bagla-sonra">Daha sonra</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-hoca-giris" role="dialog" aria-modal="true" aria-label="Giriş ve Yetkilendirme Kapısı" data-giris-modu="sade" style="display:flex;">
     <div class="kart">
       <div class="kart-baslik" style="margin-bottom:10px;">
@@ -3371,7 +3402,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261114c"></script>
-  <script src="studyo-uygulama.js?v=20261114c"></script>
+  <script src="guvenlik-ve-veri.js?v=20261114d"></script>
+  <script src="studyo-uygulama.js?v=20261114d"></script>
 </body>
 </html>
