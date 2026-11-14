@@ -2039,6 +2039,17 @@
     return cikti;
   }
 
+  /* Kanonik (düzeltilmiş form) koordinatlarını kaynak fotoğraf koordinatlarına çevirir (doğrulama görünümü çizimi için) */
+  function kanonikNoktalariKaynagaCevir(koseler, W, H, noktalar) {
+    const M = KANONIK_FIDUCIAL_MERKEZ;
+    const hedef = [{ x: M, y: M }, { x: W - M, y: M }, { x: M, y: H - M }, { x: W - M, y: H - M }];
+    const h = hesaplaHomografi(hedef, [koseler.tl, koseler.tr, koseler.bl, koseler.br]);
+    return (noktalar || []).map((p) => {
+      const z = h[6] * p.x + h[7] * p.y + 1;
+      return Object.assign({}, p, { x: (h[0] * p.x + h[1] * p.y + h[2]) / z, y: (h[3] * p.x + h[4] * p.y + h[5]) / z });
+    });
+  }
+
   /* Eski imza (geriye dönük): bilineer köşe haritalama */
   function bul4KoseFiducial(ikili, genislik, yukseklik) {
     const ceyrekler = [
@@ -2223,39 +2234,56 @@
   }
 
   /* Düzeltilmiş kanonik gri görüntüden (800xKY) üst-orta 8x8 Mini Geometri Matrisini pikselden okur (CRC doğrulamalı) */
-  function okuOptikGeometriMatrisiPikselden(duzGri, KG, KY) {
+  /* Kare deseni (8x8 geometri matrisi) düzeltilmiş görüntüden okur.
+     Gerçek taramalarda kağıt 1-5 piksel kayabilir; desen beklenen yerin çevresinde ±5 piksel aranır
+     (önce merkeze yakın konumlar). Her konumda kontrast + marj + CRC birlikte geçmelidir (yanlış pozitif yok). */
+  function okuOptikGeometriMatrisiPikselden(duzGri, KG, KY, secenek = {}) {
     if (!duzGri || KG < 800 || KY < 120) return null;
-    const x0 = Math.round(KG / 2 - 16);
-    const y0 = 8;
+    const temelX = Math.round(KG / 2 - 16);
+    const temelY = 8;
     const h = 4;
-    // Dış beyaz sessiz bölge ile en koyu hücre arasındaki kontrastı ölç
-    let enAcik = 0;
-    let enKoyu = 255;
+    const R = Number.isFinite(secenek.aramaYaricapi) ? secenek.aramaYaricapi : 5;
+    const kaymalar = [];
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) kaymalar.push([dx, dy]);
+    kaymalar.sort((a, b) => (Math.abs(a[0]) + Math.abs(a[1])) - (Math.abs(b[0]) + Math.abs(b[1])));
     const hucreOrt = new Float32Array(64);
-    for (let i = 0; i < 8; i++) {
-      for (let j = 0; j < 8; j++) {
-        const cx = x0 + j * h + 1;
-        const cy = y0 + i * h + 1;
-        const v = (
-          duzGri[cy * KG + cx] +
-          duzGri[cy * KG + cx + 1] +
-          duzGri[(cy + 1) * KG + cx] +
-          duzGri[(cy + 1) * KG + cx + 1]
-        ) * 0.25;
-        hucreOrt[i * 8 + j] = v;
-        if (v > enAcik) enAcik = v;
-        if (v < enKoyu) enKoyu = v;
+    for (const [dx, dy] of kaymalar) {
+      const x0 = temelX + dx;
+      const y0 = temelY + dy;
+      if (x0 < 0 || y0 < 0 || x0 + 8 * h + 2 >= KG || y0 + 8 * h + 2 >= KY) continue;
+      let enAcik = 0;
+      let enKoyu = 255;
+      for (let i = 0; i < 8; i++) {
+        for (let j = 0; j < 8; j++) {
+          const cx = x0 + j * h + 1;
+          const cy = y0 + i * h + 1;
+          const v = (
+            duzGri[cy * KG + cx] +
+            duzGri[cy * KG + cx + 1] +
+            duzGri[(cy + 1) * KG + cx] +
+            duzGri[(cy + 1) * KG + cx + 1]
+          ) * 0.25;
+          hucreOrt[i * 8 + j] = v;
+          if (v > enAcik) enAcik = v;
+          if (v < enKoyu) enKoyu = v;
+        }
+      }
+      if (enAcik - enKoyu < 65) continue;
+      const esik = (enAcik + enKoyu) * 0.5;
+      const bitler = new Array(64);
+      let belirsiz = false;
+      for (let k = 0; k < 64; k++) {
+        // Belirsiz/bulanık gri geçişte yanlış CRC olasılığını sıfırlamak için marj kontrolü
+        if (Math.abs(hucreOrt[k] - esik) < 12) { belirsiz = true; break; }
+        bitler[k] = hucreOrt[k] < esik ? 1 : 0;
+      }
+      if (belirsiz) continue;
+      const cozum = cozOptikGeometriMatrisi(bitler);
+      if (cozum && cozum.dySayisi <= 30 && cozum.testSayisi <= 40 && (cozum.dySayisi + cozum.testSayisi + cozum.klasikSayisi) > 0) {
+        return Object.assign(cozum, { kaymaX: dx, kaymaY: dy });
       }
     }
-    if (enAcik - enKoyu < 65) return null;
-    const esik = (enAcik + enKoyu) * 0.5;
-    const bitler = new Array(64);
-    for (let k = 0; k < 64; k++) {
-      // Belirsiz/bulanık gri geçişte yanlış CRC olasılığını sıfırlamak için marj kontrolü
-      if (Math.abs(hucreOrt[k] - esik) < 12) return null;
-      bitler[k] = hucreOrt[k] < esik ? 1 : 0;
-    }
-    return cozOptikGeometriMatrisi(bitler);
+    return null;
   }
 
   /* Ana OMR Okuma Fonksiyonu (ImageData -> Tam Sınav Değerlendirme Sonucu)
@@ -2283,6 +2311,8 @@
     let koseler = ozelKoseler;
     let formBulucu = null;
     let okunanSinavKimlikKodu = 0;
+    let kagitGeometrisi = null;
+    let oranTahminiKY = 0;
     if (!koseler) {
       formBulucu = bulOptikFormKoseleri(imageData, { yukseklik: KY });
       if (!formBulucu.bulundu) {
@@ -2311,6 +2341,8 @@
         const tahminiKY = Math.max(150, Math.min(720, Math.round(2 * KANONIK_FIDUCIAL_MERKEZ + (KANONIK_GENISLIK - 2 * KANONIK_FIDUCIAL_MERKEZ) / fizikiOran)));
         const onDuzGri = perspektifDuzeltGri(kaynakGri, imageData.width, imageData.height, koseler, KG, tahminiKY);
         const geoCozum = okuOptikGeometriMatrisiPikselden(onDuzGri, KG, tahminiKY);
+        oranTahminiKY = tahminiKY;
+        if (geoCozum) kagitGeometrisi = geoCozum;
         if (geoCozum && geoCozum.sinavKimlikKodu) okunanSinavKimlikKodu = geoCozum.sinavKimlikKodu;
         if (
           geoCozum &&
@@ -2345,11 +2377,30 @@
 
     const duzGri = perspektifDuzeltGri(kaynakGri, imageData.width, imageData.height, koseler, KG, KY);
     const duz = { gri: duzGri, ikili: adaptifEsiklemeGri(duzGri, KG, KY, 32, 0.16).ikili };
+    // Doğrulama görünümü için: değerlendirilen her balon satırının işaret durumu (kanonik koordinatlarda)
+    //  net = tek ve belirgin işaret · supheli = silik/silinti · cift = birden çok işaret · bos = işaretsiz
+    const isaretCizimi = [];
+    const degerlendirVeCiz = (g, ik, balonlar, alan) => {
+      const karar = degerlendirBalonSatiri(g, ik, balonlar, alan);
+      try {
+        const olc = Array.isArray(karar.olcumler) ? karar.olcumler : [];
+        if (karar.durum === 'CIFT') {
+          olc.filter((o) => o.doluluk >= 0.36).forEach((o) => isaretCizimi.push({ x: o.x, y: o.y, r: o.r, durum: 'cift' }));
+        } else if (karar.secilen !== null && karar.secilen !== undefined) {
+          const sec = olc.find((o) => o.etiket === karar.secilen);
+          if (sec) isaretCizimi.push({ x: sec.x, y: sec.y, r: sec.r, durum: karar.supheli ? 'supheli' : 'net' });
+        } else if (karar.soluk) {
+          const sec = olc.find((o) => o.etiket === karar.solukEtiket);
+          if (sec) isaretCizimi.push({ x: sec.x, y: sec.y, r: sec.r, durum: 'supheli' });
+        }
+      } catch (_) { /* çizim bilgisi okuma sonucunu asla etkilemez */ }
+      return karar;
+    };
 
     const incelemeKuyrugu = [];
 
     // 1. Kitapçık Grubu Okuma
-    const grupKarar = degerlendirBalonSatiri(duz.gri, duz.ikili, harita.grupBalonlari, 'harf');
+    const grupKarar = degerlendirVeCiz(duz.gri, duz.ikili, harita.grupBalonlari, 'harf');
     const okunanGrup = kagitQr && kagitQr.grup
       ? kagitQr.grup
       : ((grupKarar.secilen && ['A', 'B', 'C', 'D'].includes(grupKarar.secilen))
@@ -2372,7 +2423,7 @@
       okunanNoStr = String(kagitQr.ogrNo).trim();
     } else {
       for (let h = 0; h < harita.kimlikSatirlari.length; h++) {
-        const hKarar = degerlendirBalonSatiri(duz.gri, duz.ikili, harita.kimlikSatirlari[h].balonlar, 'rakam');
+        const hKarar = degerlendirVeCiz(duz.gri, duz.ikili, harita.kimlikSatirlari[h].balonlar, 'rakam');
         okunanNoStr += hKarar.secilen !== null && hKarar.secilen !== 'ÇİFT' ? hKarar.secilen : '?';
         if (hKarar.supheli || hKarar.durum === 'BOS') {
           incelemeKuyrugu.push({ alan: `Öğrenci No ${h + 1}. Basamak`, detay: `Durum: ${hKarar.durum}` });
@@ -2430,7 +2481,7 @@
     let dyBos = 0;
     for (let i = 0; i < harita.dySatirlari.length; i++) {
       const sat = harita.dySatirlari[i];
-      const karar = degerlendirBalonSatiri(duz.gri, duz.ikili, sat.balonlar, 'secenek');
+      const karar = degerlendirVeCiz(duz.gri, duz.ikili, sat.balonlar, 'secenek');
       const soruKod = `DY-${i + 1}`;
       const beklenen = grupAnahtar.dy[i] || 'D';
       const esnekListe = esnekKurallar[soruKod] || null;
@@ -2479,7 +2530,7 @@
     let testBos = 0;
     for (let i = 0; i < harita.testSatirlari.length; i++) {
       const sat = harita.testSatirlari[i];
-      const karar = degerlendirBalonSatiri(duz.gri, duz.ikili, sat.balonlar, 'secenek');
+      const karar = degerlendirVeCiz(duz.gri, duz.ikili, sat.balonlar, 'secenek');
       const soruKod = `TEST-${i + 1}`;
       const beklenen = grupAnahtar.test[i] || 'A';
       const esnekListe = esnekKurallar[soruKod] || null;
@@ -2530,12 +2581,12 @@
       let guven = 0.95;
 
       if (sat.optikModu === 'onlar_birler' && sat.onlarBalonlar && sat.birlerBalonlar) {
-        const kararOnlar = degerlendirBalonSatiri(duz.gri, duz.ikili, sat.onlarBalonlar, 'secenek');
-        const kararBirler = degerlendirBalonSatiri(duz.gri, duz.ikili, sat.birlerBalonlar, 'secenek');
+        const kararOnlar = degerlendirVeCiz(duz.gri, duz.ikili, sat.onlarBalonlar, 'secenek');
+        const kararBirler = degerlendirVeCiz(duz.gri, duz.ikili, sat.birlerBalonlar, 'secenek');
         const onlarDeger = (kararOnlar.secilen !== null && kararOnlar.secilen !== 'ÇİFT') ? Number(kararOnlar.secilen) : 0;
         const birlerDeger = (kararBirler.secilen !== null && kararBirler.secilen !== 'ÇİFT') ? Number(kararBirler.secilen) : 0;
         if (kararOnlar.durum === 'BOS' && kararBirler.durum === 'BOS') {
-          const kararKademe = degerlendirBalonSatiri(duz.gri, duz.ikili, sat.balonlar, 'secenek');
+          const kararKademe = degerlendirVeCiz(duz.gri, duz.ikili, sat.balonlar, 'secenek');
           alinanPuan = (kararKademe.secilen !== null && kararKademe.secilen !== 'ÇİFT') ? Number(kararKademe.secilen) : 0;
           guven = kararKademe.guven;
         } else {
@@ -2543,7 +2594,7 @@
           guven = Number(((kararOnlar.guven + kararBirler.guven) / 2).toFixed(2));
         }
       } else {
-        const karar = degerlendirBalonSatiri(duz.gri, duz.ikili, sat.balonlar, 'secenek');
+        const karar = degerlendirVeCiz(duz.gri, duz.ikili, sat.balonlar, 'secenek');
         alinanPuan = (karar.secilen !== null && karar.secilen !== 'ÇİFT') ? Number(karar.secilen) : 0;
         guven = karar.guven;
       }
@@ -2612,6 +2663,13 @@
       koseler,
       algilananYapi: etkinYapi,
       sinavKimlikKodu: okunanSinavKimlikKodu,
+      // Kağıdın şekli nereden geldi? 'matris' = kağıttaki kare desen (güvenilir), 'kagitQr' = şifreli kağıt QR'ı,
+      // 'ozelKose' = elle verilen köşeler, 'yok' = desen okunamadı (şekil seçili sınavdan varsayıldı → güvenilmez)
+      isaretCizimi,
+      geometriKaynagi: kagitQr ? 'kagitQr' : (ozelKoseler ? 'ozelKose' : (kagitGeometrisi ? 'matris' : 'yok')),
+      kagitGeometrisi,
+      oranTahminiKY,
+      beklenenKY: KY,
       kanonikBoyut: { genislik: KG, yukseklik: KY },
       kanonikHarita: harita,
       kanonikIkili: duz.ikili,
@@ -10715,6 +10773,7 @@
     uretOgrenciDogrulamaKodu,
     uretTelefonEslesmeKodu,
     uretSinavKimlikKodu,
+    kanonikNoktalariKaynagaCevir,
     sinavKimlikEtiketi,
     sayAnahtarEksikSorular,
     normalizeTelefonEslesmeKodu,

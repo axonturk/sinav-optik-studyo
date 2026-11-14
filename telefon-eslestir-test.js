@@ -21,6 +21,9 @@ function kontrol(ad, kosul, detay = '') {
   if (kosul) gecen++; else hata++;
   console.log(`  ${kosul ? '✓' : '✗ HATA'} ${ad}${detay && (!kosul || process.env.AYRINTI) ? ` — ${detay}` : ''}`);
 }
+const dogrulamaKapat = async (sayfa) => {
+  await sayfa.evaluate(() => { const b = document.getElementById('btn-mobil-dogrulama-tamam'); const k = document.getElementById('mobil-dogrulama'); if (k && !k.hidden && b) b.click(); });
+};
 async function bekleKosul(fn, ms = 8000) {
   const son = Date.now() + ms;
   while (Date.now() < son) {
@@ -185,6 +188,10 @@ const kasaVerisi = (testA) => ({
     fs.writeFileSync(girdiYolu, Buffer.from(url.split(',')[1], 'base64'));
     await (await tel.$('#input-mobil-foto')).uploadFile(girdiYolu);
     await bekleKosul(() => tel.evaluate(() => window.__mobilDurumOku().okumaSonuclari.length === 1), 6000);
+    const dogrulamaAcik = await tel.evaluate(() => !document.getElementById('mobil-dogrulama').hidden && window.__sonDogrulamaCizimi);
+    const cizim = await tel.evaluate(() => window.__sonDogrulamaCizimi);
+    kontrol('Okuma sonrası doğrulama görünümü açılır: 4 köşe yeşil, kare desen okundu, balonlar renkli yuvarlakla çizildi', Boolean(dogrulamaAcik) && cizim.kose === 4 && cizim.matris === 'matris' && cizim.net >= 10, JSON.stringify(cizim));
+    await dogrulamaKapat(tel);
     const ilk = await tel.evaluate(() => { const s = window.__mobilDurumOku().okumaSonuclari[0] || {}; return { no: s.ogrNo, ad: s.adSoyad, grup: s.grup, puan: s.toplamPuan }; });
     kontrol('B kitapçıklı kağıt doğru öğrenciye, B anahtarıyla tam puan', ilk.no === '257419205' && ilk.grup === 'B' && Number(ilk.puan) === 100, JSON.stringify(ilk));
     const fis = await tel.$eval('#mobil-sonuc-icerik', (e) => e.textContent);
@@ -240,6 +247,7 @@ const kasaVerisi = (testA) => ({
     fs.writeFileSync(girdiYolu, Buffer.from(url2.split(',')[1], 'base64'));
     await (await tel.$('#input-mobil-foto')).uploadFile(girdiYolu);
     await bekle(1500);
+    await dogrulamaKapat(tel);
     const sonrakiAdet = await tel.evaluate(() => window.__mobilDurumOku().okumaSonuclari.length);
     const kilitMesaj = await tel.$eval('#m-uyari', (e) => e.textContent);
     kontrol('Doğru cevabı eksik sınavda kağıt puanlanmaz, neden açıkça yazılır', sonrakiAdet === onceAdet && /2 sorusunun doğru cevabı işaretlenmemiş/.test(kilitMesaj), `${onceAdet}->${sonrakiAdet} · ${kilitMesaj}`);
