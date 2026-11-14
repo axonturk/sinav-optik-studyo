@@ -224,6 +224,19 @@ const kasaVerisi = (testA) => ({
     kontrol('Stüdyo: telefondan gelen sınav "Telefondan gelen sınavlar"da görünür (atlanmaz)', pcTel.gorunur && /1 kağıt/.test(pcTel.secenek), JSON.stringify(pcTel));
     kontrol('Stüdyo: telefonun puanı korunur, öğrenci adı listeden gelir', pcTel.satirlar.length === 1 && /257419205/.test(pcTel.satirlar[0]) && /Deneme İki/.test(pcTel.satirlar[0]) && /Y100$/.test(pcTel.satirlar[0]), JSON.stringify(pcTel.satirlar));
     kontrol('Stüdyo: sınavın adı telefonun gönderdiği sınav tanımından gelir', /Ağ Temelleri|BIL101/.test(pcTel.secenek), pcTel.secenek);
+    // Sunucudan silinmiş eski bir telefon sınavı tarayıcıda kalmışsa bir sonraki açılışta görünmez
+    await pc.evaluate(() => {
+      const d = JSON.parse(localStorage.getItem('SINAV_TELEFON_SINAVLARI_V1') || '{}');
+      d['ESKI-COP-SINAV'] = { sinavKodu: 'ESKI-COP-SINAV', ad: 'Eski çöp', okumalar: { x: { id: 'x', ogrNo: '03', toplamPuan: 19.4 } }, sonMs: Date.now() };
+      localStorage.setItem('SINAV_TELEFON_SINAVLARI_V1', JSON.stringify(d));
+    });
+    await pc.reload({ waitUntil: 'networkidle0' });
+    await bekle(1500);
+    await pc.evaluate(async () => { if (window.__masaustuV2SenkronSimdi) await window.__masaustuV2SenkronSimdi(); });
+    await bekle(500);
+    const copKaldiMi = await pc.evaluate(() => /ESKI-COP-SINAV|Eski çöp/.test(document.getElementById('sec-telefon-sinavi').textContent));
+    const vizeDuruyor = await pc.evaluate(() => /1 kağıt/.test(document.getElementById('sec-telefon-sinavi').textContent));
+    kontrol('Stüdyo: sunucuda olmayan eski telefon sınavı yeniden açılışta görünmez, gerçek olan kalır', !copKaldiMi && vizeDuruyor);
 
     // 8b) Bilgisayarda doğru cevabı İŞARETLENMEMİŞ sorulu sınav → telefon okumayı kilitler ve nedenini söyler
     const eksikli = kasaVerisi(['A', 'D', 'C', 'B', 'A']);
