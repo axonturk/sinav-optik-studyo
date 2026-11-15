@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261114b" />
+  <link rel="stylesheet" href="ortak.css?v=20261115c" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1048,9 +1048,9 @@
             </div>
 
             <!-- 5) Çıktı önizlemesi: katlanabilir çekmece (varsayılan kapalı, DOM'da canlı) -->
-            <details class="mini-onizleme-cekmecesi">
+            <details class="mini-onizleme-cekmecesi" open>
               <summary>
-                <span>Çoklu Sayfa Küçük Önizleme Şeridi (Tıklayıp Aç/Kapat)</span>
+                <span>👁 Seçili belgenin önizlemesi (ayar değiştikçe güncellenir)</span>
                 <span id="etiket-baski-ozet" style="font-size:0.76rem; color:var(--metin-ikincil);"></span>
               </summary>
               <div id="baski-mini-onizleme" class="mini-onizleme-seridi" aria-label="Seçili belgenin ilk sayfaları"></div>
@@ -2081,6 +2081,10 @@
               <button type="button" class="btn btn-kucuk" id="btn-yoklama-cizelgesi-yazdir" title="Sınav Yoklama Evrakını (İmza Çizelgesi) A4 olarak yazdır">İmzalı Yoklama Çizelgesi Yazdır</button>
             </div>
           </div>
+          <details id="detay-yoklama-onizleme" style="margin:0 0 0.6rem;">
+            <summary style="cursor:pointer; font-size:0.8rem; font-weight:700; color:var(--metin-ikincil);">👁 Yoklama evrakı önizlemesi (seçili sayfa kapasitesiyle)</summary>
+            <div id="onizleme-yoklama-evraki" class="mini-onizleme-seridi" style="margin-top:0.4rem;"></div>
+          </details>
           <div class="tablo-sarmal">
             <table class="veri-tablo">
               <thead>
@@ -2445,6 +2449,7 @@
 
             <div class="form-grup">
               <label class="etiket" for="sablon-ust-antet">1) Sınav Kağıdı Üst Antet Şablonu</label>
+              <div style="font-size:0.72rem; color:#b45309; margin:-0.1rem 0 0.25rem;">ⓘ Bu satır şablonda saklanır; şu an basılan belgelere yansımaz (önizlemede görürsünüz).</div>
               <input type="text" id="sablon-ust-antet" value="{{KURUM_ADI}} — {{BIRIM_ADI}} | {{DERS_KODU}} {{DERS_ADI}} ({{SINAV_TURU}})" />
             </div>
             <div class="form-grup">
@@ -2455,11 +2460,11 @@
             <div class="form-satir">
               <div>
                 <label class="etiket" for="sablon-yoklama-baslik">2) Resmi Yoklama Listesi Başlığı</label>
-                <input type="text" id="sablon-yoklama-baslik" value="RESMİ SINAV YOKLAMA VE KİTAPÇIK İMZA ÇİZELGESİ" />
+                <input type="text" id="sablon-yoklama-baslik" title="Şablonda saklanır; şu an yoklama evrakının başlığını değiştirmez" value="RESMİ SINAV YOKLAMA VE KİTAPÇIK İMZA ÇİZELGESİ" />
               </div>
               <div>
                 <label class="etiket" for="sablon-tutanak-baslik">3) Sınav Durum Tutanağı Başlığı</label>
-                <input type="text" id="sablon-tutanak-baslik" value="SINAV UYGULAMA VE EVRAK TESLİM TUTANAĞI" />
+                <input type="text" id="sablon-tutanak-baslik" title="Şablonda saklanır; şu an tutanak başlığını değiştirmez" value="SINAV UYGULAMA VE EVRAK TESLİM TUTANAĞI" />
               </div>
             </div>
 
@@ -2487,9 +2492,24 @@
 
         <!-- Sağ: Canlı Antet Önizlemesi & Kayıtlı Kurumsal Şablonlar Kütüphanesi -->
         <div>
+          <div class="kart" id="kart-kurum-belge-onizleme">
+            <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;">
+              <span>👁 Belge önizlemesi (gerçek çıktı)</span>
+              <select id="sec-kurum-onizleme-belge" aria-label="Önizlenecek belge" style="width:auto;">
+                <option value="sinif-aktif">Sınav kağıdı</option>
+                <option value="ayri-optik">Optik cevap formu</option>
+                <option value="anahtar">Cevap anahtarı</option>
+                <option value="tutanak">Sınav durum tutanağı</option>
+                <option value="yoklama">Yoklama evrakı</option>
+                <option value="okunur-yoklama">Okunabilir yoklama</option>
+              </select>
+            </div>
+            <p style="font-size:0.76rem; color:var(--metin-ikincil); margin:0 0 0.4rem;">Soldaki alanları değiştirdikçe seçili belge burada, basılacağı haliyle güncellenir. Kaydetmeden önce kontrol edin.</p>
+            <div id="onizleme-kurum-belge" class="mini-onizleme-seridi" aria-label="Kurum şablonuyla belge önizlemesi"></div>
+          </div>
           <div class="kart">
             <div class="kart-baslik">
-              <span>Canlı Kurumsal Antet &amp; Alt Künye Önizlemesi</span>
+              <span>Şablon özeti</span>
               <span class="rozet rozet-yesil">A4 Üst / Alt Şerit</span>
             </div>
             <div id="onizleme-kurum-antet" style="padding:0.85rem; background:#ffffff; border:1.5px solid #0f172a; border-radius:8px; font-size:0.8rem;"></div>
@@ -3511,7 +3531,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261115b"></script>
-  <script src="studyo-uygulama.js?v=20261115b"></script>
+  <script src="guvenlik-ve-veri.js?v=20261115c"></script>
+  <script src="studyo-uygulama.js?v=20261115c"></script>
 </body>
 </html>

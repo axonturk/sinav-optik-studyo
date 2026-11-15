@@ -137,6 +137,33 @@ function kontrol(ad, kosul, detay = '') {
     kontrol('6) Görünüm seçimi sayfa yenilenince hatırlanır', kalici === 'uzman', kalici);
     await pc.click('#btn-gorunum-modu');
 
+    // 7) Belge ayarlarında gerçek canlı önizleme
+    await pc.click('.sekme-btn[data-sekme="sekme-stüdyo"]');
+    await bekle(600);
+    const cikti = await pc.evaluate(() => ({ acik: document.querySelector('.mini-onizleme-cekmecesi').open, sayfa: document.querySelectorAll('#baski-mini-onizleme .mini-sayfa-kutu').length }));
+    kontrol('7) Çıktı Merkezi önizlemesi açık başlar ve seçili belgenin sayfalarını gösterir', cikti.acik && cikti.sayfa >= 1, JSON.stringify(cikti));
+    await pc.click('.sekme-btn[data-sekme="sekme-sablonlar"]');
+    await bekle(700);
+    const kurumIlk = await pc.$$eval('#onizleme-kurum-belge .mini-sayfa-kutu', (e) => e.length);
+    kontrol('7) Kurum Şablonu: temsili kutu yerine gerçek sınav kağıdı önizlemesi var', kurumIlk >= 1, String(kurumIlk));
+    const antetOnce = await pc.$eval('#antet-kurum', (e) => e.value);
+    await pc.$eval('#sablon-kurum-adi', (e) => { e.value = 'ÖNİZLEME DENEME ÜNİVERSİTESİ'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+    await bekle(700);
+    const kurumSonra = await pc.evaluate(() => ({ metin: document.getElementById('onizleme-kurum-belge').textContent, antet: document.getElementById('antet-kurum').value }));
+    kontrol('7) Şablon alanı yazıldıkça önizlemedeki kağıt değişir; kaydetmeden gerçek ayar değişmez', /ÖNİZLEME DENEME ÜNİVERSİTESİ/.test(kurumSonra.metin) && kurumSonra.antet === antetOnce, `${kurumSonra.antet} / ${antetOnce}`);
+    for (const [k, desen] of [['ayri-optik', /OPT|Cevap|cevap/], ['tutanak', /TUTANA/], ['yoklama', /YOKLAMA/i]]) {
+      await pc.select('#sec-kurum-onizleme-belge', k);
+      await bekle(500);
+      const t = await pc.evaluate(() => ({ n: document.querySelectorAll('#onizleme-kurum-belge .mini-sayfa-kutu').length, m: document.getElementById('onizleme-kurum-belge').textContent }));
+      kontrol(`7) Kurum Şablonu önizlemesinde "${k}" belgesi seçilip görülebilir`, t.n >= 1 && desen.test(t.m), `${t.n} · ${t.m.slice(0, 80)}`);
+    }
+    await pc.click('.sekme-btn[data-sekme="sekme-ogrenciler"]');
+    await bekle(300);
+    await pc.evaluate(() => { const d = document.getElementById('detay-yoklama-onizleme'); d.open = true; d.dispatchEvent(new Event('toggle')); });
+    await bekle(500);
+    const yok20 = await pc.$$eval('#onizleme-yoklama-evraki .mini-sayfa-kutu', (e) => e.length);
+    kontrol('7) Sınıf listesinde yoklama evrakı önizlemesi açılır', yok20 >= 1, String(yok20));
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;

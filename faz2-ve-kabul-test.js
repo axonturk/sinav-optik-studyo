@@ -917,6 +917,9 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
           olculer
         };
       });
+      // Üstteki sabit kayıt çubuğu kutuyu örtmesin diye önce ortaya kaydır
+      await sayfa.$eval('#ayar-ek-sayfa-izni', (e) => e.scrollIntoView({ block: 'center', behavior: 'instant' }));
+      await bekle(100);
       await sayfa.click('#ayar-ek-sayfa-izni');
       await bekle(450);
       const ekSayfaSonrasi = await sayfa.evaluate(() => {

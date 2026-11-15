@@ -3816,9 +3816,18 @@
       kutu.textContent = `Önizleme üretilemedi: ${err.message}`;
       return;
     }
+    const sayfaSayisi = cizBelgeOnizlemeSeridi(kutu, paket.html, 4);
+    const ozet = document.getElementById('etiket-baski-ozet');
+    if (ozet) ozet.textContent = `${sayfaSayisi} sayfa${sayfaSayisi > 4 ? ' (ilk 4 gösteriliyor)' : ''} · ${paket.dosyaAdiTabani}`;
+  }
+
+  /* Ortak belge önizlemesi: basılacak HTML'yi gerçek A4 düzeniyle (sığdırma dahil) küçük sayfalar olarak çizer.
+     Çıktı Merkezi, Kurum Şablonu ve Sınıf listesi aynı çiziciyi kullanır; önizleme = çıktı. */
+  function cizBelgeOnizlemeSeridi(kutu, html, enCok = 4) {
+    if (!kutu) return 0;
     const gecici = document.createElement('div');
     gecici.style.cssText = 'position:fixed; left:-12000px; top:0; width:794px; background:#fff; z-index:-1;';
-    gecici.innerHTML = paket.html;
+    gecici.innerHTML = html;
     gecici.querySelectorAll('.soru-ekran-araclari').forEach((el) => el.remove());
     document.body.appendChild(gecici);
     try {
@@ -3827,9 +3836,8 @@
       const sayfalar = Array.from(gecici.querySelectorAll('.a4-sayfa'));
       kutu.innerHTML = sayfalar.length === 0
         ? '<span style="font-size:0.78rem; color:var(--metin-soluk);">Önizlenecek sayfa yok.</span>'
-        : sayfalar.slice(0, 4).map((s, i) => `<div class="mini-sayfa-kutu" title="Sayfa ${i + 1}"><div class="mini-sayfa-ic">${s.outerHTML}</div><span class="mini-sayfa-no">${i + 1}</span></div>`).join('');
-      const ozet = document.getElementById('etiket-baski-ozet');
-      if (ozet) ozet.textContent = `${sayfalar.length} sayfa${sayfalar.length > 4 ? ' (ilk 4 gösteriliyor)' : ''} · ${paket.dosyaAdiTabani}`;
+        : sayfalar.slice(0, enCok).map((sy, i) => `<div class="mini-sayfa-kutu" title="Sayfa ${i + 1}"><div class="mini-sayfa-ic">${sy.outerHTML}</div><span class="mini-sayfa-no">${i + 1}</span></div>`).join('');
+      return sayfalar.length;
     } finally {
       gecici.remove();
     }
@@ -13444,6 +13452,7 @@ Yine de çıktı alınsın mı?`)) {
       };
       const ust = C.uygulaKurumsalYerTutucular(sb.ustAntetSablonu, baglam);
       const alt = C.uygulaKurumsalYerTutucular(sb.altOnaySablonu, baglam);
+      if (typeof window.__planlaKurumBelgeOnizleme === 'function') window.__planlaKurumBelgeOnizleme();
       const logoImg = durum.kaliteGorselDataUrl
         ? `<img src="${C.guvenliURL(durum.kaliteGorselDataUrl)}" alt="Logo" style="max-height:36px; max-width:56px; object-fit:contain;" />`
         : '<span style="font-size:1.3rem;">🏛️</span>';
@@ -13468,6 +13477,64 @@ Yine de çıktı alınsın mı?`)) {
       `;
     };
 
+    let kurumOnizlemeZamanlayici = null;
+    const cizKurumBelgeOnizleme = () => {
+      const kutu = document.getElementById('onizleme-kurum-belge');
+      if (!kutu) return;
+      const kapsam = (document.getElementById('sec-kurum-onizleme-belge') || {}).value || 'sinif-aktif';
+      const sb = okuSablonFormAlanlari();
+      const alanlar = ['antet-kurum', 'kagit-hizli-kurum', 'tut-fakulte', 'kalite-dokuman-no', 'kalite-yayin-tarihi', 'kalite-revizyon', 'kalite-form-tipi',
+        'kagit-hizli-dokuman-no', 'kagit-hizli-yayin-tarihi', 'kagit-hizli-revizyon', 'kagit-hizli-kunye-modu'];
+      const eskiDegerler = alanlar.map((id) => [id, (document.getElementById(id) || {}).value]);
+      const eskiSablon = JSON.stringify(durum.evrakSablonu || {});
+      const eskiLogo = durum.kaliteGorselDataUrl;
+      const set = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
+      try {
+        const tamKurum = sb.birimAdi && !String(sb.kurumAdi || '').includes(sb.birimAdi) ? `${sb.kurumAdi} — ${sb.birimAdi}` : (sb.kurumAdi || sb.ad);
+        if (sb.logoDataUrl) durum.kaliteGorselDataUrl = sb.logoDataUrl;
+        ['antet-kurum', 'kagit-hizli-kurum'].forEach((id) => set(id, tamKurum));
+        set('kalite-dokuman-no', sb.dokumanNo || ''); set('kagit-hizli-dokuman-no', sb.dokumanNo || '');
+        set('kalite-yayin-tarihi', sb.yayinTarihi || ''); set('kagit-hizli-yayin-tarihi', sb.yayinTarihi || '');
+        set('kalite-revizyon', sb.revizyonNo || ''); set('kagit-hizli-revizyon', sb.revizyonNo || '');
+        const tip = document.getElementById('kalite-form-tipi');
+        if (sb.dokumanNo && tip && tip.value === 'standart') { set('kalite-form-tipi', 'iso9001'); set('kagit-hizli-kunye-modu', 'iso9001'); }
+        Object.assign(durum.evrakSablonu = durum.evrakSablonu || {}, { kurum: tamKurum, fakulte: sb.birimAdi || '', kaliteDokumanNo: sb.dokumanNo || '', kaliteYayinTarihi: sb.yayinTarihi || '', kaliteRevizyon: sb.revizyonNo || '' });
+        const paket = uretKapsamaGoreBaskiHTML(okuAktifSinavYapisi(), kapsam);
+        cizBelgeOnizlemeSeridi(kutu, paket.html, 2);
+      } catch (err) {
+        kutu.textContent = `Önizleme üretilemedi: ${err.message}`;
+      } finally {
+        eskiDegerler.forEach(([id, v]) => set(id, v));
+        try { durum.evrakSablonu = JSON.parse(eskiSablon); } catch (_) {}
+        durum.kaliteGorselDataUrl = eskiLogo;
+      }
+    };
+    const planlaKurumBelgeOnizleme = () => {
+      clearTimeout(kurumOnizlemeZamanlayici);
+      kurumOnizlemeZamanlayici = setTimeout(() => {
+        const panel = document.getElementById('sekme-sablonlar');
+        if (panel && panel.classList.contains('aktif')) cizKurumBelgeOnizleme();
+      }, 250);
+    };
+    window.__cizKurumBelgeOnizleme = cizKurumBelgeOnizleme;
+    window.__planlaKurumBelgeOnizleme = planlaKurumBelgeOnizleme;
+    // Sınıf listesi: yoklama evrakı önizlemesi (sayfa kapasitesi değişince güncellenir)
+    const cizYoklamaOnizleme = () => {
+      const dt = document.getElementById('detay-yoklama-onizleme');
+      const kutu = document.getElementById('onizleme-yoklama-evraki');
+      if (!dt || !kutu || !dt.open) return;
+      try { cizBelgeOnizlemeSeridi(kutu, uretKapsamaGoreBaskiHTML(okuAktifSinavYapisi(), 'yoklama').html, 3); } catch (err) { kutu.textContent = `Önizleme üretilemedi: ${err.message}`; }
+    };
+    window.__cizYoklamaOnizleme = cizYoklamaOnizleme;
+    const dtYoklama = document.getElementById('detay-yoklama-onizleme');
+    if (dtYoklama) dtYoklama.addEventListener('toggle', cizYoklamaOnizleme);
+    const ogrYoklamaModu = document.getElementById('ogr-yoklama-sayfa-modu');
+    if (ogrYoklamaModu) ogrYoklamaModu.addEventListener('change', () => setTimeout(cizYoklamaOnizleme, 60));
+    const secKurumOnizleme = document.getElementById('sec-kurum-onizleme-belge');
+    if (secKurumOnizleme) secKurumOnizleme.addEventListener('change', () => cizKurumBelgeOnizleme());
+    const sekmeSablonBtn = document.querySelector('.sekme-btn[data-sekme="sekme-sablonlar"]');
+    if (sekmeSablonBtn) sekmeSablonBtn.addEventListener('click', () => setTimeout(cizKurumBelgeOnizleme, 0));
+
     const uygulaAktifKurumsalSablonStüdyoya = (sb) => {
       if (!sb) return;
       durum.aktifKurumSablonId = sb.id;
@@ -13477,6 +13544,11 @@ Yine de çıktı alınsın mı?`)) {
         : (sb.kurumAdi || sb.ad);
       const setEl = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
       setEl('antet-kurum', tamKurum);
+      setEl('kagit-hizli-kurum', tamKurum);
+      setEl('tut-fakulte', tamKurum);
+      setEl('kagit-hizli-dokuman-no', sb.dokumanNo || '');
+      setEl('kagit-hizli-yayin-tarihi', sb.yayinTarihi || '');
+      setEl('kagit-hizli-revizyon', sb.revizyonNo || '');
       setEl('kalite-dokuman-no', sb.dokumanNo || '');
       setEl('kalite-yayin-tarihi', sb.yayinTarihi || '');
       setEl('kalite-revizyon', sb.revizyonNo || '');
