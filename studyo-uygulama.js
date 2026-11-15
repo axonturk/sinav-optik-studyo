@@ -4569,7 +4569,8 @@
         testDogru: Number(k.testDogru) || 0, testYanlis: Number(k.testYanlis) || 0,
         dyDetay: (Array.isArray(k.dyDetay) ? k.dyDetay : []).map((x) => ({ verilen: x && x.verilen ? String(x.verilen) : '', sonuc: x && x.sonuc ? String(x.sonuc) : '' })),
         testDetay: (Array.isArray(k.testDetay) ? k.testDetay : []).map((x) => ({ verilen: x && x.verilen ? String(x.verilen) : '', sonuc: x && x.sonuc ? String(x.sonuc) : '' })),
-        bekliyor: /^BEKLEYEN/i.test(String(k.ogrNo || '')) || String(k.okunanNoKod || '').includes('?'),
+        bekliyor: /^BEKLEYEN/i.test(String(k.ogrNo || '')) || Boolean(k.numaraEslesmediMi) || Boolean(k.kimlikEslesmeBekliyor)
+          || (String(k.okunanNoKod || '').includes('?') && !k.kimlikOgretmenSecti && !k.kagitQrIleOkunduMu && !k.ozelKagitQrCozuldu),
         _zamanMs: zaman
       };
       kova.sonMs = Math.max(kova.sonMs, zaman);

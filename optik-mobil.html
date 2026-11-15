@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Cep Optik Okuyucu (Mobil OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261115d" />
+  <link rel="stylesheet" href="ortak.css?v=20261115f" />
   <style>
     html, body {
       margin: 0;
@@ -1023,7 +1023,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261115d"></script>
+  <script src="guvenlik-ve-veri.js?v=20261115f"></script>
   <script>
     (function () {
       'use strict';
@@ -2372,6 +2372,26 @@
         }
       }
 
+      /* Ders bağlantısı (dersId) olmayan kurulum QR'ı: başka dersin öğrenci listesi bu sınava karışmasın.
+         QR'daki ders kodu eşitlemeyle gelen bir derse uyuyorsa o derse (ve listesine) geçilir; uymuyorsa liste taşınmaz. */
+      function bagsizKurulumIcinDersSec(setup) {
+        const setupKod = (String((setup && setup.dersAd) || '').split(/\s+[-—]\s+/)[0] || String((setup && setup.sinavKodu) || '').split('-')[0] || '').trim();
+        if (!setupKod) return;
+        const kodUyar = (p) => Boolean(p && (String(p.kod || '').trim() === setupKod || String(p.ad || '').trim().startsWith(setupKod)));
+        if (kodUyar(mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId]) || String(mobilDurum.dersKod || '').trim() === setupKod) return;
+        guncelleMobilDersPaketKaydi();
+        const hedefPaket = Object.values(mobilDurum.dersPaketleriHaritasi || {}).find((p) => p && p.id !== mobilDurum.dersId && kodUyar(p));
+        if (hedefPaket) {
+          mobilDurum.dersId = temizDersAnahtari(hedefPaket.id);
+          mobilDurum.ogrenciler = Array.isArray(hedefPaket.ogrenciler) ? hedefPaket.ogrenciler.slice() : [];
+          mobilDurum.dersKod = hedefPaket.kod || setupKod;
+        } else {
+          mobilDurum.dersId = temizDersAnahtari(`qr-${setupKod}`);
+          mobilDurum.ogrenciler = [];
+          mobilDurum.dersKod = setupKod;
+        }
+      }
+
       /* #setup= Parametresinden veya izole mobil localStorage'dan Sınav Yapısını Yükle */
       function yukleBaslangicVerisi() {
         try { localStorage.removeItem('SINAV_OPTIK_STUDYO_VERI_V1'); } catch (_) {}
@@ -2518,6 +2538,8 @@
               mobilDurum.dersKod = (hedefPaket && hedefPaket.kod) || '';
             }
             mobilDurum.dersId = yeniId;
+          } else {
+            bagsizKurulumIcinDersSec(onCozulmusSetup);
           }
           if (onCozulmusSetup.sinavKodu && !mobilDurum.dersKod && !onCozulmusSetup.dersId) {
             mobilDurum.dersKod = String(onCozulmusSetup.sinavKodu).replace(/-SINAV$/i, '');
@@ -2774,6 +2796,8 @@
                 mobilDurum.dersKod = (hedefPaket && hedefPaket.kod) || '';
               }
               mobilDurum.dersId = yeniId;
+            } else {
+              bagsizKurulumIcinDersSec(cozulmusSetup);
             }
             const yeniAnahtar = sinavAnahtariHesapla(mobilDurum.dersId, cozulmusSetup.sinavKodu, cozulmusSetup.sinavGizliAnahtar);
             const yeniEskiTip = sinavAnahtariHesapla(mobilDurum.dersId, cozulmusSetup.sinavKodu, '');
@@ -3029,7 +3053,9 @@
             mobilDurum.okumaSonuclari = birlesik;
           }
 
-          if (mevcut && Array.isArray(mevcut.ogrenciler) && mevcut.ogrenciler.length > 0 && mobilDurum.ogrenciler.length === 0) {
+          // Boş listeyi diskteki listeyle kurtarma yalnız AYNI ders için (başka dersin listesi bu derse taşınmasın)
+          if (mevcut && Array.isArray(mevcut.ogrenciler) && mevcut.ogrenciler.length > 0 && mobilDurum.ogrenciler.length === 0
+            && (!mevcut.aktifDersId || temizDersAnahtari(mevcut.aktifDersId) === temizDersAnahtari(mobilDurum.dersId || 'varsayilan'))) {
             mobilDurum.ogrenciler = mevcut.ogrenciler;
           }
 
@@ -3118,6 +3144,10 @@
             mevcut.ogrenciler = mobilDurum.ogrenciler;
           } else if (Array.isArray(mevcut.ogrenciler) && mevcut.ogrenciler.length > 0 && (!mobilDurum.dersId || mobilDurum.dersId === 'varsayilan')) {
             mobilDurum.ogrenciler = mevcut.ogrenciler;
+          } else {
+            // Listesi boş bir derse geçildi: diskteki üst düzey liste önceki dersin listesi olarak kalmasın
+            // (her dersin listesi kendi paketinde korunur)
+            mevcut.ogrenciler = [];
           }
           guncelleMobilDersPaketKaydi();
           mevcut.aktifDersId = mobilDurum.dersId;
@@ -3302,9 +3332,10 @@
 
       function kagitKimlikBelirsizMi(sonuc) {
         if (!sonuc) return false;
+        if (sonuc.numaraEslesmediMi || sonuc.kimlikEslesmeBekliyor) return true;
+        // Öğretmen öğrenciyi seçtiyse (ya da kimlik kağıt QR'ından geldiyse) kağıttaki "??" numara artık belirleyici değildir
+        if (sonuc.kimlikOgretmenSecti || sonuc.ozelKagitQrCozuldu || sonuc.kagitQrIleOkunduMu) return false;
         return Boolean(
-          sonuc.numaraEslesmediMi ||
-          sonuc.kimlikEslesmeBekliyor ||
           String(sonuc.okunanNoKod || '').includes('?') ||
           (Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1)
         );
@@ -4980,6 +5011,14 @@
         }
 
         const deklansorGuvenliCalistir = () => {
+          // Liste/Anahtar ekranındayken kamera görünmez: önce kamerayı göster, görmeden kare çekme
+          if ((document.body.getAttribute('data-aktif-msekme') || 'm-panel-tara') !== 'm-panel-tara') {
+            const taraBtn = document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-tara"]');
+            if (taraBtn) taraBtn.click();
+            sonDeklansorTetikMs = Date.now();
+            mobilUyariGoster('📷 Kamera açıldı. Kağıdı çerçeveye alıp tekrar "Oku"ya basın.', 'basari');
+            return;
+          }
           const simdi = Date.now();
           if (deklansorKilitliMi || (simdi - sonDeklansorTetikMs) < 420) return;
           deklansorKilitliMi = true;
