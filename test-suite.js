@@ -735,6 +735,62 @@ async function calistirTumTestler() {
     await assert.rejects(() => Cekirdek.cozDocxKaliteFormu(new Uint8Array([1, 2, 3, 4]), inflate), /ZIP/, 'Bozuk ZIP reddedilmelidir');
   });
 
+  // 10b. Kurumun Word kalite formu: üst/alt bilgi birebir yapı + güvenli çizim
+  await testEt('10b. Kurum formu (.docx): üst/alt bilgi tablosu, birleşik hücre, sayfa no alanı, filigran ayıklama, XSS güvenli çizim, depo derinliği', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const zlib = require('zlib');
+    const ornek = (ad) => new Uint8Array(fs.readFileSync(path.join(__dirname, /^kurum-formu-ornek-/.test(ad) ? 'test-ornekleri' : 'ornek-dosyalar', ad)));
+    const inflate = async (u8) => new Uint8Array(zlib.inflateRawSync(Buffer.from(u8)));
+    const metin = (html) => html.replace(/<\/?span[^>]*>/g, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+
+    // Gerçek form (FRM-046): logo dikey birleşik, form adı yatay birleşik, "Sayfa No." değeri sayfaya göre
+    const frm = await Cekirdek.cozDocxKurumFormuYapisi(ornek('2853_files_1675426892.docx'), inflate);
+    const tablo = frm.ust.bloklar.find((b) => b.tur === 'tablo');
+    assert.ok(tablo && tablo.satirlar.length === 4, 'FRM-046 üst bilgisi 4 satırlık tablo olmalı');
+    assert.strictEqual(tablo.satirlar[0].hucreler[0].rowspan, 4, 'Logo hücresi 4 satır birleşik olmalı');
+    assert.strictEqual(tablo.satirlar[0].hucreler[1].span, 4, 'Form adı 4 sütun birleşik olmalı');
+    assert.ok(!JSON.stringify(frm.ust).includes('"gMm":182'), 'Arka plan filigranı (WordPictureWatermark) taşınmamalı');
+    const frmHtml = Cekirdek.kurumFormuBlokHTML(frm.ust, { sayfa: 2, toplam: 3 });
+    assert.ok(/SINAV DURUM TUTANAĞI/.test(metin(frmHtml)) && /FRM-046/.test(metin(frmHtml)) && /Sayfa No\. 2 \/ 3/.test(metin(frmHtml)), 'Sayfa No hücresi 2 / 3 olmalı');
+    assert.ok(/rowspan="4"/.test(frmHtml) && /colspan="4"/.test(frmHtml) && /data:image\/png;base64,/.test(frmHtml));
+    assert.ok(/Yürürlük Onay/.test(metin(Cekirdek.kurumFormuBlokHTML(frm.alt, {}))), 'Alt bilgideki onay tablosu okunmalı');
+
+    // Sentetik tablolu form: PAGE / NUMPAGES alanları, gri dolgu, kaçışlı metin
+    const tab = await Cekirdek.cozDocxKurumFormuYapisi(ornek('kurum-formu-ornek-tablolu.docx'), inflate);
+    const tabHtml = Cekirdek.kurumFormuBlokHTML(tab.ust, { sayfa: 3, toplam: 7 });
+    assert.ok(/Sayfa 3 \/ 7/.test(metin(tabHtml)), 'PAGE/NUMPAGES alanları sayfa/toplam ile dolmalı');
+    assert.ok(!/>9</.test(tabHtml), 'Alanın Word\'deki eski sonucu (9) basılmamalı');
+    assert.strictEqual((tabHtml.match(/<img /g) || []).length, 1, 'Yalnız logo basılmalı, filigran değil');
+    const altHtml = Cekirdek.kurumFormuBlokHTML(tab.alt, {});
+    assert.ok(/background:#D9D9D9/.test(altHtml) && /Müdür &amp; Kurul &lt;Onay&gt;/.test(altHtml), 'Dolgu korunmalı, metin kaçışlanmalı');
+
+    // Tablosuz başlık + kenarlıksız tablo + fldSimple PAGE; alt bilgi yok
+    const par = await Cekirdek.cozDocxKurumFormuYapisi(ornek('kurum-formu-ornek-paragraf.docx'), inflate);
+    assert.strictEqual(par.alt, null);
+    const parHtml = Cekirdek.kurumFormuBlokHTML(par.ust, { sayfa: 4, toplam: 5 });
+    assert.ok(/Sayfa No: 4/.test(metin(parHtml)) && /MYO-F-12/.test(metin(parHtml)));
+    assert.ok(/border-top:none/.test(parHtml) && !/0\.75pt solid/.test(parHtml), 'Kenarlıksız (nil) tablo çizgisiz basılmalı');
+
+    // Güvenilmeyen model (içe aktarılan şablon paketi): betik ve tehlikeli URL çizilmez
+    const kotu = { bloklar: [{ tur: 'p', hiza: 'center" onmouseover="x', parcalar: [
+      { t: '<script>alert(1)</script>', b: 1, pt: 'abc', renk: 'red;background:url(x)' },
+      { img: 'javascript:alert(1)' }, { img: 'data:image/svg+xml;base64,PHN2Zz4=' }, { img: 'data:image/png;base64,AAA" onerror="x' }
+    ] }, { tur: 'tablo', kolonlar: [1, 'x'], satirlar: [{ hucreler: [{ span: 9999, rowspan: -5, dolgu: 'x;y', dikey: 'evil', icerik: [{ tur: 'p', parcalar: [{ t: '"><img src=x onerror=alert(1)>' }] }] }] }] }] };
+    const kotuHtml = Cekirdek.kurumFormuBlokHTML(kotu, {});
+    assert.ok(!/<script/i.test(kotuHtml) && !/javascript:/i.test(kotuHtml) && !/svg\+xml/.test(kotuHtml) && !/onerror="/.test(kotuHtml) && !/onmouseover/.test(kotuHtml) && !/<img src=x/.test(kotuHtml), 'Kötü model güvenli çizilmeli');
+    assert.ok(/colspan="30"/.test(kotuHtml) && !/rowspan/.test(kotuHtml), 'Sayılar sınırlanmalı');
+    assert.strictEqual(Cekirdek.kurumFormuBlokHTML(null), '');
+    assert.strictEqual(Cekirdek.kurumFormuModeliGecerliMi({}), false);
+    await assert.rejects(() => Cekirdek.cozDocxKurumFormuYapisi(new Uint8Array([1, 2, 3]), inflate), /ZIP/);
+
+    // Depo derinlik sınırı (12): kurum formu JSON metni olarak saklanınca tüm veri doğrulamadan geçer
+    const depo = { kurumsalSablonlar: [{ id: 'k1', ad: 'Okul', kurumFormlari: { tutanak: { modelJson: JSON.stringify(frm), dosyaAdi: 'a.docx', ust: true, alt: true } } }] };
+    const temiz = Cekirdek.semaDogrulaVeTemizle(depo);
+    assert.strictEqual(JSON.parse(temiz.kurumsalSablonlar[0].kurumFormlari.tutanak.modelJson).ust.bloklar.length, frm.ust.bloklar.length);
+    assert.throws(() => Cekirdek.semaDogrulaVeTemizle({ kurumsalSablonlar: [{ id: 'k1', ad: 'Okul', kurumFormlari: { tutanak: { model: frm } } }] }), /Derinlik/, 'Ham model derinlik sınırına takılır (bu yüzden metin olarak saklanıyor)');
+  });
+
   // 11. Salon kontenjan dağıtımı: sıralı, dengeli ve kontenjan aşımında otomatik Ek Salon
   await testEt('11. Salon kontenjan dağıtımı: sıralı, dengeli ve yetersiz kontenjanda Ek Salon açma', async () => {
     const ogrler = Array.from({ length: 10 }, (_, i) => ({

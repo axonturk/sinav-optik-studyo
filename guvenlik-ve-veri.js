@@ -4142,6 +4142,405 @@
     return { ...cikarKaliteKunyesiMetinden(tumMetin), logoDataUrl: logo, kaynak: 'docx' };
   }
 
+  /* ------------------------------------------------------------------------
+     KURUM FORMU (Word üst/alt bilgisi) — birebir yapı çıkarımı
+     Kurumun kalite formundaki üst bilgi (logo + form adı + Doküman No/Revizyon/Sayfa)
+     ve alt bilgi (Hazırlayan/Onay) tablolarını güvenli bir veri modeline çevirir.
+     Model ham HTML İÇERMEZ; çizim her zaman kacisHTML ile yapılır.
+     ------------------------------------------------------------------------ */
+  function kfXmlAgaci(xml) {
+    const kok = { ad: '#kok', oz: {}, cocuk: [] };
+    const yigin = [kok];
+    const re = /<(\/?)([A-Za-z_][\w:.-]*)((?:\s+[\w:.-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>|<\?[\s\S]*?\?>|<!--[\s\S]*?-->|<!\[CDATA\[([\s\S]*?)\]\]>|([^<]+)/g;
+    let m;
+    let adim = 0;
+    while ((m = re.exec(xml)) !== null) {
+      if (++adim > 400000) throw new Error('Üst bilgi XML çok büyük.');
+      const ust = yigin[yigin.length - 1];
+      if (m[6] !== undefined) { ust.cocuk.push({ ad: '#metin', metin: m[6] }); continue; }
+      if (m[5] !== undefined) { ust.cocuk.push({ ad: '#metin', metin: m[5] }); continue; }
+      if (!m[2]) continue;
+      if (m[1]) {
+        for (let i = yigin.length - 1; i > 0; i--) {
+          if (yigin[i].ad === m[2]) { yigin.length = i; break; }
+        }
+        continue;
+      }
+      const oz = {};
+      String(m[3] || '').replace(/([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g, (_, k, v1, v2) => { oz[k] = v1 !== undefined ? v1 : v2; return ''; });
+      const dugum = { ad: m[2], oz, cocuk: [] };
+      ust.cocuk.push(dugum);
+      if (!m[4]) yigin.push(dugum);
+    }
+    return kok;
+  }
+  const kfCoz = (s) => String(s || '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&amp;/g, '&');
+  const kfCocuk = (d, ad) => (d && d.cocuk ? d.cocuk.find((c) => c.ad === ad) : null);
+  const kfCocuklar = (d, ad) => (d && d.cocuk ? d.cocuk.filter((c) => c.ad === ad) : []);
+  function kfAra(d, ad, sonuc = [], derin = 0) {
+    if (!d || !d.cocuk || derin > 40) return sonuc;
+    for (const c of d.cocuk) {
+      if (c.ad === ad) sonuc.push(c);
+      kfAra(c, ad, sonuc, derin + 1);
+    }
+    return sonuc;
+  }
+  const kfSayi = (v, varsayilan = 0) => { const n = Number(v); return Number.isFinite(n) ? n : varsayilan; };
+
+  function kfKenarlar(kapsayici) {
+    const k = {};
+    if (!kapsayici) return k;
+    ['top', 'left', 'bottom', 'right', 'start', 'end', 'insideH', 'insideV'].forEach((y) => {
+      const d = kfCocuk(kapsayici, `w:${y}`);
+      if (!d) return;
+      const val = String(d.oz['w:val'] || 'single');
+      const ad = y === 'start' ? 'left' : (y === 'end' ? 'right' : y);
+      k[ad] = (val === 'nil' || val === 'none') ? 0 : Math.max(0.5, Math.min(3, kfSayi(d.oz['w:sz'], 4) / 8));
+    });
+    return k;
+  }
+
+  async function cozDocxKurumFormuYapisi(u8, inflateRaw) {
+    const girdiler = zipGirdileriniOku(u8);
+    const bul = (ad) => girdiler.find((g) => g.ad === ad);
+    const metinOku = async (ad) => {
+      const g = bul(ad);
+      return g ? new TextDecoder('utf-8').decode(await zipGirdisiniAc(u8, g, inflateRaw, 4 * 1024 * 1024)) : '';
+    };
+    const iliskiler = async (xmlAd) => {
+      const parcalar = xmlAd.split('/');
+      const dosya = parcalar.pop();
+      const rel = await metinOku(`${parcalar.join('/')}/_rels/${dosya}.rels`);
+      const harita = {};
+      rel.replace(/<Relationship\b([^>]*)\/?>/g, (_, oz) => {
+        const id = (oz.match(/\bId="([^"]+)"/) || [])[1];
+        const hedef = (oz.match(/\bTarget="([^"]+)"/) || [])[1];
+        if (id && hedef) harita[id] = hedef;
+        return '';
+      });
+      return harita;
+    };
+
+    const govdeXml = await metinOku('word/document.xml');
+    const govdeRel = await iliskiler('word/document.xml');
+    // Son bölümün (sectPr) varsayılan üst/alt bilgisi; yoksa ilk sayfa; yoksa içerikli olan ilk dosya
+    const sectler = govdeXml.match(/<w:sectPr\b[\s\S]*?<\/w:sectPr>/g) || [];
+    const sect = sectler.length ? sectler[sectler.length - 1] : '';
+    const referans = (tur, tip) => {
+      const re = new RegExp(`<w:${tur}Reference\\b[^>]*>`, 'g');
+      const bulunan = (sect.match(re) || []).find((r) => (r.match(/w:type="([^"]+)"/) || [])[1] === tip);
+      const id = bulunan && (bulunan.match(/r:id="([^"]+)"/) || [])[1];
+      return id && govdeRel[id] ? `word/${govdeRel[id].replace(/^\.?\//, '')}` : null;
+    };
+    const sayfaGenTw = kfSayi((sect.match(/<w:pgSz\b[^>]*w:w="(\d+)"/) || [])[1], 11906);
+    const solTw = kfSayi((sect.match(/<w:pgMar\b[^>]*w:left="(\d+)"/) || [])[1], 1134);
+    const sagTw = kfSayi((sect.match(/<w:pgMar\b[^>]*w:right="(\d+)"/) || [])[1], 1134);
+    const icGenTw = Math.max(3000, sayfaGenTw - solTw - sagTw);
+
+    const gorselOnbellek = {};
+    let gorselToplam = 0;
+    const gorselAl = async (xmlAd, rid) => {
+      const harita = await iliskiler(xmlAd);
+      const hedef = harita[rid];
+      if (!hedef) return null;
+      const yol = hedef.startsWith('/') ? hedef.slice(1) : `word/${hedef.replace(/^\.?\//, '')}`;
+      if (gorselOnbellek[yol] !== undefined) return gorselOnbellek[yol];
+      const g = bul(yol);
+      if (!g || !/\.(png|jpe?g|gif)$/i.test(yol) || g.boy > 1.5 * 1024 * 1024 || gorselToplam > 3 * 1024 * 1024) {
+        gorselOnbellek[yol] = null;
+        return null;
+      }
+      const bayt = await zipGirdisiniAc(u8, g, inflateRaw);
+      gorselToplam += bayt.length;
+      const mime = /png$/i.test(yol) ? 'image/png' : (/gif$/i.test(yol) ? 'image/gif' : 'image/jpeg');
+      gorselOnbellek[yol] = `data:${mime};base64,${baytlariBase64Yap(bayt)}`;
+      return gorselOnbellek[yol];
+    };
+
+    const paragrafCoz = async (p, xmlAd) => {
+      const pPr = kfCocuk(p, 'w:pPr');
+      const jc = pPr && kfCocuk(pPr, 'w:jc');
+      const hizaHam = jc ? String(jc.oz['w:val'] || '') : '';
+      const hiza = ({ center: 'center', right: 'right', end: 'right', both: 'justify', distribute: 'justify' })[hizaHam] || 'left';
+      const parcalar = [];
+      let alanDurum = null; // complex field: 'talimat' | 'sonuc'
+      let alanTalimat = '';
+      const runIsle = async (r) => {
+        const rPr = kfCocuk(r, 'w:rPr');
+        const bicim = {};
+        if (rPr) {
+          const b = kfCocuk(rPr, 'w:b');
+          if (b && !/^(0|false|off)$/i.test(String(b.oz['w:val'] || ''))) bicim.b = 1;
+          const i = kfCocuk(rPr, 'w:i');
+          if (i && !/^(0|false|off)$/i.test(String(i.oz['w:val'] || ''))) bicim.i = 1;
+          const u = kfCocuk(rPr, 'w:u');
+          if (u && !/^(none|0)$/i.test(String(u.oz['w:val'] || ''))) bicim.u = 1;
+          const sz = kfCocuk(rPr, 'w:sz');
+          if (sz) bicim.pt = Math.max(4, Math.min(28, kfSayi(sz.oz['w:val'], 22) / 2));
+          const renk = kfCocuk(rPr, 'w:color');
+          if (renk && /^[0-9A-Fa-f]{6}$/.test(String(renk.oz['w:val'] || ''))) bicim.renk = String(renk.oz['w:val']).toUpperCase();
+          const caps = kfCocuk(rPr, 'w:caps');
+          if (caps && !/^(0|false|off)$/i.test(String(caps.oz['w:val'] || ''))) bicim.caps = 1;
+        }
+        for (const c of r.cocuk) {
+          if (c.ad === 'w:fldChar') {
+            const t = c.oz['w:fldCharType'];
+            if (t === 'begin') { alanDurum = 'talimat'; alanTalimat = ''; }
+            else if (t === 'separate') {
+              alanDurum = 'sonuc';
+              const ins = alanTalimat.trim().toUpperCase();
+              if (/^NUMPAGES\b|^SECTIONPAGES\b/.test(ins)) parcalar.push({ alan: 'TOPLAM', ...bicim });
+              else if (/^PAGE\b/.test(ins)) parcalar.push({ alan: 'SAYFA', ...bicim });
+              else alanDurum = 'sonuc-goster';
+            } else if (t === 'end') { alanDurum = null; }
+            continue;
+          }
+          if (c.ad === 'w:instrText') { if (alanDurum === 'talimat') alanTalimat += kfCoz(c.cocuk.map((x) => x.metin || '').join('')); continue; }
+          if (alanDurum === 'talimat' || alanDurum === 'sonuc') continue;
+          if (c.ad === 'w:t') parcalar.push({ t: kfCoz(c.cocuk.map((x) => x.metin || '').join('')), ...bicim });
+          else if (c.ad === 'w:tab') parcalar.push({ t: ' ', ...bicim });
+          else if (c.ad === 'w:br' || c.ad === 'w:cr') parcalar.push({ br: 1 });
+          else if (c.ad === 'w:sym') parcalar.push({ t: '□', ...bicim });
+          else if (c.ad === 'w:drawing' || c.ad === 'w:pict' || c.ad === 'mc:AlternateContent') {
+            // Filigran / arka plan resimleri (WordPictureWatermark, behindDoc) belgeye taşınmaz
+            const shapeAd = kfAra(c, 'v:shape').map((x) => String(x.oz.id || '')).join(' ');
+            if (/watermark/i.test(shapeAd) || kfAra(c, 'wp:anchor').some((x) => String(x.oz.behindDoc) === '1')) continue;
+            const blip = kfAra(c, 'a:blip')[0];
+            const vml = kfAra(c, 'v:imagedata')[0];
+            const rid = (blip && blip.oz['r:embed']) || (vml && (vml.oz['r:id'] || vml.oz['o:relid']));
+            if (!rid || parcalar.some((x) => x.rid === rid)) continue;
+            const ext = kfAra(c, 'wp:extent')[0];
+            let gMm = ext ? kfSayi(ext.oz.cx) / 36000 : 0;
+            let yMm = ext ? kfSayi(ext.oz.cy) / 36000 : 0;
+            if (!ext && vml) {
+              const shape = kfAra(c, 'v:shape')[0];
+              const st = shape ? String(shape.oz.style || '') : '';
+              const pt = (k) => { const mm = st.match(new RegExp(`${k}:\\s*([\\d.]+)pt`)); return mm ? Number(mm[1]) * 0.3528 : 0; };
+              gMm = pt('width'); yMm = pt('height');
+            }
+            const src = await gorselAl(xmlAd, rid);
+            if (src) parcalar.push({ rid, img: src, gMm: Math.round(Math.max(3, Math.min(190, gMm || 20)) * 10) / 10, yMm: Math.round(Math.max(3, Math.min(80, yMm || 15)) * 10) / 10 });
+          }
+        }
+      };
+      const dolas = async (d) => {
+        for (const c of d.cocuk) {
+          if (c.ad === 'w:r') await runIsle(c);
+          else if (c.ad === 'w:fldSimple') {
+            const ins = String(c.oz['w:instr'] || '').trim().toUpperCase();
+            if (/^NUMPAGES\b|^SECTIONPAGES\b/.test(ins)) parcalar.push({ alan: 'TOPLAM' });
+            else if (/^PAGE\b/.test(ins)) parcalar.push({ alan: 'SAYFA' });
+            else await dolas(c);
+          } else if (['w:hyperlink', 'w:smartTag', 'w:sdt', 'w:sdtContent', 'w:ins', 'w:customXml'].includes(c.ad)) await dolas(c);
+        }
+      };
+      await dolas(p);
+      parcalar.forEach((x) => { delete x.rid; });
+      return { hiza, parcalar };
+    };
+
+    const icerikCoz = async (kapsayici, xmlAd, derin = 0) => {
+      const bloklar = [];
+      for (const c of kapsayici.cocuk) {
+        if (c.ad === 'w:p') bloklar.push({ tur: 'p', ...(await paragrafCoz(c, xmlAd)) });
+        else if (c.ad === 'w:tbl' && derin < 3) bloklar.push(await tabloCoz(c, xmlAd, derin + 1));
+        else if (c.ad === 'w:sdt') {
+          const ic = kfCocuk(c, 'w:sdtContent');
+          if (ic) bloklar.push(...(await icerikCoz(ic, xmlAd, derin)));
+        }
+      }
+      return bloklar;
+    };
+
+    const tabloCoz = async (tbl, xmlAd, derin) => {
+      const tblPr = kfCocuk(tbl, 'w:tblPr');
+      const kenar = kfKenarlar(tblPr && kfCocuk(tblPr, 'w:tblBorders'));
+      const varsayilanKenar = Object.keys(kenar).length === 0;
+      const grid = kfCocuklar(kfCocuk(tbl, 'w:tblGrid'), 'w:gridCol').map((g) => Math.max(1, kfSayi(g.oz['w:w'], 1)));
+      const ham = [];
+      for (const tr of kfCocuklar(tbl, 'w:tr')) {
+        const trPr = kfCocuk(tr, 'w:trPr');
+        const yukEl = trPr && kfCocuk(trPr, 'w:trHeight');
+        const satir = { yukMm: yukEl ? Math.round(Math.min(60, kfSayi(yukEl.oz['w:val']) / 56.7) * 10) / 10 : 0, hucreler: [] };
+        let kolon = 0;
+        const gridBefore = trPr && kfCocuk(trPr, 'w:gridBefore');
+        if (gridBefore) kolon += kfSayi(gridBefore.oz['w:val'], 0);
+        for (const tc of kfCocuklar(tr, 'w:tc')) {
+          const tcPr = kfCocuk(tc, 'w:tcPr');
+          const span = Math.max(1, Math.min(30, kfSayi(tcPr && kfCocuk(tcPr, 'w:gridSpan') && kfCocuk(tcPr, 'w:gridSpan').oz['w:val'], 1)));
+          const vm = tcPr && kfCocuk(tcPr, 'w:vMerge');
+          const vMerge = vm ? (vm.oz['w:val'] === 'restart' ? 'bas' : 'devam') : null;
+          const shd = tcPr && kfCocuk(tcPr, 'w:shd');
+          const dolgu = shd && /^[0-9A-Fa-f]{6}$/.test(String(shd.oz['w:fill'] || '')) && String(shd.oz['w:fill']).toUpperCase() !== 'FFFFFF' ? String(shd.oz['w:fill']).toUpperCase() : null;
+          const va = tcPr && kfCocuk(tcPr, 'w:vAlign');
+          const dikey = va ? (({ center: 'middle', bottom: 'bottom' })[va.oz['w:val']] || 'top') : 'top';
+          const hk = kfKenarlar(tcPr && kfCocuk(tcPr, 'w:tcBorders'));
+          satir.hucreler.push({ kolon, span, vMerge, dolgu, dikey, kenar: hk, icerik: await icerikCoz(tc, xmlAd, derin) });
+          kolon += span;
+        }
+        ham.push(satir);
+      }
+      // vMerge -> rowspan
+      for (let s = 0; s < ham.length; s++) {
+        for (const h of ham[s].hucreler) {
+          if (h.vMerge !== 'bas') continue;
+          let rs = 1;
+          for (let a = s + 1; a < ham.length; a++) {
+            const alt = ham[a].hucreler.find((x) => x.kolon === h.kolon && x.vMerge === 'devam');
+            if (!alt) break;
+            rs++;
+            alt.gizli = true;
+          }
+          h.rowspan = rs;
+        }
+      }
+      const kolonSayisi = Math.max(grid.length, ...ham.map((s) => s.hucreler.reduce((t, h) => Math.max(t, h.kolon + h.span), 0)));
+      while (grid.length < kolonSayisi) grid.push(grid.length ? grid[grid.length - 1] : 1000);
+      const satirlar = ham.map((s) => ({
+        yukMm: s.yukMm,
+        hucreler: s.hucreler.filter((h) => !h.gizli).map((h) => ({
+          kolon: h.kolon,
+          span: h.span,
+          rowspan: h.rowspan || 1,
+          dolgu: h.dolgu,
+          dikey: h.dikey,
+          kenar: h.kenar,
+          icerik: h.icerik
+        }))
+      }));
+      return { tur: 'tablo', kolonlar: grid, kenar: varsayilanKenar ? null : kenar, satirlar };
+    };
+
+    const blokOku = async (xmlAd) => {
+      if (!xmlAd || !bul(xmlAd)) return null;
+      const agac = kfXmlAgaci(await metinOku(xmlAd));
+      const kok = kfCocuk(agac, 'w:hdr') || kfCocuk(agac, 'w:ftr');
+      if (!kok) return null;
+      const bloklar = await icerikCoz(kok, xmlAd);
+      // Sondaki boş paragrafları at
+      while (bloklar.length && bloklar[bloklar.length - 1].tur === 'p' && !bloklar[bloklar.length - 1].parcalar.some((x) => (x.t && x.t.trim()) || x.img || x.alan)) bloklar.pop();
+      while (bloklar.length && bloklar[0].tur === 'p' && !bloklar[0].parcalar.some((x) => (x.t && x.t.trim()) || x.img || x.alan)) bloklar.shift();
+      return bloklar.length ? { genislikTw: icGenTw, bloklar } : null;
+    };
+    const dosyaSec = async (tur) => {
+      const adaylar = [referans(tur, 'default'), referans(tur, 'first'), referans(tur, 'even')].filter(Boolean);
+      girdiler.filter((g) => new RegExp(`^word/${tur}\\d*\\.xml$`).test(g.ad)).forEach((g) => { if (!adaylar.includes(g.ad)) adaylar.push(g.ad); });
+      for (const ad of adaylar) {
+        const blok = await blokOku(ad);
+        if (blok) return blok;
+      }
+      return null;
+    };
+    const ust = await dosyaSec('header');
+    const alt = await dosyaSec('footer');
+    if (!ust && !alt) throw new Error('Bu Word dosyasında üst bilgi veya alt bilgi bulunamadı.');
+    return { surum: 1, ust, alt };
+  }
+
+  /* Kurum formu modelini güvenli HTML'e çizer. secenek: { sayfa, toplam, olcek (0.6-1.2) } */
+  function kurumFormuBlokHTML(blok, secenek = {}) {
+    if (!blok || typeof blok !== 'object' || !Array.isArray(blok.bloklar)) return '';
+    const sayfa = String(secenek.sayfa || 1);
+    const toplam = String(secenek.toplam || 1);
+    const olcek = Math.max(0.6, Math.min(1.2, kfSayi(secenek.olcek, 1)));
+    const pt = (v) => `${Math.round(Math.max(4, Math.min(28, kfSayi(v, 10))) * olcek * 10) / 10}pt`;
+    const renk = (v) => (/^[0-9A-F]{6}$/.test(String(v || '')) ? `#${v}` : null);
+    let sayfaEtiketiBekliyor = false;
+    const paragrafHTML = (p) => {
+      if (!p || !Array.isArray(p.parcalar)) return '';
+      const hiza = ['left', 'center', 'right', 'justify'].includes(p.hiza) ? p.hiza : 'left';
+      const ic = p.parcalar.slice(0, 400).map((x) => {
+        if (!x || typeof x !== 'object') return '';
+        if (x.br) return '<br/>';
+        if (x.img) {
+          const src = String(x.img);
+          if (!/^data:image\/(png|jpeg|gif);base64,[A-Za-z0-9+/=]+$/.test(src)) return '';
+          const g = Math.max(3, Math.min(190, kfSayi(x.gMm, 20))) * olcek;
+          const y = Math.max(3, Math.min(80, kfSayi(x.yMm, 15))) * olcek;
+          return `<img src="${src}" alt="Kurum logosu" style="width:${g.toFixed(1)}mm; height:${y.toFixed(1)}mm; object-fit:contain; vertical-align:middle;" />`;
+        }
+        let metin = x.alan === 'SAYFA' ? sayfa : (x.alan === 'TOPLAM' ? toplam : String(x.t || ''));
+        if (x.caps) metin = metin.toLocaleUpperCase('tr-TR');
+        const st = [];
+        if (x.b) st.push('font-weight:700');
+        if (x.i) st.push('font-style:italic');
+        if (x.u) st.push('text-decoration:underline');
+        if (x.pt) st.push(`font-size:${pt(x.pt)}`);
+        if (renk(x.renk)) st.push(`color:${renk(x.renk)}`);
+        return st.length ? `<span style="${st.join(';')}">${kacisHTML(metin)}</span>` : kacisHTML(metin);
+      }).join('');
+      return `<div style="text-align:${hiza}; margin:0; line-height:1.15; min-height:1em;">${ic || '&nbsp;'}</div>`;
+    };
+    const duzMetin = (icerik) => (Array.isArray(icerik) ? icerik : []).map((b) => (b && b.tur === 'p' && Array.isArray(b.parcalar) ? b.parcalar.map((x) => (x && x.alan ? '#' : String((x && x.t) || ''))).join('') : '')).join(' ').replace(/\s+/g, ' ').trim();
+    const sayfaHucresiMi = (m) => /^Sayfa\s*(No|Numaras[ıi]|Say[ıi]s[ıi])?\s*[.:]?\s*$/i.test(m);
+    const icerikHTML = (icerik, derin) => (Array.isArray(icerik) ? icerik : []).slice(0, 200).map((b) => {
+      if (!b || typeof b !== 'object') return '';
+      if (b.tur === 'tablo') return derin < 4 ? tabloHTML(b, derin + 1) : '';
+      return paragrafHTML(b);
+    }).join('');
+    const tabloHTML = (t, derin) => {
+      if (!t || !Array.isArray(t.satirlar) || !Array.isArray(t.kolonlar)) return '';
+      const kolonlar = t.kolonlar.slice(0, 30).map((k) => Math.max(1, kfSayi(k, 1)));
+      const top = kolonlar.reduce((a, b) => a + b, 0) || 1;
+      const tk = t.kenar && typeof t.kenar === 'object' ? t.kenar : null;
+      const kenarCss = (hk, y, ic) => {
+        let v = hk && hk[y] !== undefined ? hk[y] : undefined;
+        if (v === undefined && tk) v = ic && tk[ic] !== undefined ? tk[ic] : tk[y];
+        if (v === undefined) v = tk ? 0 : 0.75;
+        v = Math.max(0, Math.min(3, kfSayi(v, 0.75)));
+        return v ? `${v}pt solid #000` : 'none';
+      };
+      const satirAdedi = t.satirlar.length;
+      const satirlarHTML = t.satirlar.slice(0, 60).map((s, si) => {
+        if (!s || !Array.isArray(s.hucreler)) return '';
+        sayfaEtiketiBekliyor = false;
+        const yuk = Math.max(0, Math.min(60, kfSayi(s.yukMm, 0))) * olcek;
+        return `<tr${yuk ? ` style="height:${yuk.toFixed(1)}mm"` : ''}>${s.hucreler.slice(0, 30).map((h) => {
+          if (!h || typeof h !== 'object') return '';
+          const span = Math.max(1, Math.min(30, Math.round(kfSayi(h.span, 1))));
+          const rs = Math.max(1, Math.min(60, Math.round(kfSayi(h.rowspan, 1))));
+          const kolon = Math.max(0, Math.round(kfSayi(h.kolon, 0)));
+          const sonKolon = kolon + span >= kolonlar.length;
+          const sonSatir = si + rs >= satirAdedi;
+          const hk = h.kenar && typeof h.kenar === 'object' ? h.kenar : {};
+          const dikey = ['top', 'middle', 'bottom'].includes(h.dikey) ? h.dikey : 'top';
+          const st = [
+            `border-top:${kenarCss(hk, 'top', si > 0 ? 'insideH' : null)}`,
+            `border-bottom:${kenarCss(hk, 'bottom', sonSatir ? null : 'insideH')}`,
+            `border-left:${kenarCss(hk, 'left', kolon > 0 ? 'insideV' : null)}`,
+            `border-right:${kenarCss(hk, 'right', sonKolon ? null : 'insideV')}`,
+            'padding:0.6mm 1.4mm',
+            `vertical-align:${dikey}`
+          ];
+          if (renk(h.dolgu)) st.push(`background:${renk(h.dolgu)}`);
+          let icHTML;
+          const metin = duzMetin(h.icerik);
+          const icerikteAlanVar = JSON.stringify(h.icerik || []).includes('"alan"');
+          if (sayfaEtiketiBekliyor && !icerikteAlanVar && /^[\s.:]*\d*\s*(\/\s*\d+)?[\s.]*$/.test(metin)) {
+            icHTML = `<div style="line-height:1.15;">${kacisHTML(`${sayfa} / ${toplam}`)}</div>`;
+          } else {
+            icHTML = icerikHTML(h.icerik, derin);
+          }
+          sayfaEtiketiBekliyor = sayfaHucresiMi(metin);
+          return `<td${span > 1 ? ` colspan="${span}"` : ''}${rs > 1 ? ` rowspan="${rs}"` : ''} style="${st.join(';')}">${icHTML}</td>`;
+        }).join('')}</tr>`;
+      }).join('');
+      return `<table class="kurum-formu-tablo" style="width:100%; border-collapse:collapse; table-layout:fixed;"><colgroup>${kolonlar.map((k) => `<col style="width:${(k / top * 100).toFixed(2)}%" />`).join('')}</colgroup>${satirlarHTML}</table>`;
+    };
+    return `<div class="kurum-formu-blok" style="font-family:'Times New Roman', Times, serif; font-size:${pt(10)}; color:#000;">${icerikHTML(blok.bloklar, 0)}</div>`;
+  }
+
+  /* İçe aktarılan (güvenilmeyen) kurum formu modelini boyut açısından sınırlar */
+  function kurumFormuModeliGecerliMi(model) {
+    if (!model || typeof model !== 'object') return false;
+    if (!model.ust && !model.alt) return false;
+    try { return JSON.stringify(model).length < 6 * 1024 * 1024; } catch (_) { return false; }
+  }
+
   /* Eski ikili .doc dosyasından (OLE) metin tabanlı künye çıkarır; logo çıkarılamaz */
   function cozDocKaliteFormu(u8) {
     const u16 = [];
@@ -11069,6 +11468,9 @@
     cozPdfIcindenMetinVeGorsel,
     cikarKaliteKunyesiMetinden,
     cozDocxKaliteFormu,
+    cozDocxKurumFormuYapisi,
+    kurumFormuBlokHTML,
+    kurumFormuModeliGecerliMi,
     cozDocKaliteFormu,
     excelSeriNoyuTarihYap,
     salonlaraDagit,
