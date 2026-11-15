@@ -482,11 +482,11 @@
       <span class="rozet rozet-mavi" id="rozet-mobil-bekleyen" hidden style="font-size:10.5px; padding:1px 6px; flex-shrink:0;">Yerel: 0</span>
     </div>
     <div class="mobil-ust-aksiyonlar">
-      <button type="button" class="mobil-ust-btn" id="btn-pwa-yukle" hidden title="Uygulamayı telefona yükle">Kur</button>
+      <button type="button" class="mobil-ust-btn" id="btn-pwa-yukle" hidden title="Uygulamayı telefona yükle">Yükle</button>
       <button type="button" class="mobil-ust-btn" id="btn-mobil-fener" hidden title="Feneri Aç / Kapat" aria-label="Fener">
         <svg class="ui-ikon"><use href="#i-zap"></use></svg>
       </button>
-      <button type="button" class="mobil-ust-btn" id="btn-mobil-ses" title="Sesli Geri Bildirim Aç/Kapat">Ses</button>
+      <button type="button" class="mobil-ust-btn" id="btn-mobil-ses" title="Sesli Geri Bildirim Aç/Kapat">🔊 Ses</button>
       <button type="button" class="mobil-ust-btn" id="btn-mobil-araclar-ac" title="QR Kurulum, Form Türü ve Son Okuma Detayı" aria-label="Araçlar ve Detaylar">
         <svg class="ui-ikon"><use href="#i-more"></use></svg>
       </button>
@@ -1012,18 +1012,18 @@
       <svg class="ui-ikon" style="width:22px; height:22px;"><use href="#i-camera"></use></svg>
       <span>Oku</span>
     </button>
-    <button type="button" class="mobil-oto-btn" id="btn-mobil-seri-tara" title="Otomatik Seri Tarama">
+    <button type="button" class="mobil-oto-btn" id="btn-mobil-seri-tara" title="Açıkken kağıt görünür görünmez kendisi okur">
       <svg class="ui-ikon"><use href="#i-refresh"></use></svg>
-      <span>Oto: Kapalı</span>
+      <span>Otomatik: Kapalı</span>
     </button>
     <button type="button" class="mobil-sekme-btn aktif" data-msekme="m-panel-tara" title="Tam Ekran Vizör">
       <svg class="ui-ikon"><use href="#i-camera"></use></svg>
-      <span>Vizör</span>
+      <span>Tam ekran</span>
     </button>
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261115a"></script>
+  <script src="guvenlik-ve-veri.js?v=20261115b"></script>
   <script>
     (function () {
       'use strict';
@@ -4485,7 +4485,7 @@
             if (otoBtn) {
               otoBtn.classList.remove('aktif');
               const sp = otoBtn.querySelector('span');
-              if (sp) sp.textContent = 'Oto: Kapalı';
+              if (sp) sp.textContent = 'Otomatik: Kapalı';
             }
           }
           const taraSekmeBtn = document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-tara"]');
@@ -4906,7 +4906,7 @@
               if (otoBtn) {
                 otoBtn.classList.remove('aktif');
                 const sp = otoBtn.querySelector('span');
-                if (sp) sp.textContent = 'Oto: Kapalı';
+                if (sp) sp.textContent = 'Otomatik: Kapalı';
               }
             }
             document.body.setAttribute('data-aktif-msekme', hedefId);
@@ -5093,8 +5093,8 @@
           if (!btn) return;
           btn.classList.toggle('aktif', seriTaramaAktif);
           const sp = btn.querySelector('span');
-          if (sp) sp.textContent = seriTaramaAktif ? 'Oto: Açık' : 'Oto: Kapalı';
-          else btn.textContent = seriTaramaAktif ? 'Oto: Açık' : 'Oto: Kapalı';
+          if (sp) sp.textContent = seriTaramaAktif ? 'Otomatik: Açık' : 'Otomatik: Kapalı';
+          else btn.textContent = seriTaramaAktif ? 'Otomatik: Açık' : 'Otomatik: Kapalı';
         };
 
         const guncelleKameraButonMetin = (acikMi) => {
@@ -5124,7 +5124,7 @@
 
         document.getElementById('btn-mobil-ses').addEventListener('click', (e) => {
           sesAcik = !sesAcik;
-          e.currentTarget.textContent = sesAcik ? 'Ses' : 'Sessiz';
+          e.currentTarget.textContent = sesAcik ? '🔊 Ses' : '🔇 Sessiz';
         });
 
         document.getElementById('btn-mobil-seri-tara').addEventListener('click', () => {
