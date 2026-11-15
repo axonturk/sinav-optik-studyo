@@ -221,7 +221,7 @@ async function main() {
     await sayfa.click('#btn-modal-ogrenci-qr-kapat');
 
     // ---- Çıktılar: PDF / Word / Yazdır (tüm kapsamlar) ----
-    await sayfa.evaluate(() => document.querySelectorAll('.sekme-btn')[0].click());
+    await sayfa.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-stüdyo"]').click());
     const kapsamlar = ['sinif-aktif', 'sinif-tum-gruplar', 'ogrenci-tek', 'ogrenci-tum-sinif', 'ayri-optik', 'anahtar'];
     for (const kapsam of kapsamlar) {
       for (const [format, uzanti] of [['pdf-indir', '.pdf'], ['word-indir', '.doc']]) {
@@ -246,7 +246,7 @@ async function main() {
     }
 
     // ---- Sınav Durum Tutanağı & Yoklama Evrakı (Birleşik Çıktı Merkezi + Mini Önizleme + Çoklu Salon + Ders Bazlı Öğrenci) ----
-    await sayfa.evaluate(() => document.querySelectorAll('.sekme-btn')[0].click());
+    await sayfa.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-stüdyo"]').click());
     await bekle(350);
     const miniKutuAdet = await sayfa.$$eval('#baski-mini-onizleme .mini-sayfa-kutu', (els) => els.length);
     kontrol('Çıktı Merkezi: mini önizleme şeridi sayfa küçük resimlerini gösteriyor', miniKutuAdet >= 1, String(miniKutuAdet));
@@ -298,7 +298,7 @@ async function main() {
     await bekle(300);
     const salonYerlesimMetin = await sayfa.$eval('#kutu-salon-yerlesim', (e) => e.textContent);
     kontrol('Salon kontenjanı (3) aşıldığında 5 öğrenci için otomatik Ek Salon 1 açıldı', salonYerlesimMetin.includes('B-201: 3/3') && salonYerlesimMetin.includes('Ek Salon 1: 2/3'));
-    await sayfa.evaluate(() => document.querySelectorAll('.sekme-btn')[0].click());
+    await sayfa.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-stüdyo"]').click());
     await sayfa.select('#baski-kapsam-sec', 'tutanak');
     await bekle(350);
     const ikiSalonSayfa = await sayfa.$$eval('#a4-onizleme-sahne .a4-sayfa', (els) => els.length);
@@ -354,7 +354,7 @@ async function main() {
     for (const ad of ['Deniz Arslan', 'Elif Çelik', 'Furkan Öztürk', 'Gülşen Yıldırım', 'Hakan Şahin']) kontrol(`OMR: ${ad} numarasından doğru eşleşti`, tabloMetin.includes(ad));
 
     // ---- 1B. Haftalık Kota (manuel_kota) yatay taşma kontrolü ----
-    await sayfa.evaluate(() => document.querySelectorAll('.sekme-btn')[0].click());
+    await sayfa.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-stüdyo"]').click());
     await bekle(200);
     await sayfa.evaluate(() => {
       const iz = document.getElementById('kutu-hafta-secim-izgara');

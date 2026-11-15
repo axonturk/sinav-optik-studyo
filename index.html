@@ -96,20 +96,7 @@
       <button type="button" class="btn btn-basari" id="btn-telefon-bagla" title="Telefonu tek karekodla bu hesaba bağla; dersler ve cevap anahtarları telefona iner" style="margin:0.35rem 0.6rem 0.2rem; justify-content:center; gap:0.4rem; font-weight:800;">
         <span aria-hidden="true">📱</span><span data-telefon-bagla-etiket>Telefonu Bağla</span>
       </button>
-      <div class="yan-menu-grup-baslik">Sınav</div>
-      <div class="yan-menu-liste">
-        <button type="button" class="sekme-btn aktif" data-sekme="sekme-stüdyo" title="A4 Kağıt Stüdyosu ve Optik Kurgu">
-          <svg class="ui-ikon"><use href="#i-sheet"></use></svg>
-          <span class="yan-menu-metin">Kağıt Stüdyosu</span>
-          <span class="sekme-rozet" id="rozet-secili-soru">22 Soru</span>
-        </button>
-        <button type="button" class="sekme-btn ust-modul-btn" data-sekme="sekme-online" title="Online Sınav ve Kiosk Kilidi">
-          <svg class="ui-ikon"><use href="#i-monitor"></use></svg>
-          <span class="yan-menu-metin">Online Sınav</span>
-        </button>
-      </div>
-
-      <div class="yan-menu-grup-baslik">Hazırlık</div>
+      <div class="yan-menu-grup-baslik" title="Ders → sorular → öğrenciler → sınav kağıdı">1 · Hazırla</div>
       <div class="yan-menu-liste">
         <button type="button" class="sekme-btn" data-sekme="sekme-dersler" title="Dersler ve Bologna Öğrenim Çıktıları">
           <svg class="ui-ikon"><use href="#i-book"></use></svg>
@@ -126,15 +113,28 @@
           <span class="yan-menu-metin">Sınıf ve Salonlar</span>
           <span class="sekme-rozet" id="rozet-ogrenci-sayisi">0</span>
         </button>
+        <button type="button" class="sekme-btn aktif" data-sekme="sekme-stüdyo" title="A4 Kağıt Stüdyosu ve Optik Kurgu">
+          <svg class="ui-ikon"><use href="#i-sheet"></use></svg>
+          <span class="yan-menu-metin">Kağıt Stüdyosu</span>
+          <span class="sekme-rozet" id="rozet-secili-soru">22 Soru</span>
+        </button>
       </div>
 
-      <div class="yan-menu-grup-baslik">Sonrası</div>
+      <div class="yan-menu-grup-baslik" title="Kağıtları telefonla okut veya online sınav yap">2 · Sınav yap</div>
       <div class="yan-menu-liste">
         <button type="button" class="sekme-btn" data-sekme="sekme-omr" title="Optik Okuma (OMR)">
           <svg class="ui-ikon"><use href="#i-camera"></use></svg>
           <span class="yan-menu-metin">Okuma</span>
           <span class="sekme-rozet" id="rozet-okunan-kagit">0</span>
         </button>
+        <button type="button" class="sekme-btn ust-modul-btn" data-sekme="sekme-online" title="Online Sınav ve Kiosk Kilidi">
+          <svg class="ui-ikon"><use href="#i-monitor"></use></svg>
+          <span class="yan-menu-metin">Online Sınav</span>
+        </button>
+      </div>
+
+      <div class="yan-menu-grup-baslik" title="Notlar, analizler, arşiv ve kayıtlar">3 · Sonuçlar</div>
+      <div class="yan-menu-liste">
         <button type="button" class="sekme-btn" data-sekme="sekme-analiz" title="Değerlendirme, Madde Analizi ve Akreditasyon">
           <svg class="ui-ikon"><use href="#i-chart"></use></svg>
           <span class="yan-menu-metin">Değerlendirme</span>

@@ -310,7 +310,7 @@ async function tarayiciTestleri() {
     const ogrInput = await sayfa.$('#input-ogrenci-csv-yukle');
     await ogrInput.uploadFile(path.join(URETILEN, 'ornek_ogrenciler.csv'));
     await bekle(600);
-    await sayfa.evaluate(() => document.querySelectorAll('.sekme-btn')[0].click());
+    await sayfa.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-stüdyo"]').click());
     await bekle(300);
     for (const sikSayisi of [5, 4]) {
       await ayarla('ayar-sik-sayisi', sikSayisi);
