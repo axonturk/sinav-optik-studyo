@@ -5783,6 +5783,16 @@
 
     // 2. İstatistiksel Kopya & Ortak Yanlış Şık Benzerlik Dedektörü (Harpp-Hogan)
     const supheliCiftler = C.tespitEtKopyaBenzerlikCiftleri(durum.okumaSonuclari);
+    // Kopya şüphesi varsa Okuma ve Değerlendirme sayfalarının üstünde uyarı bandı
+    ['uyari-kopya-supheli', 'uyari-kopya-okuma'].forEach((bandId) => {
+      const bant = document.getElementById(bandId);
+      if (!bant) return;
+      const var_ = supheliCiftler.length > 0;
+      bant.hidden = !var_;
+      bant.style.display = var_ ? 'flex' : 'none';
+      const metin = bant.querySelector('[data-kopya-uyari-metin]');
+      if (metin) metin.textContent = var_ ? `⚠️ ${supheliCiftler.length} öğrenci çiftinde kopya şüphesi var (aynı yanlış şıklar).` : '';
+    });
     const tbodyKopya = document.getElementById('tablo-kopya-benzerlik');
     if (tbodyKopya) {
       if (supheliCiftler.length === 0) {
@@ -15511,6 +15521,12 @@ Yine de çıktı alınsın mı?`)) {
       });
     }
 
+    document.querySelectorAll('[data-kopya-raporu-ac]').forEach((b) => b.addEventListener('click', () => {
+      const sekmeBtn = document.querySelector('.sekme-btn[data-sekme="sekme-analiz"]');
+      if (sekmeBtn) sekmeBtn.click();
+      const altBtn = document.querySelector('#analiz-alt-sekmeler [data-alt="benzerlik"]');
+      if (altBtn) altBtn.click();
+    }));
     const analizAltSekmeler = document.getElementById('analiz-alt-sekmeler');
     const sekmeAnalizPanel = document.getElementById('sekme-analiz');
     if (analizAltSekmeler && sekmeAnalizPanel) {

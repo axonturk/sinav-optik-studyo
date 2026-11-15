@@ -1630,6 +1630,10 @@
             </div>
           </div>
 
+          <div id="uyari-kopya-okuma" class="yazdir-gizle" role="status" hidden style="margin-bottom:0.6rem; padding:0.55rem 0.8rem; border-radius:8px; background:#fef2f2; border:1px solid #fca5a5; color:#991b1b; font-size:0.86rem; justify-content:space-between; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <span data-kopya-uyari-metin></span>
+            <button type="button" class="btn btn-kucuk" data-kopya-raporu-ac>Kopya raporunu aç</button>
+          </div>
           <!-- Okunan Kağıtlar Tablosu -->
           <div class="kart">
             <div class="kart-baslik">
@@ -1721,11 +1725,11 @@
       <div class="yazdir-gizle" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:var(--b-4);">
         <div class="bolmeli-secici" id="analiz-alt-sekmeler" aria-label="Değerlendirme Bölümleri">
           <button type="button" data-alt="tumu" class="aktif">Tümü</button>
-          <button type="button" data-alt="sorular">Sorular</button>
-          <button type="button" data-alt="ogrenciler">Öğrenciler</button>
-          <button type="button" data-alt="kazanimlar">Kazanımlar</button>
-          <button type="button" data-alt="benzerlik">Benzerlik</button>
-          <button type="button" data-alt="raporlar">Raporlar</button>
+          <button type="button" data-alt="ogrenciler" title="Not çizelgesi (OBS), sınava girmeyenler (GR)">Notlar</button>
+          <button type="button" data-alt="sorular" title="Soru zorluğu, ayırt edicilik, dikkat isteyen sorular">Soru analizi</button>
+          <button type="button" data-alt="kazanimlar" title="Öğrenim çıktıları (ÖÇ) başarısı ve dönem sonu birleştirme">Öğrenim çıktıları</button>
+          <button type="button" data-alt="benzerlik" title="Ortak yanlış analizi">Kopya</button>
+          <button type="button" data-alt="raporlar" title="Program çıktıları ve ders iyileştirme raporu">Raporlar</button>
         </div>
         <div style="display:inline-flex; gap:14px; flex-wrap:wrap; font-size:var(--yazi-xs); color:var(--metin-ikincil); font-variant-numeric:tabular-nums;">
           <span>Std. Sapma: <strong id="ist-sapma">0.0</strong></span>
@@ -1733,6 +1737,11 @@
           <span>En Yüksek / Düşük: <strong id="ist-min-max">0 / 0</strong></span>
           <span>Std. Hata (SE): <strong id="ist-se">±0.0</strong></span>
         </div>
+      </div>
+
+      <div id="uyari-kopya-supheli" class="yazdir-gizle" role="status" hidden style="margin-bottom:var(--b-3); padding:0.55rem 0.8rem; border-radius:8px; background:#fef2f2; border:1px solid #fca5a5; color:#991b1b; font-size:0.86rem; justify-content:space-between; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+        <span data-kopya-uyari-metin></span>
+        <button type="button" class="btn btn-kucuk" data-kopya-raporu-ac>Kopya raporunu aç</button>
       </div>
 
       <!-- Sade Türkçe "Dikkat İsteyen Sorular" Kartı (Canlı İptal Simülasyonlu) -->
@@ -1745,9 +1754,9 @@
       </div>
 
       <!-- Puanlama Kuralları ve Resmi Dışa Aktarım -->
-      <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="sorular">
+      <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="ogrenciler">
         <div class="kart-baslik">
-          <span>Puanlama Kuralları ve Çıktılar</span>
+          <span>Notlar ve OBS çıktısı</span>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button type="button" class="btn btn-birincil btn-kucuk" id="btn-obs-resmi-csv-indir" title="Sınava girmeyenleri GR olarak işaretleyen ve Harf Notu hesaplayan tam sınıf çizelgesi">
               OBS Resmi Not Çizelgesi (GR + Harf)
