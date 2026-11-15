@@ -6,6 +6,7 @@
    2) Aynı öğrenciye farklı ikinci kağıt eski notu silmez; "hangisi geçerli" kararı bekler.
    3) Ayrı okutulan kağıt QR'ı daha önce okunmuş hiçbir kayda uygulanmaz.
    4) Yalnız liste QR'ı ile açılan (kurulum QR'ı okutulmamış) derste kağıt puanlanmaz.
+   5) Numarası boş (??) kağıda öğretmen öğrenci seçince listede "okundu" görünür, "eşleşme bekliyor" kalkar.
    Çalıştırma: node pwa-veri-koruma-test.js
    ========================================================================== */
 'use strict';
@@ -27,7 +28,8 @@ const LISTE = [
   { ogrNo: '2023104011', adSoyad: 'Ali Yılmaz' },
   { ogrNo: '2023105011', adSoyad: 'Ayşe Kaya' },
   { ogrNo: '2023104022', adSoyad: 'Mehmet Demir' },
-  { ogrNo: '2023104033', adSoyad: 'Zeynep Ak' }
+  { ogrNo: '2023104033', adSoyad: 'Zeynep Ak' },
+  { ogrNo: '2023104044', adSoyad: 'Can Öz' }
 ];
 const YAPI = {
   dersId: 'BIL101', dersAd: 'BIL101 - Ağ Temelleri', sinavKodu: 'BIL101-VIZE',
@@ -142,6 +144,30 @@ const YAPI = {
     r = await okumalar();
     const zeynep = r.find((k) => k.ogrNo === '2023104033');
     kontrol('Bekleyen kağıt QR\'ı sıradaki kağıda (Zeynep) uygulanır', Boolean(zeynep), JSON.stringify(r));
+
+    // 5) Numarası hiç kodlanmamış kağıt: öğretmen seçince "bekliyor"dan çıkar ve sınıf listesinde okundu görünür
+    await kagitOkut('XX', ['A', 'B', 'C', 'D', 'E']); // 'XX' = numara balonları boş
+    const bosNolu = await sayfa.evaluate(() => {
+      const d = window.__mobilDurumOku();
+      const k = d.okumaSonuclari.find((s) => String(s.okunanNoKod || '').includes('?'));
+      return k ? { id: k.id, kod: k.okunanNoKod } : null;
+    });
+    const bekleyenOnce = await sayfa.$eval('#mobil-sinif-istatistik-ozet', (e) => e.textContent);
+    kontrol('Numarası boş kağıt "eşleşme bekliyor" olarak gelir', Boolean(bosNolu) && /Eşleşme Bekliyor/.test(bekleyenOnce), `${JSON.stringify(bosNolu)} · ${bekleyenOnce.replace(/\s+/g, ' ')}`);
+    const canAtandi = await ata(bosNolu ? bosNolu.id : '', '2023104044');
+    const sonra = await sayfa.evaluate(() => {
+      const satir = Array.from(document.querySelectorAll('#mobil-tablo-okunanlar tr')).find((tr) => /Can Öz/.test(tr.textContent));
+      const yoklama = Array.from(document.querySelectorAll('#mobil-tablo-sinif-yoklama tr')).find((tr) => /2023104044/.test(tr.textContent));
+      return {
+        ozet: document.getElementById('mobil-sinif-istatistik-ozet').textContent.replace(/\s+/g, ' '),
+        satir: satir ? satir.textContent.replace(/\s+/g, ' ') : '',
+        yoklama: yoklama ? yoklama.textContent.replace(/\s+/g, ' ') : '',
+        rozet: (document.getElementById('mobil-bekleyen-rozet') || {}).hidden
+      };
+    });
+    kontrol('Öğretmen seçince kağıt öğrenciye yerleşir: uyarı ve "Seç" düğmesi kalkar, numara görünür', canAtandi && /2023104044/.test(sonra.satir) && !/⚠️/.test(sonra.satir) && !/Seç/.test(sonra.satir), sonra.satir);
+    kontrol('"Eşleşme Bekliyor" rozeti kalkar', !/Eşleşme Bekliyor/.test(sonra.ozet) && sonra.rozet === true, sonra.ozet);
+    kontrol('Sınıf listesinde öğrenci "Okundu" görünür', /Okundu/.test(sonra.yoklama), sonra.yoklama);
 
     kontrol('JS hatası / uyarı penceresi yok', hatalar.length === 0, hatalar.join(' | '));
   } finally {

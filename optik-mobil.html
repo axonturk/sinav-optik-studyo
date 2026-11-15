@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Cep Optik Okuyucu (Mobil OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261115d" />
+  <link rel="stylesheet" href="ortak.css?v=20261115e" />
   <style>
     html, body {
       margin: 0;
@@ -1023,7 +1023,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261115d"></script>
+  <script src="guvenlik-ve-veri.js?v=20261115e"></script>
   <script>
     (function () {
       'use strict';
@@ -3302,9 +3302,10 @@
 
       function kagitKimlikBelirsizMi(sonuc) {
         if (!sonuc) return false;
+        if (sonuc.numaraEslesmediMi || sonuc.kimlikEslesmeBekliyor) return true;
+        // Öğretmen öğrenciyi seçtiyse (ya da kimlik kağıt QR'ından geldiyse) kağıttaki "??" numara artık belirleyici değildir
+        if (sonuc.kimlikOgretmenSecti || sonuc.ozelKagitQrCozuldu || sonuc.kagitQrIleOkunduMu) return false;
         return Boolean(
-          sonuc.numaraEslesmediMi ||
-          sonuc.kimlikEslesmeBekliyor ||
           String(sonuc.okunanNoKod || '').includes('?') ||
           (Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1)
         );
