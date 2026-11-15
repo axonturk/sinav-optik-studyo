@@ -2554,3 +2554,21 @@ body:not(.sinav-basildi-kilitli) .a4-sahne [data-antet-alan]:hover {
 .kiosk-h-adim { padding: 12px; border: 1px solid var(--kenar); border-radius: 8px; margin-bottom: 12px; background: var(--bg-kart); }
 #kiosk-h-mesaj.tur-hata { background: var(--tehlike-acik); color: var(--tehlike); }
 #kiosk-h-mesaj.tur-bilgi { background: var(--bg-ikincil); color: var(--metin); }
+
+/* Basit / Uzman görünümü: Basit'te gelişmiş ayarlar gizlenir (özellik silinmez, "Uzman"da hepsi görünür) */
+html[data-gorunum="basit"] [data-uzman] { display: none !important; }
+
+/* Ayar ekranlarındaki belge önizlemeleri: okunabilir boyutta (Kurum Şablonu, yoklama) */
+#onizleme-kurum-belge .mini-sayfa-kutu,
+#onizleme-yoklama-evraki .mini-sayfa-kutu { width: 334px; height: 472px; }
+#onizleme-kurum-belge .mini-sayfa-ic,
+#onizleme-yoklama-evraki .mini-sayfa-ic { transform: scale(0.42); }
+@media (max-width: 640px) {
+  #onizleme-kurum-belge .mini-sayfa-kutu,
+  #onizleme-yoklama-evraki .mini-sayfa-kutu { width: 238px; height: 337px; }
+  #onizleme-kurum-belge .mini-sayfa-ic,
+  #onizleme-yoklama-evraki .mini-sayfa-ic { transform: scale(0.3); }
+}
+
+/* Yapışkan üst çubuk (48–58px) odaklanan / kaydırılan alanın üstünü örtmesin */
+html { scroll-padding-top: 72px; }

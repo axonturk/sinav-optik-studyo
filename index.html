@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261114b" />
+  <link rel="stylesheet" href="ortak.css?v=20261115c" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -96,20 +96,7 @@
       <button type="button" class="btn btn-basari" id="btn-telefon-bagla" title="Telefonu tek karekodla bu hesaba bağla; dersler ve cevap anahtarları telefona iner" style="margin:0.35rem 0.6rem 0.2rem; justify-content:center; gap:0.4rem; font-weight:800;">
         <span aria-hidden="true">📱</span><span data-telefon-bagla-etiket>Telefonu Bağla</span>
       </button>
-      <div class="yan-menu-grup-baslik">Sınav</div>
-      <div class="yan-menu-liste">
-        <button type="button" class="sekme-btn aktif" data-sekme="sekme-stüdyo" title="A4 Kağıt Stüdyosu ve Optik Kurgu">
-          <svg class="ui-ikon"><use href="#i-sheet"></use></svg>
-          <span class="yan-menu-metin">Kağıt Stüdyosu</span>
-          <span class="sekme-rozet" id="rozet-secili-soru">22 Soru</span>
-        </button>
-        <button type="button" class="sekme-btn ust-modul-btn" data-sekme="sekme-online" title="Online Sınav ve Kiosk Kilidi">
-          <svg class="ui-ikon"><use href="#i-monitor"></use></svg>
-          <span class="yan-menu-metin">Online Sınav</span>
-        </button>
-      </div>
-
-      <div class="yan-menu-grup-baslik">Hazırlık</div>
+      <div class="yan-menu-grup-baslik" title="Ders → sorular → öğrenciler → sınav kağıdı">1 · Hazırla</div>
       <div class="yan-menu-liste">
         <button type="button" class="sekme-btn" data-sekme="sekme-dersler" title="Dersler ve Bologna Öğrenim Çıktıları">
           <svg class="ui-ikon"><use href="#i-book"></use></svg>
@@ -126,15 +113,28 @@
           <span class="yan-menu-metin">Sınıf ve Salonlar</span>
           <span class="sekme-rozet" id="rozet-ogrenci-sayisi">0</span>
         </button>
+        <button type="button" class="sekme-btn aktif" data-sekme="sekme-stüdyo" title="A4 Kağıt Stüdyosu ve Optik Kurgu">
+          <svg class="ui-ikon"><use href="#i-sheet"></use></svg>
+          <span class="yan-menu-metin">Kağıt Stüdyosu</span>
+          <span class="sekme-rozet" id="rozet-secili-soru">22 Soru</span>
+        </button>
       </div>
 
-      <div class="yan-menu-grup-baslik">Sonrası</div>
+      <div class="yan-menu-grup-baslik" title="Kağıtları telefonla okut veya online sınav yap">2 · Sınav yap</div>
       <div class="yan-menu-liste">
         <button type="button" class="sekme-btn" data-sekme="sekme-omr" title="Optik Okuma (OMR)">
           <svg class="ui-ikon"><use href="#i-camera"></use></svg>
           <span class="yan-menu-metin">Okuma</span>
           <span class="sekme-rozet" id="rozet-okunan-kagit">0</span>
         </button>
+        <button type="button" class="sekme-btn ust-modul-btn" data-sekme="sekme-online" title="Online Sınav ve Kiosk Kilidi">
+          <svg class="ui-ikon"><use href="#i-monitor"></use></svg>
+          <span class="yan-menu-metin">Online Sınav</span>
+        </button>
+      </div>
+
+      <div class="yan-menu-grup-baslik" title="Notlar, analizler, arşiv ve kayıtlar">3 · Sonuçlar</div>
+      <div class="yan-menu-liste">
         <button type="button" class="sekme-btn" data-sekme="sekme-analiz" title="Değerlendirme, Madde Analizi ve Akreditasyon">
           <svg class="ui-ikon"><use href="#i-chart"></use></svg>
           <span class="yan-menu-metin">Değerlendirme</span>
@@ -216,6 +216,7 @@
               <svg class="ui-ikon"><use href="#i-undo"></use></svg>
               <span>Geri Al</span>
             </button>
+            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-gorunum-modu" aria-pressed="false" title="Basit: yalnız temel adımlar görünür. Uzman: tüm gelişmiş ayarlar açılır. Hiçbir özellik silinmez.">🧭 Basit görünüm</button>
             <button type="button" class="btn btn-hayalet btn-kucuk btn-kaydet-onayla-ana" id="btn-genel-kaydet-uygula" title="Değişiklikleri kaydet ve uygula (Ctrl+S)">
               Kaydet
             </button>
@@ -451,7 +452,7 @@
             </div>
 
             <!-- GELİŞMİŞ 1: Hafta Kotası ve ÖÇ Kuralları -->
-            <details class="gelismis-akordeon" id="detay-gelismis-hafta-oc">
+            <details class="gelismis-akordeon" id="detay-gelismis-hafta-oc" data-uzman>
               <summary>
                 <span>Hafta kotası ve ÖÇ kuralları</span>
                 <svg class="ui-ikon"><use href="#i-chevron-down"></use></svg>
@@ -503,7 +504,7 @@
             </details>
 
             <!-- GELİŞMİŞ 2: Zorluk ve Şık Düzeni -->
-            <details class="gelismis-akordeon" id="detay-gelismis-zorluk-sik">
+            <details class="gelismis-akordeon" id="detay-gelismis-zorluk-sik" data-uzman>
               <summary>
                 <span>Zorluk ve şık düzeni</span>
                 <svg class="ui-ikon"><use href="#i-chevron-down"></use></svg>
@@ -564,7 +565,12 @@
             </details>
 
             <!-- GELİŞMİŞ 3: Başlık ve Kurumsal Künye -->
-            <details class="gelismis-akordeon" id="detay-gelismis-baslik-kunye">
+            <div class="gelismis-akordeon" style="padding:0.55rem 0.7rem; font-size:0.8rem; color:var(--metin-ikincil);">
+              Başlık, süre, tarih, öğretim elemanı ve belge no artık tek yerde:
+              <button type="button" class="btn btn-kucuk" id="btn-sinav-bilgilerine-git" style="margin-top:0.35rem; width:100%;">Çıktı Merkezi › Sınav bilgileri</button>
+            </div>
+            <!-- Eski yinelenen alanlar: görünmez yedek (kod ve eski kayıtlar bu kimliklerle okur), tek görünür yer Çıktı Merkezi -->
+            <details class="gelismis-akordeon" id="detay-gelismis-baslik-kunye" hidden style="display:none;">
               <summary>
                 <span>Başlık ve kurumsal künye</span>
                 <svg class="ui-ikon"><use href="#i-chevron-down"></use></svg>
@@ -633,7 +639,7 @@
             </details>
 
             <!-- GELİŞMİŞ 4: PDF Arka Plan Kesiti -->
-            <details class="gelismis-akordeon" id="detay-gelismis-pdf-kesit">
+            <details class="gelismis-akordeon" id="detay-gelismis-pdf-kesit" data-uzman>
               <summary>
                 <span>PDF arka plan kesiti</span>
                 <svg class="ui-ikon"><use href="#i-chevron-down"></use></svg>
@@ -746,7 +752,7 @@
             </div>
           </div>
 
-          <details id="detay-canli-belirtke" class="yazdir-gizle" style="margin-bottom:var(--b-3); background:var(--bg-kart); border:1px solid var(--kenar); border-radius:var(--radius); padding:8px 12px;">
+          <details id="detay-canli-belirtke" data-uzman class="yazdir-gizle" style="margin-bottom:var(--b-3); background:var(--bg-kart); border:1px solid var(--kenar); border-radius:var(--radius); padding:8px 12px;">
             <summary style="font-size:var(--yazi-xs); font-weight:600; cursor:pointer; color:var(--metin-ikincil);">
               Canlı Sınav Belirtke Tablosu (Hafta × Bologna ÖÇ × Soru Türü × Zorluk × Puan)
             </summary>
@@ -799,6 +805,7 @@
 
             <!-- 1B) Sınav Kağıdı SeçiliOlduğunda Görünen Hızlı Başlık, Sınav Süresi, Tarih ve Seçmeli Künye Çubuğu -->
             <div id="panel-kagit-bilgi" style="margin-bottom:0.5rem; padding:0.6rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:var(--radius-kucuk);">
+              <div style="font-weight:800; font-size:0.84rem; margin-bottom:0.4rem;">📋 Sınav bilgileri <span style="font-weight:400; font-size:0.74rem; color:var(--metin-ikincil);">(kağıt, tutanak ve yoklama buradan alır)</span></div>
               <div class="form-satir" style="margin-bottom:0.4rem;">
                 <div>
                   <label class="etiket" for="kagit-hizli-sure" style="color:var(--birincil); font-weight:800;">Sınav Süresi</label>
@@ -1041,9 +1048,9 @@
             </div>
 
             <!-- 5) Çıktı önizlemesi: katlanabilir çekmece (varsayılan kapalı, DOM'da canlı) -->
-            <details class="mini-onizleme-cekmecesi">
+            <details class="mini-onizleme-cekmecesi" open>
               <summary>
-                <span>Çoklu Sayfa Küçük Önizleme Şeridi (Tıklayıp Aç/Kapat)</span>
+                <span>👁 Seçili belgenin önizlemesi (ayar değiştikçe güncellenir)</span>
                 <span id="etiket-baski-ozet" style="font-size:0.76rem; color:var(--metin-ikincil);"></span>
               </summary>
               <div id="baski-mini-onizleme" class="mini-onizleme-seridi" aria-label="Seçili belgenin ilk sayfaları"></div>
@@ -1518,8 +1525,10 @@
             </div>
           </div>
 
-          <!-- Etkileşimli OMR Simülatörü (Kamerasız Test & Kalibrasyon) -->
-          <div class="kart">
+          <!-- Etkileşimli OMR Simülatörü (Kamerasız Test & Kalibrasyon) — gelişmiş, kapalı başlar -->
+          <details class="gelismis-akordeon" id="detay-okuma-deneme" data-uzman style="margin-bottom:0.85rem;">
+            <summary>Gelişmiş: okumayı örnek kağıtla dene</summary>
+          <div class="kart" style="margin:0.5rem 0 0;">
             <div class="kart-baslik">
               <span>2. Okuma ayarlarını dene (gelişmiş)</span>
               <span class="rozet rozet-yesil" title="7 adımlı görüntü işleme: adaptif eşikleme, homografi, balon kontrastı">Deneme ⓘ</span>
@@ -1566,6 +1575,7 @@
               </button>
             </div>
           </div>
+          </details>
 
           <!-- Öğretmen İnceleme Kuyruğu (Düşük Güvenilirlik / Silinti) -->
           <div class="kart">
@@ -1587,13 +1597,15 @@
               <span class="rozet rozet-mavi" id="rozet-son-okuma-guven">Hazır</span>
             </div>
 
+            <div id="omr-uyari-kutu" role="alert" hidden style="margin-top:0.4rem; padding:0.5rem 0.7rem; border-radius:6px; background:#fef3c7; color:#92400e; font-weight:700; font-size:0.85rem;"></div>
+            <details id="detay-okuma-goruntu" style="margin-bottom:0.85rem;">
+              <summary style="cursor:pointer; font-size:0.8rem; font-weight:700; color:var(--metin-ikincil); margin-bottom:0.4rem;">Kağıt görüntüsünü göster</summary>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; margin-bottom:0.85rem;">
               <div>
                 <div style="font-size:0.78rem; font-weight:700; margin-bottom:0.25rem; color:var(--metin-ikincil);">
                   1. Okunan kağıt
                 </div>
                 <canvas id="canvas-omr-girdi" width="800" height="420" style="width:100%; border:1px solid var(--kenar-koyu); border-radius:6px; background:#fff;"></canvas>
-              <div id="omr-uyari-kutu" role="alert" hidden style="margin-top:0.4rem; padding:0.5rem 0.7rem; border-radius:6px; background:#fef3c7; color:#92400e; font-weight:700; font-size:0.85rem;"></div>
               </div>
               <div>
                 <div style="font-size:0.78rem; font-weight:700; margin-bottom:0.25rem; color:var(--metin-ikincil);">
@@ -1602,6 +1614,7 @@
                 <canvas id="canvas-omr-islenmis" width="800" height="420" style="width:100%; border:1px solid var(--kenar-koyu); border-radius:6px; background:#fff;"></canvas>
               </div>
             </div>
+            </details>
 
             <!-- Son Okunan Kağıdın Detaylı Sonuç Fişi -->
             <div id="kutu-son-okunan-detay" style="padding:0.85rem; background:var(--bg-ikincil); border-radius:var(--radius-kucuk); border:1px solid var(--kenar);">
@@ -1624,6 +1637,10 @@
             </div>
           </div>
 
+          <div id="uyari-kopya-okuma" class="yazdir-gizle" role="status" hidden style="margin-bottom:0.6rem; padding:0.55rem 0.8rem; border-radius:8px; background:#fef2f2; border:1px solid #fca5a5; color:#991b1b; font-size:0.86rem; justify-content:space-between; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <span data-kopya-uyari-metin></span>
+            <button type="button" class="btn btn-kucuk" data-kopya-raporu-ac>Kopya raporunu aç</button>
+          </div>
           <!-- Okunan Kağıtlar Tablosu -->
           <div class="kart">
             <div class="kart-baslik">
@@ -1715,18 +1732,23 @@
       <div class="yazdir-gizle" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:var(--b-4);">
         <div class="bolmeli-secici" id="analiz-alt-sekmeler" aria-label="Değerlendirme Bölümleri">
           <button type="button" data-alt="tumu" class="aktif">Tümü</button>
-          <button type="button" data-alt="sorular">Sorular</button>
-          <button type="button" data-alt="ogrenciler">Öğrenciler</button>
-          <button type="button" data-alt="kazanimlar">Kazanımlar</button>
-          <button type="button" data-alt="benzerlik">Benzerlik</button>
-          <button type="button" data-alt="raporlar">Raporlar</button>
+          <button type="button" data-alt="ogrenciler" title="Not çizelgesi (OBS), sınava girmeyenler (GR)">Notlar</button>
+          <button type="button" data-alt="sorular" title="Soru zorluğu, ayırt edicilik, dikkat isteyen sorular">Soru analizi</button>
+          <button type="button" data-alt="kazanimlar" title="Öğrenim çıktıları (ÖÇ) başarısı ve dönem sonu birleştirme">Öğrenim çıktıları</button>
+          <button type="button" data-alt="benzerlik" title="Ortak yanlış analizi">Kopya</button>
+          <button type="button" data-alt="raporlar" title="Program çıktıları ve ders iyileştirme raporu">Raporlar</button>
         </div>
-        <div style="display:inline-flex; gap:14px; flex-wrap:wrap; font-size:var(--yazi-xs); color:var(--metin-ikincil); font-variant-numeric:tabular-nums;">
+        <div data-uzman style="display:inline-flex; gap:14px; flex-wrap:wrap; font-size:var(--yazi-xs); color:var(--metin-ikincil); font-variant-numeric:tabular-nums;">
           <span>Std. Sapma: <strong id="ist-sapma">0.0</strong></span>
           <span>Medyan: <strong id="ist-medyan">0.0</strong></span>
           <span>En Yüksek / Düşük: <strong id="ist-min-max">0 / 0</strong></span>
           <span>Std. Hata (SE): <strong id="ist-se">±0.0</strong></span>
         </div>
+      </div>
+
+      <div id="uyari-kopya-supheli" class="yazdir-gizle" role="status" hidden style="margin-bottom:var(--b-3); padding:0.55rem 0.8rem; border-radius:8px; background:#fef2f2; border:1px solid #fca5a5; color:#991b1b; font-size:0.86rem; justify-content:space-between; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+        <span data-kopya-uyari-metin></span>
+        <button type="button" class="btn btn-kucuk" data-kopya-raporu-ac>Kopya raporunu aç</button>
       </div>
 
       <!-- Sade Türkçe "Dikkat İsteyen Sorular" Kartı (Canlı İptal Simülasyonlu) -->
@@ -1739,9 +1761,9 @@
       </div>
 
       <!-- Puanlama Kuralları ve Resmi Dışa Aktarım -->
-      <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="sorular">
+      <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="ogrenciler">
         <div class="kart-baslik">
-          <span>Puanlama Kuralları ve Çıktılar</span>
+          <span>Notlar ve OBS çıktısı</span>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
             <button type="button" class="btn btn-birincil btn-kucuk" id="btn-obs-resmi-csv-indir" title="Sınava girmeyenleri GR olarak işaretleyen ve Harf Notu hesaplayan tam sınıf çizelgesi">
               OBS Resmi Not Çizelgesi (GR + Harf)
@@ -2059,6 +2081,10 @@
               <button type="button" class="btn btn-kucuk" id="btn-yoklama-cizelgesi-yazdir" title="Sınav Yoklama Evrakını (İmza Çizelgesi) A4 olarak yazdır">İmzalı Yoklama Çizelgesi Yazdır</button>
             </div>
           </div>
+          <details id="detay-yoklama-onizleme" style="margin:0 0 0.6rem;">
+            <summary style="cursor:pointer; font-size:0.8rem; font-weight:700; color:var(--metin-ikincil);">👁 Yoklama evrakı önizlemesi (seçili sayfa kapasitesiyle)</summary>
+            <div id="onizleme-yoklama-evraki" class="mini-onizleme-seridi" style="margin-top:0.4rem;"></div>
+          </details>
           <div class="tablo-sarmal">
             <table class="veri-tablo">
               <thead>
@@ -2223,15 +2249,20 @@
                 <input type="checkbox" id="online-degisen-salon-kodu" style="width:auto;" />
                 <span>Her dakika değişen salon kodu (projeksiyon)</span>
               </label>
-              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;" title="Yalnız Safe Exam Browser ile girilebilir (laboratuvar bilgisayarları)">
+            </div>
+            <details class="gelismis-akordeon" id="detay-online-ek-guvenlik" data-uzman style="margin-top:0.45rem;">
+              <summary>Ek güvenlik: laboratuvar ve okul ağı</summary>
+              <div style="font-size:0.78rem; margin-top:0.4rem;">
+                <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;" title="Yalnız Safe Exam Browser ile girilebilir (laboratuvar bilgisayarları)">
                 <input type="checkbox" id="online-seb-zorunlu" style="width:auto;" />
                 <span>Yalnız Safe Exam Browser (laboratuvar)</span>
               </label>
-            </div>
-            <div style="margin-top:0.45rem;">
+                <div style="margin-top:0.45rem;">
               <label class="etiket" for="online-izinli-ag">Yalnız bu ağlardan giriş (isteğe bağlı, IP ön ekleri, virgülle)</label>
               <input type="text" id="online-izinli-ag" placeholder="Boş = her yerden · Örn: 193.140.250., 10.12." style="width:100%;" />
             </div>
+              </div>
+            </details>
             <div style="margin-top:0.45rem;">
               <button type="button" class="btn btn-kucuk" id="btn-online-salon-kodu-goster">📺 Değişen salon kodunu tam ekran göster</button>
             </div>
@@ -2418,6 +2449,7 @@
 
             <div class="form-grup">
               <label class="etiket" for="sablon-ust-antet">1) Sınav Kağıdı Üst Antet Şablonu</label>
+              <div style="font-size:0.72rem; color:#b45309; margin:-0.1rem 0 0.25rem;">ⓘ Bu satır şablonda saklanır; şu an basılan belgelere yansımaz (önizlemede görürsünüz).</div>
               <input type="text" id="sablon-ust-antet" value="{{KURUM_ADI}} — {{BIRIM_ADI}} | {{DERS_KODU}} {{DERS_ADI}} ({{SINAV_TURU}})" />
             </div>
             <div class="form-grup">
@@ -2428,11 +2460,11 @@
             <div class="form-satir">
               <div>
                 <label class="etiket" for="sablon-yoklama-baslik">2) Resmi Yoklama Listesi Başlığı</label>
-                <input type="text" id="sablon-yoklama-baslik" value="RESMİ SINAV YOKLAMA VE KİTAPÇIK İMZA ÇİZELGESİ" />
+                <input type="text" id="sablon-yoklama-baslik" title="Şablonda saklanır; şu an yoklama evrakının başlığını değiştirmez" value="RESMİ SINAV YOKLAMA VE KİTAPÇIK İMZA ÇİZELGESİ" />
               </div>
               <div>
                 <label class="etiket" for="sablon-tutanak-baslik">3) Sınav Durum Tutanağı Başlığı</label>
-                <input type="text" id="sablon-tutanak-baslik" value="SINAV UYGULAMA VE EVRAK TESLİM TUTANAĞI" />
+                <input type="text" id="sablon-tutanak-baslik" title="Şablonda saklanır; şu an tutanak başlığını değiştirmez" value="SINAV UYGULAMA VE EVRAK TESLİM TUTANAĞI" />
               </div>
             </div>
 
@@ -2460,9 +2492,24 @@
 
         <!-- Sağ: Canlı Antet Önizlemesi & Kayıtlı Kurumsal Şablonlar Kütüphanesi -->
         <div>
+          <div class="kart" id="kart-kurum-belge-onizleme">
+            <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;">
+              <span>👁 Belge önizlemesi (gerçek çıktı)</span>
+              <select id="sec-kurum-onizleme-belge" aria-label="Önizlenecek belge" style="width:auto;">
+                <option value="sinif-aktif">Sınav kağıdı</option>
+                <option value="ayri-optik">Optik cevap formu</option>
+                <option value="anahtar">Cevap anahtarı</option>
+                <option value="tutanak">Sınav durum tutanağı</option>
+                <option value="yoklama">Yoklama evrakı</option>
+                <option value="okunur-yoklama">Okunabilir yoklama</option>
+              </select>
+            </div>
+            <p style="font-size:0.76rem; color:var(--metin-ikincil); margin:0 0 0.4rem;">Soldaki alanları değiştirdikçe seçili belge burada, basılacağı haliyle güncellenir. Kaydetmeden önce kontrol edin.</p>
+            <div id="onizleme-kurum-belge" class="mini-onizleme-seridi" aria-label="Kurum şablonuyla belge önizlemesi"></div>
+          </div>
           <div class="kart">
             <div class="kart-baslik">
-              <span>Canlı Kurumsal Antet &amp; Alt Künye Önizlemesi</span>
+              <span>Şablon özeti</span>
               <span class="rozet rozet-yesil">A4 Üst / Alt Şerit</span>
             </div>
             <div id="onizleme-kurum-antet" style="padding:0.85rem; background:#ffffff; border:1.5px solid #0f172a; border-radius:8px; font-size:0.8rem;"></div>
@@ -3484,7 +3531,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261115b"></script>
-  <script src="studyo-uygulama.js?v=20261115b"></script>
+  <script src="guvenlik-ve-veri.js?v=20261115c"></script>
+  <script src="studyo-uygulama.js?v=20261115c"></script>
 </body>
 </html>
