@@ -1876,7 +1876,7 @@
     const seciliKayit = dersKayitlari.find((k) => k.id === durum.aktifKayitliSinavId) || null;
 
     const opsiyonHTML = [
-      '<option value="">Canlı Çalışma Taslağı (Düzenlenebilir)</option>',
+      '<option value="">Taslak (kaydedilmedi)</option>',
       ...dersKayitlari.map((k) => {
         const kilitSimge = k.basildiKilidi ? '[Kilitli] ' : '';
         const soruTop = (Number(k.ayarlar && k.ayarlar.dySayisi) || 0)
@@ -1923,7 +1923,7 @@
     } else {
       if (rozetKilit) {
         rozetKilit.className = 'rozet rozet-mavi';
-        rozetKilit.textContent = 'Canlı Taslak';
+        rozetKilit.textContent = 'Taslak';
       }
       if (bilgiEl) {
         bilgiEl.textContent = `Bu derste ${dersKayitlari.length} kayıtlı sınav var. Sınavı kaydettiğinizde soruları ve A/B/C/D anahtarları sabitlenir.`;
@@ -8764,6 +8764,7 @@
         btn.classList.add('aktif');
         const hedef = document.getElementById(hedefId);
         if (hedef) hedef.classList.add('aktif');
+        if (typeof window.__guncelleDerslerVeBosDurumUI === 'function') window.__guncelleDerslerVeBosDurumUI();
       });
     });
 
@@ -14711,7 +14712,9 @@ Yine de çıktı alınsın mı?`)) {
       if (rozetDersSayisi) rozetDersSayisi.textContent = String(dersler.length);
 
       const bosKart = document.getElementById('bos-durum-ilk-kurulum');
-      if (bosKart) bosKart.hidden = dersler.length > 0;
+      const aktifPanel = document.querySelector('.sekme-panel.aktif');
+      const anaEkranMi = !aktifPanel || ['sekme-stüdyo', 'sekme-dersler'].includes(aktifPanel.id);
+      if (bosKart) bosKart.hidden = dersler.length > 0 || !anaEkranMi;
 
       const listeEl = document.getElementById('liste-sekme-dersler');
       const baslikDetay = document.getElementById('baslik-aktif-ders-detay');
