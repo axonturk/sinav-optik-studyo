@@ -8780,6 +8780,27 @@
       });
     });
 
+    // Basit / Uzman görünümü (kalıcı; varsayılan Basit)
+    const GORUNUM_DEPO = 'SINAV_STUDYO_GORUNUM_MODU';
+    const uygulaGorunumModu = (mod) => {
+      const uzman = mod === 'uzman';
+      document.documentElement.setAttribute('data-gorunum', uzman ? 'uzman' : 'basit');
+      const b = document.getElementById('btn-gorunum-modu');
+      if (b) {
+        b.textContent = uzman ? '🛠️ Uzman görünüm' : '🧭 Basit görünüm';
+        b.setAttribute('aria-pressed', uzman ? 'true' : 'false');
+      }
+    };
+    let kayitliGorunum = 'basit';
+    try { kayitliGorunum = localStorage.getItem(GORUNUM_DEPO) || 'basit'; } catch (_) {}
+    uygulaGorunumModu(kayitliGorunum);
+    const btnGorunumModu = document.getElementById('btn-gorunum-modu');
+    if (btnGorunumModu) btnGorunumModu.addEventListener('click', () => {
+      const yeni = document.documentElement.getAttribute('data-gorunum') === 'uzman' ? 'basit' : 'uzman';
+      uygulaGorunumModu(yeni);
+      try { localStorage.setItem(GORUNUM_DEPO, yeni); } catch (_) {}
+    });
+
     // Tema Değiştirici (localStorage kalıcı, A4 önizleme beyaz kağıt korunur)
     const uygulaTemaUI = (tema) => {
       const koyuMu = tema === 'koyu';

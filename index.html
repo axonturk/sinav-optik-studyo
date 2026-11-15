@@ -216,6 +216,7 @@
               <svg class="ui-ikon"><use href="#i-undo"></use></svg>
               <span>Geri Al</span>
             </button>
+            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-gorunum-modu" aria-pressed="false" title="Basit: yalnız temel adımlar görünür. Uzman: tüm gelişmiş ayarlar açılır. Hiçbir özellik silinmez.">🧭 Basit görünüm</button>
             <button type="button" class="btn btn-hayalet btn-kucuk btn-kaydet-onayla-ana" id="btn-genel-kaydet-uygula" title="Değişiklikleri kaydet ve uygula (Ctrl+S)">
               Kaydet
             </button>
@@ -451,7 +452,7 @@
             </div>
 
             <!-- GELİŞMİŞ 1: Hafta Kotası ve ÖÇ Kuralları -->
-            <details class="gelismis-akordeon" id="detay-gelismis-hafta-oc">
+            <details class="gelismis-akordeon" id="detay-gelismis-hafta-oc" data-uzman>
               <summary>
                 <span>Hafta kotası ve ÖÇ kuralları</span>
                 <svg class="ui-ikon"><use href="#i-chevron-down"></use></svg>
@@ -503,7 +504,7 @@
             </details>
 
             <!-- GELİŞMİŞ 2: Zorluk ve Şık Düzeni -->
-            <details class="gelismis-akordeon" id="detay-gelismis-zorluk-sik">
+            <details class="gelismis-akordeon" id="detay-gelismis-zorluk-sik" data-uzman>
               <summary>
                 <span>Zorluk ve şık düzeni</span>
                 <svg class="ui-ikon"><use href="#i-chevron-down"></use></svg>
@@ -638,7 +639,7 @@
             </details>
 
             <!-- GELİŞMİŞ 4: PDF Arka Plan Kesiti -->
-            <details class="gelismis-akordeon" id="detay-gelismis-pdf-kesit">
+            <details class="gelismis-akordeon" id="detay-gelismis-pdf-kesit" data-uzman>
               <summary>
                 <span>PDF arka plan kesiti</span>
                 <svg class="ui-ikon"><use href="#i-chevron-down"></use></svg>
@@ -751,7 +752,7 @@
             </div>
           </div>
 
-          <details id="detay-canli-belirtke" class="yazdir-gizle" style="margin-bottom:var(--b-3); background:var(--bg-kart); border:1px solid var(--kenar); border-radius:var(--radius); padding:8px 12px;">
+          <details id="detay-canli-belirtke" data-uzman class="yazdir-gizle" style="margin-bottom:var(--b-3); background:var(--bg-kart); border:1px solid var(--kenar); border-radius:var(--radius); padding:8px 12px;">
             <summary style="font-size:var(--yazi-xs); font-weight:600; cursor:pointer; color:var(--metin-ikincil);">
               Canlı Sınav Belirtke Tablosu (Hafta × Bologna ÖÇ × Soru Türü × Zorluk × Puan)
             </summary>
@@ -1525,7 +1526,7 @@
           </div>
 
           <!-- Etkileşimli OMR Simülatörü (Kamerasız Test & Kalibrasyon) — gelişmiş, kapalı başlar -->
-          <details class="gelismis-akordeon" id="detay-okuma-deneme" style="margin-bottom:0.85rem;">
+          <details class="gelismis-akordeon" id="detay-okuma-deneme" data-uzman style="margin-bottom:0.85rem;">
             <summary>Gelişmiş: okumayı örnek kağıtla dene</summary>
           <div class="kart" style="margin:0.5rem 0 0;">
             <div class="kart-baslik">
@@ -1737,7 +1738,7 @@
           <button type="button" data-alt="benzerlik" title="Ortak yanlış analizi">Kopya</button>
           <button type="button" data-alt="raporlar" title="Program çıktıları ve ders iyileştirme raporu">Raporlar</button>
         </div>
-        <div style="display:inline-flex; gap:14px; flex-wrap:wrap; font-size:var(--yazi-xs); color:var(--metin-ikincil); font-variant-numeric:tabular-nums;">
+        <div data-uzman style="display:inline-flex; gap:14px; flex-wrap:wrap; font-size:var(--yazi-xs); color:var(--metin-ikincil); font-variant-numeric:tabular-nums;">
           <span>Std. Sapma: <strong id="ist-sapma">0.0</strong></span>
           <span>Medyan: <strong id="ist-medyan">0.0</strong></span>
           <span>En Yüksek / Düşük: <strong id="ist-min-max">0 / 0</strong></span>
@@ -2245,7 +2246,7 @@
                 <span>Her dakika değişen salon kodu (projeksiyon)</span>
               </label>
             </div>
-            <details class="gelismis-akordeon" id="detay-online-ek-guvenlik" style="margin-top:0.45rem;">
+            <details class="gelismis-akordeon" id="detay-online-ek-guvenlik" data-uzman style="margin-top:0.45rem;">
               <summary>Ek güvenlik: laboratuvar ve okul ağı</summary>
               <div style="font-size:0.78rem; margin-top:0.4rem;">
                 <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;" title="Yalnız Safe Exam Browser ile girilebilir (laboratuvar bilgisayarları)">

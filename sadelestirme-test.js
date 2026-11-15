@@ -121,6 +121,22 @@ function kontrol(ad, kosul, detay = '') {
     const a4 = await pc.$eval('#a4-onizleme-sahne', (e) => e.textContent);
     kontrol('5) Sınav kağıdında yeni süre ve okul adı görünür', /75 Dakika/.test(a4) && /DENEME MESLEK YÜKSEKOKULU/.test(a4));
 
+    // 6) Basit / Uzman
+    const gorunurMu = (id) => pc.evaluate((i) => { const e = document.getElementById(i); return !!e && e.getClientRects().length > 0; }, id);
+    await pc.click('.sekme-btn[data-sekme="sekme-stüdyo"]');
+    await bekle(200);
+    const basit = { mod: await pc.evaluate(() => document.documentElement.getAttribute('data-gorunum')), hafta: await gorunurMu('detay-gelismis-hafta-oc'), yapi: await gorunurMu('rozet-toplam-puan'), dugme: await pc.$eval('#btn-gorunum-modu', (e) => e.textContent) };
+    kontrol('6) Varsayılan Basit görünüm: gelişmiş ayarlar gizli, temel "Sınav Yapısı" görünür', basit.mod === 'basit' && !basit.hafta && basit.yapi && /Basit/.test(basit.dugme), JSON.stringify(basit));
+    await pc.click('#btn-gorunum-modu');
+    await bekle(150);
+    const uzman = { mod: await pc.evaluate(() => document.documentElement.getAttribute('data-gorunum')), hafta: await gorunurMu('detay-gelismis-hafta-oc'), dugme: await pc.$eval('#btn-gorunum-modu', (e) => e.textContent) };
+    kontrol('6) "Uzman"a geçince gelişmiş ayarlar görünür (hiçbir özellik silinmedi)', uzman.mod === 'uzman' && uzman.hafta && /Uzman/.test(uzman.dugme), JSON.stringify(uzman));
+    await pc.reload({ waitUntil: 'networkidle0' });
+    await girisYap();
+    const kalici = await pc.evaluate(() => document.documentElement.getAttribute('data-gorunum'));
+    kontrol('6) Görünüm seçimi sayfa yenilenince hatırlanır', kalici === 'uzman', kalici);
+    await pc.click('#btn-gorunum-modu');
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;
