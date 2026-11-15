@@ -564,7 +564,12 @@
             </details>
 
             <!-- GELİŞMİŞ 3: Başlık ve Kurumsal Künye -->
-            <details class="gelismis-akordeon" id="detay-gelismis-baslik-kunye">
+            <div class="gelismis-akordeon" style="padding:0.55rem 0.7rem; font-size:0.8rem; color:var(--metin-ikincil);">
+              Başlık, süre, tarih, öğretim elemanı ve belge no artık tek yerde:
+              <button type="button" class="btn btn-kucuk" id="btn-sinav-bilgilerine-git" style="margin-top:0.35rem; width:100%;">Çıktı Merkezi › Sınav bilgileri</button>
+            </div>
+            <!-- Eski yinelenen alanlar: görünmez yedek (kod ve eski kayıtlar bu kimliklerle okur), tek görünür yer Çıktı Merkezi -->
+            <details class="gelismis-akordeon" id="detay-gelismis-baslik-kunye" hidden style="display:none;">
               <summary>
                 <span>Başlık ve kurumsal künye</span>
                 <svg class="ui-ikon"><use href="#i-chevron-down"></use></svg>
@@ -799,6 +804,7 @@
 
             <!-- 1B) Sınav Kağıdı SeçiliOlduğunda Görünen Hızlı Başlık, Sınav Süresi, Tarih ve Seçmeli Künye Çubuğu -->
             <div id="panel-kagit-bilgi" style="margin-bottom:0.5rem; padding:0.6rem; background:var(--bg-ikincil); border:1px solid var(--kenar); border-radius:var(--radius-kucuk);">
+              <div style="font-weight:800; font-size:0.84rem; margin-bottom:0.4rem;">📋 Sınav bilgileri <span style="font-weight:400; font-size:0.74rem; color:var(--metin-ikincil);">(kağıt, tutanak ve yoklama buradan alır)</span></div>
               <div class="form-satir" style="margin-bottom:0.4rem;">
                 <div>
                   <label class="etiket" for="kagit-hizli-sure" style="color:var(--birincil); font-weight:800;">Sınav Süresi</label>

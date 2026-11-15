@@ -10764,6 +10764,34 @@ Yine de çıktı alınsın mı?`)) {
     ciftYonluBagla('kagit-hizli-sinav-ad', 'antet-sinav-ad');
     ciftYonluBagla('kagit-hizli-kurum', 'antet-kurum');
     ciftYonluBagla('kagit-hizli-hoca', 'antet-hoca');
+    // TEK KAYNAK: aynı bilgi (süre, tarih, sınav adı, okul) hangi kutuda yazılırsa yazılsın her yere ve
+    // kalıcı şablona işlenir; "Kaydet" ya da sayfa yenilemesi yazılanı eski değere döndürmez.
+    const tekKaynakGrubu = (ids, sablonaYaz) => {
+      ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const yay = () => {
+          ids.forEach((digerId) => {
+            const o = document.getElementById(digerId);
+            if (o && o !== el && o.value !== el.value) o.value = el.value;
+          });
+          if (!durum.evrakSablonu || typeof durum.evrakSablonu !== 'object') durum.evrakSablonu = {};
+          sablonaYaz(String(el.value || '').trim());
+        };
+        el.addEventListener('input', yay);
+        el.addEventListener('change', () => { yay(); verileriKaydet(); });
+      });
+    };
+    tekKaynakGrubu(['kagit-hizli-sure', 'antet-sure'], (v) => { if (v) durum.evrakSablonu.sure = v; });
+    tekKaynakGrubu(['kagit-hizli-tarih', 'antet-tarih'], (v) => { durum.evrakSablonu.tarih = v; });
+    tekKaynakGrubu(['kagit-hizli-sinav-ad', 'antet-sinav-ad'], (v) => { if (v) durum.evrakSablonu.sinavAd = v; });
+    tekKaynakGrubu(['kagit-hizli-kurum', 'antet-kurum', 'tut-fakulte'], (v) => {
+      if (!v) return;
+      durum.evrakSablonu.kurum = v;
+      durum.evrakSablonu.fakulte = v;
+      const aktifDersK = durum.dersler.find((d) => d.id === durum.aktifDersId) || null;
+      if (aktifDersK) aktifDersK.fakulte = v;
+    });
     const esitleOgretimElemani = (yeniAd) => {
       const temiz = String(yeniAd || '').trim();
       const aktifDers = durum.dersler.find((d) => d.id === durum.aktifDersId) || durum.dersler[0] || null;
@@ -10790,6 +10818,13 @@ Yine de çıktı alınsın mı?`)) {
     ciftYonluBagla('kagit-hizli-yayin-tarihi', 'kalite-yayin-tarihi');
     ciftYonluBagla('kagit-hizli-revizyon', 'kalite-revizyon');
 
+    const btnSinavBilgilerineGit = document.getElementById('btn-sinav-bilgilerine-git');
+    if (btnSinavBilgilerineGit) btnSinavBilgilerineGit.addEventListener('click', () => {
+      const kapsamSec = document.getElementById('baski-kapsam-sec');
+      if (kapsamSec && TUTANAK_KAPSAMLARI.includes(kapsamSec.value)) { kapsamSec.value = 'sinif-aktif'; kapsamSec.dispatchEvent(new Event('change')); }
+      const panel = document.getElementById('panel-kagit-bilgi');
+      if (panel) { panel.scrollIntoView({ block: 'center', behavior: 'smooth' }); const ilk = document.getElementById('kagit-hizli-sure'); if (ilk) ilk.focus({ preventScroll: true }); }
+    });
     const btnKagitSablonKaydet = document.getElementById('btn-kagit-sablon-kaydet');
     if (btnKagitSablonKaydet) {
       btnKagitSablonKaydet.addEventListener('click', () => {
