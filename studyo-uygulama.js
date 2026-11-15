@@ -5092,6 +5092,8 @@
      ------------------------------------------------------------------------ */
   function cizOmrIslemRontgeni(sonuc) {
     const canvas = document.getElementById('canvas-omr-islenmis');
+    const detayGoruntu = document.getElementById('detay-okuma-goruntu');
+    if (detayGoruntu) detayGoruntu.open = true; // okunan kağıt renkli halkalarla gözle kontrol edilebilsin
     if (!canvas || !sonuc || !sonuc.kanonikIkili) return;
     const ctx = canvas.getContext('2d');
     const gen = sonuc.kanonikBoyut.genislik;

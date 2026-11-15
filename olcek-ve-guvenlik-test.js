@@ -940,6 +940,7 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
     // 4f. GR Mutabakatı & CSV BOM/Formül Enjeksiyon Koruması
     await sayfa.click('[data-sekme="sekme-omr"]');
     await bekle(200);
+    await sayfa.evaluate(() => { const d = document.getElementById('detay-okuma-deneme'); if (d) d.open = true; });
     await sayfa.click('#btn-sim-tek-tara');
     await bekle(350);
     await sayfa.click('[data-sekme="sekme-analiz"]');

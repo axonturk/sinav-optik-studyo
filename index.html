@@ -1518,8 +1518,10 @@
             </div>
           </div>
 
-          <!-- Etkileşimli OMR Simülatörü (Kamerasız Test & Kalibrasyon) -->
-          <div class="kart">
+          <!-- Etkileşimli OMR Simülatörü (Kamerasız Test & Kalibrasyon) — gelişmiş, kapalı başlar -->
+          <details class="gelismis-akordeon" id="detay-okuma-deneme" style="margin-bottom:0.85rem;">
+            <summary>Gelişmiş: okumayı örnek kağıtla dene</summary>
+          <div class="kart" style="margin:0.5rem 0 0;">
             <div class="kart-baslik">
               <span>2. Okuma ayarlarını dene (gelişmiş)</span>
               <span class="rozet rozet-yesil" title="7 adımlı görüntü işleme: adaptif eşikleme, homografi, balon kontrastı">Deneme ⓘ</span>
@@ -1566,6 +1568,7 @@
               </button>
             </div>
           </div>
+          </details>
 
           <!-- Öğretmen İnceleme Kuyruğu (Düşük Güvenilirlik / Silinti) -->
           <div class="kart">
@@ -1587,13 +1590,15 @@
               <span class="rozet rozet-mavi" id="rozet-son-okuma-guven">Hazır</span>
             </div>
 
+            <div id="omr-uyari-kutu" role="alert" hidden style="margin-top:0.4rem; padding:0.5rem 0.7rem; border-radius:6px; background:#fef3c7; color:#92400e; font-weight:700; font-size:0.85rem;"></div>
+            <details id="detay-okuma-goruntu" style="margin-bottom:0.85rem;">
+              <summary style="cursor:pointer; font-size:0.8rem; font-weight:700; color:var(--metin-ikincil); margin-bottom:0.4rem;">Kağıt görüntüsünü göster</summary>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; margin-bottom:0.85rem;">
               <div>
                 <div style="font-size:0.78rem; font-weight:700; margin-bottom:0.25rem; color:var(--metin-ikincil);">
                   1. Okunan kağıt
                 </div>
                 <canvas id="canvas-omr-girdi" width="800" height="420" style="width:100%; border:1px solid var(--kenar-koyu); border-radius:6px; background:#fff;"></canvas>
-              <div id="omr-uyari-kutu" role="alert" hidden style="margin-top:0.4rem; padding:0.5rem 0.7rem; border-radius:6px; background:#fef3c7; color:#92400e; font-weight:700; font-size:0.85rem;"></div>
               </div>
               <div>
                 <div style="font-size:0.78rem; font-weight:700; margin-bottom:0.25rem; color:var(--metin-ikincil);">
@@ -1602,6 +1607,7 @@
                 <canvas id="canvas-omr-islenmis" width="800" height="420" style="width:100%; border:1px solid var(--kenar-koyu); border-radius:6px; background:#fff;"></canvas>
               </div>
             </div>
+            </details>
 
             <!-- Son Okunan Kağıdın Detaylı Sonuç Fişi -->
             <div id="kutu-son-okunan-detay" style="padding:0.85rem; background:var(--bg-ikincil); border-radius:var(--radius-kucuk); border:1px solid var(--kenar);">
@@ -2223,15 +2229,20 @@
                 <input type="checkbox" id="online-degisen-salon-kodu" style="width:auto;" />
                 <span>Her dakika değişen salon kodu (projeksiyon)</span>
               </label>
-              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;" title="Yalnız Safe Exam Browser ile girilebilir (laboratuvar bilgisayarları)">
+            </div>
+            <details class="gelismis-akordeon" id="detay-online-ek-guvenlik" style="margin-top:0.45rem;">
+              <summary>Ek güvenlik: laboratuvar ve okul ağı</summary>
+              <div style="font-size:0.78rem; margin-top:0.4rem;">
+                <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;" title="Yalnız Safe Exam Browser ile girilebilir (laboratuvar bilgisayarları)">
                 <input type="checkbox" id="online-seb-zorunlu" style="width:auto;" />
                 <span>Yalnız Safe Exam Browser (laboratuvar)</span>
               </label>
-            </div>
-            <div style="margin-top:0.45rem;">
+                <div style="margin-top:0.45rem;">
               <label class="etiket" for="online-izinli-ag">Yalnız bu ağlardan giriş (isteğe bağlı, IP ön ekleri, virgülle)</label>
               <input type="text" id="online-izinli-ag" placeholder="Boş = her yerden · Örn: 193.140.250., 10.12." style="width:100%;" />
             </div>
+              </div>
+            </details>
             <div style="margin-top:0.45rem;">
               <button type="button" class="btn btn-kucuk" id="btn-online-salon-kodu-goster">📺 Değişen salon kodunu tam ekran göster</button>
             </div>

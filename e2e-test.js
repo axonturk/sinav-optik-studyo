@@ -340,6 +340,7 @@ async function main() {
 
     // ---- OMR simülasyonu: öğrenci numarası okuma ----
     await sekmeAc(sayfa, 'sekme-omr');
+    await sayfa.evaluate(() => { const d = document.getElementById('detay-okuma-deneme'); if (d) d.open = true; });
     await sayfa.click('#btn-sim-tek-tara');
     await bekle(800);
     const detay = await sayfa.$eval('#kutu-son-okunan-detay', (e) => e.textContent);
