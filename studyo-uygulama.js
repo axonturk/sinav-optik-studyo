@@ -3083,6 +3083,49 @@
   }
 
   /* Türkiye Standart Kalite Formu Anteti Üretici (ISO 9001 / YÖKAK / MÜDEK / MEB TKY / Özel Banner) */
+  /* Kurumun Word kalite formu (üst/alt bilgi) — aktif kurum şablonundan; önizlemede taslak */
+  let kurumFormuOnizlemeTaslagi = null;
+  function aktifKurumFormu(tur) {
+    const kaynak = kurumFormuOnizlemeTaslagi || (() => {
+      const liste = Array.isArray(durum.kurumsalSablonlar) ? durum.kurumsalSablonlar : [];
+      const sb = liste.find((x) => x && x.id === durum.aktifKurumSablonId);
+      return sb && sb.kurumFormlari;
+    })();
+    const k = kaynak && typeof kaynak === 'object' ? kaynak[tur] : null;
+    const model = kurumFormuModeliCoz(k);
+    if (!model) return null;
+    return {
+      ust: k.ust !== false && model.ust ? model.ust : null,
+      alt: k.alt !== false && model.alt ? model.alt : null
+    };
+  }
+  // Model, depo derinlik sınırına (12) takılmaması için JSON metni olarak saklanır; çözüm önbelleklenir
+  const kurumFormuModelOnbellek = new Map();
+  function kurumFormuModeliCoz(k) {
+    if (!k || typeof k.modelJson !== 'string' || k.modelJson.length > 6 * 1024 * 1024) return null;
+    if (kurumFormuModelOnbellek.has(k.modelJson)) return kurumFormuModelOnbellek.get(k.modelJson);
+    let model = null;
+    try { model = JSON.parse(k.modelJson); } catch (_) { model = null; }
+    if (!C.kurumFormuModeliGecerliMi(model)) model = null;
+    if (kurumFormuModelOnbellek.size > 12) kurumFormuModelOnbellek.clear();
+    kurumFormuModelOnbellek.set(k.modelJson, model);
+    return model;
+  }
+  function sayfaNoAyikla(metin) {
+    const m = String(metin || '').match(/(\d+)\s*\/\s*(\d+)/);
+    return m ? { sayfa: Number(m[1]), toplam: Number(m[2]) } : { sayfa: 1, toplam: 1 };
+  }
+  function kurumFormuUstHTML(tur, sayfa, toplam, olcek = 1) {
+    const kf = aktifKurumFormu(tur);
+    if (!kf || !kf.ust) return '';
+    return `<div class="kurum-formu-ust" style="margin-bottom:4px;">${C.kurumFormuBlokHTML(kf.ust, { sayfa, toplam, olcek })}</div>`;
+  }
+  function kurumFormuAltHTML(tur, sayfa, toplam, olcek = 1) {
+    const kf = aktifKurumFormu(tur);
+    if (!kf || !kf.alt) return '';
+    return `<div class="kurum-formu-alt" style="margin-top:auto; padding-top:3px;">${C.kurumFormuBlokHTML(kf.alt, { sayfa, toplam, olcek })}</div>`;
+  }
+
   function uretStandartKaliteAntetHTML(yapi, grupHarfi = 'A', ozelOgrenci = null) {
     const logoHTML = durum.kaliteGorselDataUrl
       ? `<img src="${C.guvenliURL(durum.kaliteGorselDataUrl)}" alt="Kurum Logosu" />`
@@ -3098,6 +3141,29 @@
       ? `${C.kacisHTML(ozelOgrenci.ozelKod || grupHarfi)} (${grupHarfi})`
       : `GRUP: ${grupHarfi}`;
     const oqv2KutuHTML = uretKagitSifreliQrHTML(yapi, grupHarfi, ozelOgrenci);
+
+    // Kurumun Word kalite formu: üst bilgi birebir + öğrenci kimlik şeridi
+    if (yapi.kaliteFormTipi === 'kurum-formu' && aktifKurumFormu('kagit') && aktifKurumFormu('kagit').ust) {
+      return `
+        <div class="kurum-formu-kagit-antet" style="margin-bottom:5px;">
+          ${kurumFormuUstHTML('kagit', 1, '__KF_TOPLAM__', 0.85)}
+          <div class="kurum-formu-sinav-bilgi" style="border:1px solid #000; border-top:none; padding:2px 5px; font-size:7.6pt; line-height:1.25;">
+            <strong>Ders:</strong> ${C.kacisHTML(yapi.ders.kod)} - ${C.kacisHTML(yapi.ders.ad)} ·
+            <strong>Sınav:</strong> ${C.kacisHTML(yapi.sinavAd)} ·
+            <strong>Tarih/Süre:</strong> ${C.kacisHTML(yapi.tarih)} (${C.kacisHTML(yapi.sure)}) ·
+            <strong>Sorumlu:</strong> ${C.kacisHTML(yapi.hoca)} ·
+            <strong>Toplam:</strong> ${C.kacisHTML(yapi.toplamPuan)} Puan
+          </div>
+          <div class="ogrenci-kimlik-serit" style="border:1px solid #000; border-top:none; padding:3px 5px; display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:7.8pt;">
+            <div class="ogrenci-kimlik-hucre">Adı Soyadı: ${adSoyadMetin}</div>
+            <div class="ogrenci-kimlik-hucre">Öğrenci No: ${ogrNoMetin}</div>
+            <div class="ogrenci-kimlik-hucre">İmza: ....................</div>
+            <span style="border:1.5px solid #000; padding:0 5px; font-weight:900;">${grupKutuMetin}</span>
+            ${oqv2KutuHTML}
+          </div>
+        </div>
+      `;
+    }
 
     // Özel Banner / Hazır PDF Form Modu (Okulun kendi PDF/Resim anteti tam genişlikte; mükerrer isim/ders satırı basılmaz!)
     if (yapi.kaliteFormTipi === 'ozel-banner' && durum.kaliteGorselDataUrl) {
@@ -3389,7 +3455,8 @@
         ? `Doküman: ${C.kacisHTML(yapi.kaliteDokumanNo)} · ${aktifGrup} KİTAPÇIĞI`
         : `${aktifGrup} KİTAPÇIĞI · Süre: ${C.kacisHTML(yapi.sure)}`);
 
-    const kaliteAltBilgiHTML = (yapi.kaliteFormTipi === 'ozel-banner' && durum.kaliteAltBilgiDataUrl)
+    const kurumKagitAltHTML = yapi.kaliteFormTipi === 'kurum-formu' ? kurumFormuAltHTML('kagit', 2, 2, 0.85) : '';
+    const kaliteAltBilgiHTML = kurumKagitAltHTML ? kurumKagitAltHTML : (yapi.kaliteFormTipi === 'ozel-banner' && durum.kaliteAltBilgiDataUrl)
       ? `
         <div style="border-top:1px solid #000; padding-top:2px; margin-top:4px; background:#fff;">
           <img src="${C.guvenliURL(durum.kaliteAltBilgiDataUrl)}" alt="Kalite Formu Alt İmza Şeridi" style="width:100%; max-height:20mm; object-fit:contain; display:block;" />
@@ -3427,7 +3494,7 @@
       `
       : '';
 
-    return sayfa1HTML + sayfa2HTML;
+    return (sayfa1HTML + sayfa2HTML).split('__KF_TOPLAM__').join(sayfa2HTML ? '2' : '1');
   }
 
   /* Ayrı Optik Cevap Kağıdı Üretici (1 A4'e 1, 2 veya 4 Adet Kesilebilir Form) */
@@ -8207,7 +8274,12 @@
       : [{ salon: { ad: (tb && tb.salon) || 'Salon 1', gozetmenler: [] }, ogrenciler: [] }];
   }
 
-  function tutanakKunyeTablosuHTML(b, baslik, dokumanNo, sayfaMetni, kompaktMi = false) {
+  function tutanakKunyeTablosuHTML(b, baslik, dokumanNo, sayfaMetni, kompaktMi = false, kurumFormTuru = null) {
+    if (kurumFormTuru) {
+      const sn = sayfaNoAyikla(sayfaMetni);
+      const kurumUst = kurumFormuUstHTML(kurumFormTuru, sn.sayfa, sn.toplam, kompaktMi ? 0.8 : 0.95);
+      if (kurumUst) return kurumUst;
+    }
     const logo = durum.kaliteGorselDataUrl
       ? `<img src="${C.guvenliURL(durum.kaliteGorselDataUrl)}" alt="Kurum Logosu" style="max-width:${kompaktMi ? '22mm' : '26mm'}; max-height:${kompaktMi ? '14mm' : '20mm'}; object-fit:contain;" />`
       : `<div style="font-size:${kompaktMi ? '15pt' : '20pt'};">🏛️</div>`;
@@ -8265,7 +8337,7 @@
     return `
       <div class="a4-sayfa">
         <div class="a4-sayfa-etiket">SINAV DURUM TUTANAĞI — ${C.kacisHTML(b.ders.kod)}</div>
-        ${tutanakKunyeTablosuHTML(b, 'SINAV DURUM TUTANAĞI', b.dokumanNoDurum, 'Sayfa 1 / 1')}
+        ${tutanakKunyeTablosuHTML(b, 'SINAV DURUM TUTANAĞI', b.dokumanNoDurum, 'Sayfa 1 / 1', false, 'tutanak')}
         ${ustOkulSatiri}
         <table style="width:100%; border-collapse:collapse; margin-bottom:6px;">
           <tr><td style="${hucre} width:48mm;"><strong>Ders Adı</strong></td><td style="${hucre}">${C.kacisHTML(b.ders.kod)} — ${C.kacisHTML(b.ders.ad)} (${C.kacisHTML(b.sinavTuru)}${b.donem ? ` · ${C.kacisHTML(b.donem)}` : ''})</td></tr>
@@ -8302,6 +8374,7 @@
             <tr><td style="${hucre} height:26px;"><strong>Evrak Teslim Alan (Bölüm / İdare Yetkilisi):</strong> .................................</td><td style="${hucre}"></td></tr>
           </tbody>
         </table>
+        ${kurumFormuAltHTML('tutanak', 1, 1, 0.95)}
       </div>
     `;
   }
@@ -8461,7 +8534,7 @@
       sayfalar.push(`
         <div class="a4-sayfa" style="padding:${d.sayfaPad};">
           <div class="a4-sayfa-etiket" style="margin-bottom:2px;">SINAV YOKLAMA EVRAKI — ${C.kacisHTML(b.ders.kod)} (${s + 1}/${sayfaAdedi})</div>
-          ${tutanakKunyeTablosuHTML(b, 'SINAV YOKLAMA EVRAKI', b.dokumanNoYoklama, `Sayfa ${s + 1} / ${sayfaAdedi}`, d.kompaktMi)}
+          ${tutanakKunyeTablosuHTML(b, 'SINAV YOKLAMA EVRAKI', b.dokumanNoYoklama, `Sayfa ${s + 1} / ${sayfaAdedi}`, d.kompaktMi, 'yoklama')}
           ${b.kunyeModu === 'kunyeli' ? `<div style="text-align:center; font-weight:700; font-size:${d.baslikFontPt}; margin-bottom:1px;">${C.kacisHTML(ustBaslikMetni)}</div>` : ''}
           <div style="text-align:center; font-weight:700; font-size:${d.baslikFontPt}; margin-bottom:${d.baslikMb};">${C.kacisHTML(b.donem || '20…… - 20……')} EĞİTİM ÖĞRETİM YILI SINAV YOKLAMA EVRAKI</div>
           <table style="${bilgiTabloStil}">
@@ -8473,6 +8546,7 @@
           <table style="width:100%; border-collapse:collapse;">
             <tr><td style="${bilgiHucre} height:${d.gozetmenYuk}px; width:50mm;"><strong>Gözetmen 1:</strong> ${C.kacisHTML(gozetmenler[0] || '')}</td><td style="${bilgiHucre} height:${d.gozetmenYuk}px;">İmza:</td><td style="${bilgiHucre} height:${d.gozetmenYuk}px; width:50mm;"><strong>Gözetmen 2:</strong> ${C.kacisHTML(gozetmenler[1] || '')}</td><td style="${bilgiHucre} height:${d.gozetmenYuk}px;">İmza:</td></tr>
           </table>
+          ${kurumFormuAltHTML('yoklama', s + 1, sayfaAdedi, d.kompaktMi ? 0.8 : 0.9)}
         </div>
       `);
     }
@@ -13391,8 +13465,10 @@ Yine de çıktı alınsın mı?`)) {
       }
     });
 
+    let taslakKurumFormlari = {};
     const okuSablonFormAlanlari = () => ({
       id: durum.aktifKurumSablonId || ('kurum-' + Date.now().toString(36)),
+      kurumFormlari: { ...taslakKurumFormlari },
       ad: ((document.getElementById('sablon-ad') || {}).value || '').trim() || 'Özel Kurumsal Kalite Şablonu',
       kurumAdi: ((document.getElementById('sablon-kurum-adi') || {}).value || '').trim() || 'T.C. ÜNİVERSİTE REKTÖRLÜĞÜ',
       birimAdi: ((document.getElementById('sablon-birim-adi') || {}).value || '').trim() || 'Meslek Yüksekokulu / Fakülte',
@@ -13414,6 +13490,8 @@ Yine de çıktı alınsın mı?`)) {
 
     const doldurSablonFormAlanlari = (sb) => {
       if (!sb) return;
+      taslakKurumFormlari = sb.kurumFormlari && typeof sb.kurumFormlari === 'object' ? { ...sb.kurumFormlari } : {};
+      guncelleKurumFormSatirlari();
       const yaz = (id, v) => { const el = document.getElementById(id); if (el) el.value = v !== undefined && v !== null ? String(v) : ''; };
       yaz('sablon-ad', sb.ad || '');
       yaz('sablon-kurum-adi', sb.kurumAdi || '');
@@ -13429,6 +13507,126 @@ Yine de çıktı alınsın mı?`)) {
       yaz('sablon-akreditasyon-baraj', sb.akreditasyonBaraj || 60);
       yaz('sablon-obs-sutunlar', Array.isArray(sb.obsNotSutunlari) ? sb.obsNotSutunlari.join(';') : (sb.obsNotSutunlari || 'OGRENCI_NO;AD_SOYAD;KITAPCIK;PUAN;HARF_NOTU;DURUM'));
     };
+
+    const KURUM_FORM_ONIZLEME = { kagit: 'sinif-aktif', tutanak: 'tutanak', yoklama: 'yoklama' };
+    function kurumFormMesaj(metin, tur = 'basari') {
+      const el = document.getElementById('etiket-kurum-word-form-mesaj');
+      if (!el) return;
+      el.style.display = metin ? 'block' : 'none';
+      el.style.background = tur === 'hata' ? '#fef2f2' : '#ecfdf5';
+      el.style.border = `1px solid ${tur === 'hata' ? '#fca5a5' : '#6ee7b7'}`;
+      el.style.color = tur === 'hata' ? '#991b1b' : '#065f46';
+      el.textContent = metin || '';
+    }
+    function guncelleKurumFormSatirlari() {
+      document.querySelectorAll('#kutu-kurum-word-formlari [data-kurum-form-tur]').forEach((satir) => {
+        const tur = satir.getAttribute('data-kurum-form-tur');
+        const k = taslakKurumFormlari[tur];
+        const model = kurumFormuModeliCoz(k);
+        const durumEl = satir.querySelector('[data-kurum-form-durum]');
+        const ust = satir.querySelector('[data-kurum-form-ust]');
+        const alt = satir.querySelector('[data-kurum-form-alt]');
+        const kaldir = satir.querySelector('[data-kurum-form-kaldir]');
+        const varMi = Boolean(model);
+        if (durumEl) {
+          durumEl.textContent = varMi
+            ? `✅ ${k.dosyaAdi || 'Kurum formu'}${model.ust ? '' : ' (üst bilgi yok)'}${model.alt ? '' : ' (alt bilgi yok)'}`
+            : 'Yüklenmedi (uygulamanın kendi başlığı kullanılır)';
+          durumEl.style.color = varMi ? '#047857' : '';
+        }
+        if (ust) { ust.disabled = !varMi || !model.ust; ust.checked = varMi ? (k.ust !== false && Boolean(model.ust)) : true; }
+        if (alt) { alt.disabled = !varMi || !model.alt; alt.checked = varMi ? (k.alt !== false && Boolean(model.alt)) : true; }
+        if (kaldir) kaldir.hidden = !varMi;
+      });
+    }
+    // Büyük logoları küçült (sunucu eşitlemesi ve depolama için); yalnız tarayıcıda
+    async function kucultKurumFormuGorselleri(model) {
+      if (typeof document === 'undefined' || typeof Image === 'undefined') return model;
+      const parcalar = [];
+      const topla = (bloklar) => (bloklar || []).forEach((b) => {
+        if (!b) return;
+        if (b.tur === 'p') (b.parcalar || []).forEach((x) => { if (x && x.img) parcalar.push(x); });
+        if (b.tur === 'tablo') (b.satirlar || []).forEach((sat) => (sat.hucreler || []).forEach((h) => topla(h.icerik)));
+      });
+      topla(model.ust && model.ust.bloklar);
+      topla(model.alt && model.alt.bloklar);
+      for (const x of parcalar) {
+        if (String(x.img).length < 90000) continue;
+        try {
+          const img = await new Promise((coz, red) => { const i = new Image(); i.onload = () => coz(i); i.onerror = red; i.src = x.img; });
+          const oran = Math.min(1, 520 / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+          const cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round(img.naturalWidth * oran));
+          cv.height = Math.max(1, Math.round(img.naturalHeight * oran));
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          const png = cv.toDataURL('image/png');
+          x.img = png.length < String(x.img).length ? png : x.img;
+        } catch (_) { /* resim olduğu gibi kalır */ }
+      }
+      return model;
+    }
+    const kutuKurumFormlari = document.getElementById('kutu-kurum-word-formlari');
+    if (kutuKurumFormlari) {
+      kutuKurumFormlari.addEventListener('change', async (e) => {
+        const satir = e.target.closest('[data-kurum-form-tur]');
+        if (!satir) return;
+        const tur = satir.getAttribute('data-kurum-form-tur');
+        const onizlemeGoster = () => {
+          const sec = document.getElementById('sec-kurum-onizleme-belge');
+          if (sec && KURUM_FORM_ONIZLEME[tur]) sec.value = KURUM_FORM_ONIZLEME[tur];
+          if (typeof window.__cizKurumBelgeOnizleme === 'function') window.__cizKurumBelgeOnizleme();
+        };
+        if (e.target.matches('[data-kurum-form-ust], [data-kurum-form-alt]')) {
+          const k = taslakKurumFormlari[tur];
+          if (!k) return;
+          taslakKurumFormlari[tur] = { ...k, [e.target.matches('[data-kurum-form-ust]') ? 'ust' : 'alt']: e.target.checked };
+          onizlemeGoster();
+          return;
+        }
+        if (!e.target.matches('[data-kurum-form-dosya]')) return;
+        const dosya = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!dosya) return;
+        const ad = String(dosya.name || '');
+        if (/\.doc$/i.test(ad)) { kurumFormMesaj(`"${ad}" eski Word biçiminde (.doc). Word'de açıp "Farklı Kaydet → Word Belgesi (.docx)" yapın, sonra tekrar yükleyin.`, 'hata'); return; }
+        if (!/\.docx$/i.test(ad)) { kurumFormMesaj(`"${ad}" bir Word (.docx) dosyası değil. PDF veya görsel için aşağıdaki "Kurum belgesinden başlık ve künye al" kutusunu kullanın.`, 'hata'); return; }
+        if (dosya.size > 15 * 1024 * 1024) { kurumFormMesaj('Dosya çok büyük (15 MB üstü).', 'hata'); return; }
+        try {
+          kurumFormMesaj(`"${ad}" okunuyor…`);
+          const model = await kucultKurumFormuGorselleri(await C.cozDocxKurumFormuYapisi(await dosyayiBaytOku(dosya), tarayiciInflateRaw));
+          if (!C.kurumFormuModeliGecerliMi(model)) throw new Error('Form çok büyük veya boş.');
+          taslakKurumFormlari[tur] = { modelJson: JSON.stringify(model), dosyaAdi: ad.slice(0, 120), ust: Boolean(model.ust), alt: Boolean(model.alt), yuklenme: new Date().toISOString() };
+          guncelleKurumFormSatirlari();
+          const parca = [model.ust ? 'üst bilgi' : null, model.alt ? 'alt bilgi' : null].filter(Boolean).join(' ve ');
+          kurumFormMesaj(`✅ "${ad}" okundu: ${parca}. Sağdaki önizlemeyi kontrol edin, sonra "Kaydet ve belgelere uygula"ya basın.`);
+          onizlemeGoster();
+        } catch (err) {
+          kurumFormMesaj(`"${ad}" okunamadı: ${err.message}`, 'hata');
+        }
+      });
+      kutuKurumFormlari.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-kurum-form-kaldir]');
+        if (!btn) return;
+        const satir = btn.closest('[data-kurum-form-tur]');
+        const tur = satir && satir.getAttribute('data-kurum-form-tur');
+        if (!tur) return;
+        delete taslakKurumFormlari[tur];
+        guncelleKurumFormSatirlari();
+        kurumFormMesaj('Form kaldırıldı. Kaydet\'e basınca belgeler uygulamanın kendi başlığına döner.');
+        const sec = document.getElementById('sec-kurum-onizleme-belge');
+        if (sec && KURUM_FORM_ONIZLEME[tur]) sec.value = KURUM_FORM_ONIZLEME[tur];
+        if (typeof window.__cizKurumBelgeOnizleme === 'function') window.__cizKurumBelgeOnizleme();
+      });
+    }
+    const btnKurumFormKaydet = document.getElementById('btn-kurum-word-form-kaydet');
+    if (btnKurumFormKaydet) {
+      btnKurumFormKaydet.addEventListener('click', () => {
+        const asil = document.getElementById('btn-kurum-sablon-kaydet');
+        if (asil) asil.click();
+        const adet = Object.keys(taslakKurumFormlari).filter((k) => kurumFormuModeliCoz(taslakKurumFormlari[k])).length;
+        kurumFormMesaj(adet ? `✅ Kaydedildi. ${adet} belge kurumun kendi formuyla basılacak.` : '✅ Kaydedildi. Belgeler uygulamanın kendi başlığını kullanacak.');
+      });
+    }
 
     const guncelleCanliKurumAntetOnizleme = () => {
       const kutu = document.getElementById('onizleme-kurum-antet');
@@ -13498,12 +13696,16 @@ Yine de çıktı alınsın mı?`)) {
         set('kalite-revizyon', sb.revizyonNo || ''); set('kagit-hizli-revizyon', sb.revizyonNo || '');
         const tip = document.getElementById('kalite-form-tipi');
         if (sb.dokumanNo && tip && tip.value === 'standart') { set('kalite-form-tipi', 'iso9001'); set('kagit-hizli-kunye-modu', 'iso9001'); }
+        kurumFormuOnizlemeTaslagi = sb.kurumFormlari || {};
+        if (kurumFormuModeliCoz(kurumFormuOnizlemeTaslagi.kagit)) { set('kalite-form-tipi', 'kurum-formu'); set('kagit-hizli-kunye-modu', 'kurum-formu'); }
+        else if (tip && tip.value === 'kurum-formu') { set('kalite-form-tipi', 'iso9001'); set('kagit-hizli-kunye-modu', 'iso9001'); }
         Object.assign(durum.evrakSablonu = durum.evrakSablonu || {}, { kurum: tamKurum, fakulte: sb.birimAdi || '', kaliteDokumanNo: sb.dokumanNo || '', kaliteYayinTarihi: sb.yayinTarihi || '', kaliteRevizyon: sb.revizyonNo || '' });
         const paket = uretKapsamaGoreBaskiHTML(okuAktifSinavYapisi(), kapsam);
         cizBelgeOnizlemeSeridi(kutu, paket.html, 2);
       } catch (err) {
         kutu.textContent = `Önizleme üretilemedi: ${err.message}`;
       } finally {
+        kurumFormuOnizlemeTaslagi = null;
         eskiDegerler.forEach(([id, v]) => set(id, v));
         try { durum.evrakSablonu = JSON.parse(eskiSablon); } catch (_) {}
         durum.kaliteGorselDataUrl = eskiLogo;
@@ -13555,6 +13757,17 @@ Yine de çıktı alınsın mı?`)) {
       if (sb.dokumanNo) {
         const fTipEl = document.getElementById('kalite-form-tipi');
         if (fTipEl && fTipEl.value === 'standart') fTipEl.value = 'iso9001';
+      }
+      {
+        const fTipEl = document.getElementById('kalite-form-tipi');
+        const hizliEl = document.getElementById('kagit-hizli-kunye-modu');
+        const kagitFormuVar = Boolean(sb.kurumFormlari && kurumFormuModeliCoz(sb.kurumFormlari.kagit));
+        const yeniTip = kagitFormuVar ? 'kurum-formu' : (fTipEl && fTipEl.value === 'kurum-formu' ? 'iso9001' : null);
+        if (yeniTip) {
+          if (fTipEl) fTipEl.value = yeniTip;
+          if (hizliEl) hizliEl.value = yeniTip;
+          if (durum.evrakSablonu) durum.evrakSablonu.kaliteFormTipi = yeniTip;
+        }
       }
       Object.assign(durum.evrakSablonu, {
         kurum: tamKurum,

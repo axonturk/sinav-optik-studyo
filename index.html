@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261115c" />
+  <link rel="stylesheet" href="ortak.css?v=20261115d" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -616,6 +616,7 @@
                     <option value="mudek">MÜDEK / Bologna ÖÇ Puan Tablolu</option>
                     <option value="meb">MEB TKY Standart Yazılı Formu</option>
                     <option value="ozel-banner">Yüklenen Hazır Okul PDF Anteti</option>
+                    <option value="kurum-formu">Kurumun Word kalite formu (birebir)</option>
                   </select>
                 </div>
                 <div id="alan-kalite-kunye" class="form-satir" style="display:none;">
@@ -836,6 +837,7 @@
                     <option value="iso9001">Belge No / Kalite Künyesi Göster (Düzenlenebilir)</option>
                     <option value="mudek">MÜDEK / Bologna ÖÇ Puan Tablolu Künye</option>
                     <option value="meb">MEB TKY Standart Yazılı Formu</option>
+                    <option value="kurum-formu">Kurumun Word kalite formu (birebir)</option>
                   </select>
                 </div>
                 <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
@@ -2380,6 +2382,58 @@
       <div class="iki-sutun-duzen">
         <!-- Sol: Kalite Belgesi Yükle -> Otomatik Tanı & 5'li Şablon Editörü -->
         <div>
+          <div class="kart" id="kart-kurum-word-formlari">
+            <div class="kart-baslik">
+              <span>📄 Kurumun kalite formları (Word'den birebir)</span>
+              <span class="rozet rozet-yesil">.docx</span>
+            </div>
+            <p style="font-size:0.79rem; color:var(--metin-ikincil); margin:0 0 0.55rem;">
+              Okulunuzun kalite formunu (<code>.docx</code>) yükleyin. Formun <strong>üst bilgisi</strong> (logo, form adı, Doküman No, Revizyon, Sayfa No) ve <strong>alt bilgisi</strong> (Hazırlayan / Onay) belgelere <strong>aynı düzende</strong> basılır. Sayfa numarası kendiliğinden dolar. Sağdaki önizlemede hemen görürsünüz; <strong>Kaydet</strong>'e basana kadar belgeler değişmez.
+            </p>
+            <div id="kutu-kurum-word-formlari" style="display:flex; flex-direction:column; gap:0.45rem;">
+              <div class="kurum-form-satir" data-kurum-form-tur="kagit" style="border:1px solid var(--kenar, #cbd5e1); border-radius:8px; padding:0.45rem 0.6rem;">
+                <div style="display:flex; justify-content:space-between; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+                  <strong style="font-size:0.82rem;">Sınav kağıdı</strong>
+                  <span data-kurum-form-durum style="font-size:0.74rem; color:var(--metin-ikincil);">Yüklenmedi (uygulamanın kendi başlığı kullanılır)</span>
+                </div>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin-top:0.35rem;">
+                  <input type="file" accept=".docx" data-kurum-form-dosya aria-label="Sınav kağıdı kalite formu (.docx)" style="flex:1; min-width:190px; font-size:0.76rem;" />
+                  <label style="font-size:0.76rem; display:flex; gap:0.25rem; align-items:center;"><input type="checkbox" data-kurum-form-ust checked /> Üst bilgi</label>
+                  <label style="font-size:0.76rem; display:flex; gap:0.25rem; align-items:center;"><input type="checkbox" data-kurum-form-alt checked /> Alt bilgi</label>
+                  <button type="button" class="btn btn-kucuk" data-kurum-form-kaldir hidden>Kaldır</button>
+                </div>
+              </div>
+              <div class="kurum-form-satir" data-kurum-form-tur="tutanak" style="border:1px solid var(--kenar, #cbd5e1); border-radius:8px; padding:0.45rem 0.6rem;">
+                <div style="display:flex; justify-content:space-between; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+                  <strong style="font-size:0.82rem;">Sınav durum tutanağı</strong>
+                  <span data-kurum-form-durum style="font-size:0.74rem; color:var(--metin-ikincil);">Yüklenmedi (uygulamanın kendi başlığı kullanılır)</span>
+                </div>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin-top:0.35rem;">
+                  <input type="file" accept=".docx" data-kurum-form-dosya aria-label="Sınav durum tutanağı kalite formu (.docx)" style="flex:1; min-width:190px; font-size:0.76rem;" />
+                  <label style="font-size:0.76rem; display:flex; gap:0.25rem; align-items:center;"><input type="checkbox" data-kurum-form-ust checked /> Üst bilgi</label>
+                  <label style="font-size:0.76rem; display:flex; gap:0.25rem; align-items:center;"><input type="checkbox" data-kurum-form-alt checked /> Alt bilgi</label>
+                  <button type="button" class="btn btn-kucuk" data-kurum-form-kaldir hidden>Kaldır</button>
+                </div>
+              </div>
+              <div class="kurum-form-satir" data-kurum-form-tur="yoklama" style="border:1px solid var(--kenar, #cbd5e1); border-radius:8px; padding:0.45rem 0.6rem;">
+                <div style="display:flex; justify-content:space-between; gap:0.4rem; flex-wrap:wrap; align-items:center;">
+                  <strong style="font-size:0.82rem;">Yoklama evrakı</strong>
+                  <span data-kurum-form-durum style="font-size:0.74rem; color:var(--metin-ikincil);">Yüklenmedi (uygulamanın kendi başlığı kullanılır)</span>
+                </div>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin-top:0.35rem;">
+                  <input type="file" accept=".docx" data-kurum-form-dosya aria-label="Yoklama evrakı kalite formu (.docx)" style="flex:1; min-width:190px; font-size:0.76rem;" />
+                  <label style="font-size:0.76rem; display:flex; gap:0.25rem; align-items:center;"><input type="checkbox" data-kurum-form-ust checked /> Üst bilgi</label>
+                  <label style="font-size:0.76rem; display:flex; gap:0.25rem; align-items:center;"><input type="checkbox" data-kurum-form-alt checked /> Alt bilgi</label>
+                  <button type="button" class="btn btn-kucuk" data-kurum-form-kaldir hidden>Kaldır</button>
+                </div>
+              </div>
+            </div>
+            <div id="etiket-kurum-word-form-mesaj" role="status" style="display:none; margin-top:0.5rem; padding:0.45rem 0.6rem; border-radius:6px; font-size:0.77rem;"></div>
+            <p style="font-size:0.72rem; color:var(--metin-ikincil); margin:0.5rem 0 0.4rem;">
+              ⓘ Optik cevap formu ve okunabilir yoklama, okuma doğruluğu için kendi düzeninde kalır. Formunuz eski <code>.doc</code> ise Word'de <em>Farklı Kaydet → Word Belgesi (.docx)</em> yapın. Yalnız PDF'iniz varsa aşağıdaki kutudan görsel/PDF antet yükleyebilirsiniz.
+            </p>
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-kurum-word-form-kaydet">Kaydet ve belgelere uygula</button>
+          </div>
           <div class="kart">
             <div class="kart-baslik">
               <span>Kurum belgesinden başlık ve künye al</span>
@@ -3531,7 +3585,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261115c"></script>
-  <script src="studyo-uygulama.js?v=20261115c"></script>
+  <script src="guvenlik-ve-veri.js?v=20261115d"></script>
+  <script src="studyo-uygulama.js?v=20261115d"></script>
 </body>
 </html>
