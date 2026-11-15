@@ -169,6 +169,36 @@ const YAPI = {
     kontrol('"Eşleşme Bekliyor" rozeti kalkar', !/Eşleşme Bekliyor/.test(sonra.ozet) && sonra.rozet === true, sonra.ozet);
     kontrol('Sınıf listesinde öğrenci "Okundu" görünür', /Okundu/.test(sonra.yoklama), sonra.yoklama);
 
+    // 6) Liste ekranındayken "Oku": görünmeyen kameradan kare çekmez, önce kamerayı açar
+    const okumaSayisiOnce = (await okumalar()).length;
+    await sayfa.evaluate(() => document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-liste"]').click());
+    await bekle(200);
+    await sayfa.evaluate(() => document.getElementById('btn-mobil-kare-oku').click());
+    await bekle(500);
+    const okuSonra = await sayfa.evaluate(() => ({ sekme: document.body.getAttribute('data-aktif-msekme'), uyari: document.getElementById('m-uyari').textContent }));
+    kontrol('Liste ekranında "Oku" önce kamerayı açar, görmeden okuma yapmaz', okuSonra.sekme === 'm-panel-tara' && /Kamera açıldı/.test(okuSonra.uyari) && (await okumalar()).length === okumaSayisiOnce, JSON.stringify(okuSonra));
+
+    // 7) Ders bağlantısız kurulum QR'ı başka dersin listesini taşımaz; ders kodu eşleşen dersin listesine geçer
+    const LISTE3 = [{ ogrNo: '2024300001', adSoyad: 'Deniz Su' }, { ogrNo: '2024300002', adSoyad: 'Ece Gül' }];
+    const ogr3 = await sayfa.evaluate((l) => window.SinavOptikCekirdek.uretOgrenciQrPaketi(l, { tabanAdres: location.origin, dersId: 'BIL303', dersKod: 'BIL303', dersAd: 'BIL303 — Veri Yapıları' }), LISTE3);
+    await sayfa.goto(ogr3.tekUrl, { waitUntil: 'networkidle0' });
+    await bekle(600);
+    await sayfa.goto(setupUrl, { waitUntil: 'networkidle0' }); // BIL101'e geri dön (dersId'li QR)
+    await bekle(700);
+    const bagsizUrl = (dersAd) => sayfa.evaluate((y, ad) => {
+      const k = Object.assign({}, y, { dersId: '', dersAd: ad, sinavKodu: ad.split(' ')[0] + '-VIZE' });
+      delete k.dersId;
+      return window.SinavOptikCekirdek.uretKompaktSetupQrPaketi(k, [], location.origin).url;
+    }, YAPI, dersAd);
+    await sayfa.goto(await bagsizUrl('BIL303 - Veri Yapıları'), { waitUntil: 'networkidle0' });
+    await bekle(700);
+    const d303 = await sayfa.evaluate(() => { const d = window.__mobilDurumOku(); return { id: d.dersId, ogr: d.ogrenciler.map((o) => o.ogrNo) }; });
+    kontrol('Ders bağlantısız QR: ders kodu eşleşen dersin (BIL303) listesine geçer', d303.ogr.length === 2 && d303.ogr.includes('2024300001'), JSON.stringify(d303));
+    await sayfa.goto(await bagsizUrl('BIL999 - Bilinmeyen Ders'), { waitUntil: 'networkidle0' });
+    await bekle(700);
+    const d999 = await sayfa.evaluate(() => { const d = window.__mobilDurumOku(); return { id: d.dersId, ogr: d.ogrenciler.length, p101: ((d.dersPaketleriHaritasi || {}).BIL101 || {}).ogrenciler }; });
+    kontrol('Eşleşen ders yoksa başka dersin listesi taşınmaz; önceki dersin listesi korunur', d999.ogr === 0 && Array.isArray(d999.p101) && d999.p101.length === LISTE.length, JSON.stringify({ ...d999, p101: (d999.p101 || []).length }));
+
     kontrol('JS hatası / uyarı penceresi yok', hatalar.length === 0, hatalar.join(' | '));
   } finally {
     try { fs.unlinkSync(girdiYolu); } catch (_) {}
