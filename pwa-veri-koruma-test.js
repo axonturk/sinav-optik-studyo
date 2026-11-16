@@ -221,6 +221,26 @@ const YAPI = {
     }, solukHazir ? solukHazir.id : '');
     kontrol('A5) Telefonda silinen okuma bilgisayara gitmek üzere OKUDU_SIL olayı olarak kuyruğa girer', silOlay.tur === 'OKUDU_SIL' && silOlay.veriId === (solukHazir && solukHazir.id), JSON.stringify(silOlay));
 
+    // GR) "Okumayı bitir": kağıdı okunmayan öğrenciler "girmedi (GR)" olarak bilgisayara gönderilir
+    {
+      const gr = await sayfa.evaluate(() => {
+        window.__eskiConfirmGR = window.confirm; let soru = ''; window.confirm = (m) => { soru = m; return true; };
+        const once = JSON.parse(localStorage.getItem('MOBIL_V2_OUTBOX_V2') || '[]').length;
+        document.getElementById('btn-mobil-okuma-bitir').click();
+        window.confirm = window.__eskiConfirmGR;
+        const kuyruk = JSON.parse(localStorage.getItem('MOBIL_V2_OUTBOX_V2') || '[]').slice(once);
+        const yok = kuyruk.filter((o) => o.tur === 'YOKLAMA');
+        const d = window.__mobilDurumOku();
+        const okunan = new Set(d.okumaSonuclari.filter((x) => !/^BEKLEYEN/.test(String(x.ogrNo))).map((x) => String(x.ogrNo)));
+        const beklenen = d.ogrenciler.filter((o) => !okunan.has(String(o.ogrNo))).map((o) => String(o.ogrNo)).sort();
+        const gonderilen = yok.flatMap((o) => (o.veri.satirlar || []).map((x) => x.ogrNo)).sort();
+        window.__mobilListeYenile();
+        const satir = Array.from(document.querySelectorAll('#mobil-tablo-sinif-yoklama tr')).map((tr) => tr.textContent.replace(/\s+/g, ' '));
+        return { soru, beklenen, gonderilen, kaynak: yok[0] && yok[0].veri.kaynak, hepsiGr: yok.every((o) => o.veri.satirlar.every((x) => x.gr && x.durum === 'gelmedi')), grSatir: satir.filter((t) => /GR · girmedi/.test(t)).length };
+      });
+      kontrol('GR) "Okumayı bitir" onay sorar; okunmayan öğrencilerin hepsi "girmedi (GR)" olarak gönderilir ve listede GR görünür', /girmedi \(GR\)/.test(gr.soru) && gr.beklenen.length > 0 && JSON.stringify(gr.beklenen) === JSON.stringify(gr.gonderilen) && gr.kaynak === 'okuma-bitir' && gr.hepsiGr && gr.grSatir === gr.beklenen.length, JSON.stringify(gr));
+    }
+
     // A1) Öğrenci numaralı kağıt "kağıttan anahtar" ile okunursa onay sorulur; hayır denirse anahtar değişmez
     const anahtarOnce = await sayfa.evaluate(() => JSON.stringify(window.__mobilDurumOku().sinavYapisi.cevapAnahtarlari.A));
     await sayfa.evaluate(() => { window.__sonConfirm = ''; window.__eskiConfirm2 = window.confirm; window.confirm = (m) => { window.__sonConfirm = m; return false; }; });

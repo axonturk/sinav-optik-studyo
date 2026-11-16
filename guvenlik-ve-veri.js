@@ -11180,12 +11180,14 @@
       veri = {
         sayfa: Math.max(0, Math.min(99, Number(veriHam.sayfa) || 0)),
         toplamSayfa: Math.max(0, Math.min(99, Number(veriHam.toplamSayfa) || 0)),
+        kaynak: veriHam.kaynak === 'okuma-bitir' ? 'okuma-bitir' : 'yoklama-cizelgesi',
         satirlar: (Array.isArray(veriHam.satirlar) ? veriHam.satirlar : []).slice(0, 40)
           .filter((x) => x && typeof x === 'object' && String(x.ogrNo || '').trim())
           .map((x) => ({
             ogrNo: String(x.ogrNo).trim().slice(0, 40),
             durum: gecerli.includes(String(x.durum)) ? String(x.durum) : 'belirsiz',
-            elle: Boolean(x.elle)
+            elle: Boolean(x.elle),
+            gr: Boolean(x.gr)
           }))
       };
     } else if (tur === 'OKUDU_SIL') {

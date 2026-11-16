@@ -4978,6 +4978,25 @@
     if (!s || !kutu) return;
     const okumalar = s.okumalar.slice().sort((a, b) => String(a.ogrNo).localeCompare(String(b.ogrNo), 'tr'));
     const ciftler = okumalar.length > 1 ? C.tespitEtKopyaBenzerlikCiftleri(okumalar) : [];
+    // Telefonda "Okumayı bitir" ile gelen sınava girmeyenler (GR): kağıdı okunmamış olanlar
+    const okunanNo = new Set(okumalar.map((o) => String(o.ogrNo)));
+    const girmeyenler = (durum.yoklamalar || []).filter((y) => y && y.gr && s.sinavKodu && y.sinavKodu === s.sinavKodu && !okunanNo.has(String(y.ogrNo)));
+    // Daha önce gönderilmiş sınavlar: sınavın dersi bulunursa o dersin listesinde kağıdı olmayan herkes GR sayılır
+    if (s.sinavKodu && (s.anahtar.startsWith('TEL-') || /^Telefon|^Derste kayıtlı/.test(s.kaynak || ''))) {
+      const ks = (durum.kayitliSinavlar || []).find((k) => k && k.kaynak === 'telefon' && k.sinavKodu === s.sinavKodu);
+      const kova = telefonSinavlariniYukle()[s.sinavKodu] || { ad: s.ad };
+      const dersId = (ks && ks.dersId) || telefonSinavininDersiniBul(kova, s.sinavKodu);
+      if (dersId) {
+        const grNo = new Set(girmeyenler.map((y) => String(y.ogrNo)));
+        (durum.ogrenciKayitlari || [])
+          .filter((o) => o && o.ogrNo && Array.isArray(o.dersIdler) && o.dersIdler.includes(dersId))
+          .forEach((o) => {
+            const no = String(o.ogrNo);
+            if (!okunanNo.has(no) && !grNo.has(no)) { girmeyenler.push({ ogrNo: no, gr: true, listeden: true }); grNo.add(no); }
+          });
+      }
+    }
+    girmeyenler.sort((a, b) => String(a.ogrNo).localeCompare(String(b.ogrNo), 'tr'));
     const puanlar = okumalar.map((o) => Number(o.toplamPuan) || 0);
     const ort = puanlar.length ? (puanlar.reduce((a, b) => a + b, 0) / puanlar.length).toFixed(1) : '—';
     kutu.dataset.anahtar = anahtar;
@@ -4987,7 +5006,7 @@
           <button type="button" class="btn btn-basari btn-kucuk" data-arsiv-csv="1">Excel (.csv)</button>
           ${ciftler.length ? '<button type="button" class="btn btn-tehlike btn-kucuk" data-kopya-tutanak="1">Kopya şüphe tutanağı (yazdır / PDF)</button>' : ''}
         </div></div>
-      <div style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">${okumalar.length} kağıt · ortalama ${ort} · ${C.kacisHTML(s.kaynak)}</div>
+      <div style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">${okumalar.length} kağıt${girmeyenler.length ? ` · <strong>${girmeyenler.length} girmedi (GR)</strong>` : ''} · ortalama ${ort} · ${C.kacisHTML(s.kaynak)}</div>
       <h4 style="margin:0.4rem 0;">🔎 Kopya Şüphe Raporu ${ciftler.length ? `<span class="rozet rozet-kirmizi">${ciftler.length} şüpheli çift</span>` : '<span class="rozet rozet-yesil">şüpheli çift yok</span>'}</h4>
       <div id="kopya-ciftleri">${ciftler.map((c, i) => {
         const a = okumalar.find((o) => String(o.ogrNo) === String(c.ogrenci1No));
@@ -5004,9 +5023,10 @@
       <h4 style="margin:0.6rem 0 0.3rem;">Sonuçlar</h4>
       <div class="tablo-sarmal" style="max-height:340px; overflow:auto;"><table class="veri-tablo"><thead><tr><th>Öğr. No</th><th>Ad Soyad</th><th>Kodlanan</th><th>Kitapçık</th><th>D/Y</th><th>Test</th><th>Puan</th></tr></thead><tbody>
       ${okumalar.map((o) => `<tr><td class="mono">${C.kacisHTML(o.ogrNo)}</td><td>${C.kacisHTML(ogrAdiBul(o.ogrNo, o.adSoyad))}</td><td class="mono">${C.kacisHTML(o.okunanNoKod || '')}</td><td>${C.kacisHTML(o.grup || '')}</td><td>${o.dyDogru ?? '-'}D/${o.dyYanlis ?? '-'}Y</td><td>${o.testDogru ?? '-'}D/${o.testYanlis ?? '-'}Y</td><td><strong>${o.toplamPuan}</strong></td></tr>`).join('')}
+      ${girmeyenler.map((y) => `<tr style="background:rgba(107,114,128,0.10);"><td class="mono">${C.kacisHTML(y.ogrNo)}</td><td>${C.kacisHTML(ogrAdiBul(y.ogrNo))}</td><td>—</td><td>—</td><td>—</td><td>—</td><td><strong>GR</strong></td></tr>`).join('')}
       </tbody></table></div>`;
     const csvBtn = kutu.querySelector('[data-arsiv-csv]');
-    if (csvBtn) csvBtn.addEventListener('click', () => indirCsvDosyasi(`arsiv-${s.sinavKodu || 'sinav'}.csv`, [['Öğrenci No', 'Ad Soyad', 'Kodlanan', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Puan']].concat(okumalar.map((o) => [o.ogrNo, ogrAdiBul(o.ogrNo, o.adSoyad), o.okunanNoKod || '', o.grup || '', o.dyDogru, o.dyYanlis, o.testDogru, o.testYanlis, o.toplamPuan]))));
+    if (csvBtn) csvBtn.addEventListener('click', () => indirCsvDosyasi(`arsiv-${s.sinavKodu || 'sinav'}.csv`, [['Öğrenci No', 'Ad Soyad', 'Kodlanan', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Puan']].concat(okumalar.map((o) => [o.ogrNo, ogrAdiBul(o.ogrNo, o.adSoyad), o.okunanNoKod || '', o.grup || '', o.dyDogru, o.dyYanlis, o.testDogru, o.testYanlis, o.toplamPuan])).concat(girmeyenler.map((y) => [y.ogrNo, ogrAdiBul(y.ogrNo), '', '', '', '', '', '', 'GR']))));
     const tutBtn = kutu.querySelector('[data-kopya-tutanak]');
     if (tutBtn) tutBtn.addEventListener('click', () => yazdirKopyaTutanagi(s, okumalar, ciftler));
   }
@@ -5071,7 +5091,7 @@
     (durum.telefonOlaylari || []).forEach((o) => kayitlar.push({ zamanMs: o.zamanMs, tur: 'Telefon okuma', ogrNo: o.veri.ogrNo || '', ad: o.veri.adSoyad || '', sinav: o.sinavKodu, aciklama: `Kağıt okundu · kodlanan ${o.veri.okunanNoKod || '?'} · kitapçık ${o.veri.grup || '?'} · ${o.veri.toplamPuan} puan`, muhur: `#${o.seqNo}` }));
     C.cikarElleAtamalar(durum.telefonOlaylari || []).forEach((a) => kayitlar.push({ zamanMs: a.zamanMs, tur: 'Elle atama', ogrNo: a.yeniNo, ad: a.adSoyad, sinav: a.sinavKodu, aciklama: `Kağıtta ${a.kodlanan || a.eskiNo} kodlu kağıt öğretmen tarafından ${a.yeniNo} numaralı öğrenciye atandı (önceki: ${a.eskiNo})`, muhur: '' }));
     (durum.kayitliSinavlar || []).forEach((k) => (k.basimGecmisi || []).forEach((b) => kayitlar.push({ zamanMs: Number(b.zamanMs || b.tarihMs) || Date.parse(b.zaman || '') || 0, tur: 'Basım', ogrNo: '', ad: '', sinav: k.ad || k.sinavKodu, aciklama: `Sınav basıldı (${b.kapsam || ''} · ${b.format || ''})`, muhur: '' })));
-    (durum.yoklamalar || []).forEach((y) => kayitlar.push({ zamanMs: y.zamanMs, tur: 'Yoklama', ogrNo: y.ogrNo, ad: ogrAdiBul(y.ogrNo), sinav: y.sinavKodu || '', aciklama: y.durum === 'geldi' ? 'İmzası var (geldi)' : (y.durum === 'gelmedi' ? 'İmzası yok (gelmedi)' : 'İmza belirsiz'), muhur: '' }));
+    (durum.yoklamalar || []).forEach((y) => kayitlar.push({ zamanMs: y.zamanMs, tur: y.gr ? 'Girmedi (GR)' : 'Yoklama', ogrNo: y.ogrNo, ad: ogrAdiBul(y.ogrNo), sinav: y.sinavKodu || '', aciklama: y.gr ? 'Kağıdı okunmadı — telefonda "Okumayı bitir" ile sınava girmedi (GR) gönderildi' : (y.durum === 'geldi' ? 'İmzası var (geldi)' : (y.durum === 'gelmedi' ? 'İmzası yok (gelmedi)' : 'İmza belirsiz')), muhur: '' }));
     return kayitlar.sort((a, b) => (b.zamanMs || 0) - (a.zamanMs || 0));
   }
   function cizKayitlar() {
@@ -16626,7 +16646,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
             const satirlar = olay.veri && Array.isArray(olay.veri.satirlar) ? olay.veri.satirlar : [];
             satirlar.forEach((x) => {
               if (!x || !x.ogrNo) return;
-              const yeni = { ogrNo: String(x.ogrNo), durum: String(x.durum || 'belirsiz'), elle: Boolean(x.elle), sinavKodu: olay.sinavKodu || '', zamanMs: Number(olay.zamanMs) || 0, seqNo: Number(olay.seqNo) || 0, sayfa: Number(olay.veri.sayfa) || 0 };
+              const yeni = { ogrNo: String(x.ogrNo), durum: String(x.durum || 'belirsiz'), elle: Boolean(x.elle), gr: Boolean(x.gr), kaynak: String(olay.veri.kaynak || ''), sinavKodu: olay.sinavKodu || '', zamanMs: Number(olay.zamanMs) || 0, seqNo: Number(olay.seqNo) || 0, sayfa: Number(olay.veri.sayfa) || 0 };
               const i = durum.yoklamalar.findIndex((y) => y.ogrNo === yeni.ogrNo && y.sinavKodu === yeni.sinavKodu);
               if (i < 0) durum.yoklamalar.push(yeni);
               else if ((durum.yoklamalar[i].seqNo || 0) <= yeni.seqNo) durum.yoklamalar[i] = yeni;
