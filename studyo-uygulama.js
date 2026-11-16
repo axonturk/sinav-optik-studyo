@@ -4813,8 +4813,29 @@
     return adEsit ? adEsit.id : '';
   }
   function telefonSinaviniDerseKaydet(kod, secenek = {}) {
-    const kova = telefonSinavlariniYukle()[kod];
-    if (!kova) return { basarili: false, mesaj: 'Sınav bulunamadı.' };
+    // Zaten derse kaydedildiyse yalnız açılır (öğretmenin yaptığı düzeltmeler/yeniden puanlama ezilmez)
+    const mevcutKayit = (durum.kayitliSinavlar || []).find((x) => x && x.kaynak === 'telefon' && x.sinavKodu === kod);
+    if (mevcutKayit && !secenek.yenidenAktar) {
+      if (durum.aktifDersId !== mevcutKayit.dersId && (durum.dersler || []).some((x) => x.id === mevcutKayit.dersId)) {
+        const dd = (durum.dersler || []).find((x) => x.id === mevcutKayit.dersId);
+        if (dd && dd.donemId && dd.donemId !== durum.aktifDonemId) durum.aktifDonemId = dd.donemId;
+        degistirAktifDersGuvenli(mevcutKayit.dersId);
+        const sec = document.getElementById('aktif-ders-sec');
+        if (sec) sec.value = mevcutKayit.dersId;
+      }
+      yukleKayitliSinavSnapshot(mevcutKayit.id);
+      if (typeof yenileTumSekmePanelleriUI === 'function') yenileTumSekmePanelleriUI();
+      return { basarili: true, dersId: mevcutKayit.dersId, id: mevcutKayit.id, acildi: true };
+    }
+    let kova = telefonSinavlariniYukle()[kod];
+    if (!kova) {
+      // Yalnız arşivde duran telefon sınavı: arşiv kaydından derse alınır
+      const ars = sinavArsivi().find((a) => a && a.sinavKodu === kod);
+      if (!ars) return { basarili: false, mesaj: 'Sınav bulunamadı.' };
+      const tum = telefonSinavlariniYukle();
+      tum[kod] = { ad: ars.ad, yapi: ars.yapi || null, okumalar: Object.fromEntries((ars.okumalar || []).map((o, i) => [String(o.id || `${o.ogrNo}-${i}`), Object.assign({}, o, { id: String(o.id || `${o.ogrNo}-${i}`) })])), sonMs: ars.tarihMs || Date.now() };
+      kova = tum[kod];
+    }
     let dersId = telefonSinavininDersiniBul(kova, kod);
     if (!dersId) {
       const aktif = (durum.dersler || []).find((d) => d.id === durum.aktifDersId);
@@ -4887,14 +4908,31 @@
   /* Arşiv sayfasındaki tüm sınavlar (tek liste) */
   function tumArsivSinavlari() {
     const sonuc = [];
-    sinavArsivi().forEach((a) => sonuc.push({ anahtar: a.id, ad: a.ad, sinavKodu: a.sinavKodu, kaynak: a.kaynak === 'telefon' ? 'Telefon (arşivde)' : 'Arşiv', tarihMs: a.tarihMs, okumalar: a.okumalar || [], arsivde: true }));
+    const dersteKayit = (kod) => (durum.kayitliSinavlar || []).find((k) => k && k.kaynak === 'telefon' && k.sinavKodu === kod) || null;
+    const dersAdi = (k) => { const dd = k && (durum.dersler || []).find((x) => x.id === k.dersId); return dd ? `${dd.kod || ''} ${dd.ad || ''}`.trim() : ''; };
+    const dersteOkumalar = (k) => {
+      const kova = k && (durum.okumaSonuclariHaritasi || {})[`${k.dersId}::${k.id}`];
+      const aktif = aktifTelefonKayitliSinavi();
+      if (aktif && k && aktif.id === k.id) return durum.okumaSonuclari || [];
+      return Array.isArray(kova) ? kova : null;
+    };
+    const etiketle = (kaynakMetni, k) => (k ? `Derste kayıtlı · ${dersAdi(k) || 'ders'}${kaynakMetni.includes('arşivde') ? ' · arşivde' : ''}` : kaynakMetni);
+    sinavArsivi().forEach((a) => {
+      const k = a.kaynak === 'telefon' ? dersteKayit(a.sinavKodu) : null;
+      const dOk = dersteOkumalar(k);
+      sonuc.push({ anahtar: a.id, derste: Boolean(k), ad: a.ad, sinavKodu: a.sinavKodu, kaynak: etiketle(a.kaynak === 'telefon' ? 'Telefon (arşivde)' : 'Arşiv', k), tarihMs: a.tarihMs, okumalar: dOk || a.okumalar || [], arsivde: true });
+    });
     const tum = telefonSinavlariniYukle();
     Object.keys(tum).forEach((k) => {
       if (!Object.keys(tum[k].okumalar || {}).length) return;
       if (sonuc.some((x) => x.sinavKodu === k)) return;
-      sonuc.push({ anahtar: `TEL-${k}`, derste: Boolean(tum[k].derseKaydedildi), ad: tum[k].ad || k, sinavKodu: k, kaynak: tum[k].derseKaydedildi ? 'Telefon (derse kaydedildi)' : 'Telefon (arşive alınmadı)', tarihMs: tum[k].sonMs, okumalar: telefonSinavOkumalari(k).map((o) => Object.assign({}, o, { adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad) })), arsivde: false });
+      const ks = dersteKayit(k);
+      const dOk = dersteOkumalar(ks);
+      sonuc.push({ anahtar: `TEL-${k}`, derste: Boolean(ks), ad: tum[k].ad || k, sinavKodu: k, kaynak: ks ? etiketle('Telefon', ks) : 'Telefon (derse alınmadı)', tarihMs: tum[k].sonMs, okumalar: dOk || telefonSinavOkumalari(k).map((o) => Object.assign({}, o, { adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad) })), arsivde: false });
     });
     (durum.kayitliSinavlar || []).forEach((k) => {
+      // Telefondan derse alınan sınav kendi telefon/arşiv satırında gösterilir (çift satır olmasın)
+      if (k && k.kaynak === 'telefon' && sonuc.some((x) => x.sinavKodu === k.sinavKodu)) return;
       sonuc.push({ anahtar: `KS-${k.id}`, ad: k.ad || k.sinavKodu || 'Kayıtlı sınav', sinavKodu: k.sinavKodu || '', kaynak: 'Stüdyo (basılan / kaydedilen)', tarihMs: Number(k.guncellemeMs || k.olusturmaMs) || 0, okumalar: [], arsivde: true, studyo: true, basimSayisi: (k.basimGecmisi || []).length });
     });
     if ((durum.okumaSonuclari || []).length) {
@@ -4917,7 +4955,7 @@
           <td>${s.studyo ? '—' : s.okumalar.length}</td>
           <td>${s.studyo ? '—' : (ciftler.length ? `<span class="rozet rozet-kirmizi">${ciftler.length} çift</span>` : '<span class="rozet rozet-yesil">yok</span>')}</td>
           <td style="white-space:nowrap;">${s.studyo ? '' : `<button type="button" class="btn btn-kucuk" data-arsiv-ac="${C.kacisHTML(s.anahtar)}">Aç</button>`}
-            ${s.anahtar.startsWith('TEL-') || s.kaynak === 'Telefon (arşivde)' ? `<button type="button" class="btn btn-birincil btn-kucuk" data-derse-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Sınavı ilgili derse kaydet; Değerlendirme'de notlar, soru analizi ve kopya raporu açılır">${s.derste ? 'Derste aç' : 'Kaydet'}</button>` : ''}
+            ${s.anahtar.startsWith('TEL-') || /^Telefon \(arşivde\)|^Derste kayıtlı/.test(s.kaynak) ? `<button type="button" class="btn btn-birincil btn-kucuk" data-derse-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Sınavı ilgili derse kaydet; Değerlendirme'de notlar, soru analizi ve kopya raporu açılır">${s.derste ? 'Derste aç' : 'Kaydet'}</button>` : ''}
             ${!s.arsivde && s.anahtar.startsWith('TEL-') ? `<button type="button" class="btn btn-hayalet btn-kucuk" data-arsive-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Kalıcı arşive al (isteğe bağlı)">Arşive al</button>` : ''}</td>
         </tr>`;
       }).join('')}</tbody></table>` : '<div style="color:var(--metin-ikincil);">Henüz arşivde sınav yok. Basılan sınavlar ve telefondan gelen okumalar burada görünür.</div>';
@@ -6543,10 +6581,7 @@
     if (dersHavuzSorulari.length === 0 && Array.isArray(yapi.tumSeciliSorular) && yapi.tumSeciliSorular.length > 0) {
       dersHavuzSorulari = yapi.tumSeciliSorular;
     }
-    if (onl.haftaKapsam === 'vize') {
-      const vizeSorular = dersHavuzSorulari.filter((s) => C.normalizeHaftaNo(s.hafta, 1) <= 7);
-      if (vizeSorular.length >= 2) dersHavuzSorulari = vizeSorular;
-    }
+    dersHavuzSorulari = onlineHaftaFiltresi(dersHavuzSorulari, onl.haftaKapsam);
 
     const dyAdet = onl.dySayisi !== undefined ? Number(onl.dySayisi) : yapi.dySayisi;
     const testAdet = onl.testSayisi !== undefined ? Number(onl.testSayisi) : yapi.testSayisi;
@@ -7829,6 +7864,17 @@
     }
   }
 
+  /* Online sınav hafta kapsamı: Stüdyodaki seçili haftalar / Vize (1–7) / Final (1–14) */
+  function onlineHaftaFiltresi(havuz, kapsam) {
+    let haftalar = null;
+    if (kapsam === 'vize') haftalar = [1, 2, 3, 4, 5, 6, 7];
+    else if (kapsam === 'studyo' && Array.isArray(durum.seciliHaftalar) && durum.seciliHaftalar.length) haftalar = durum.seciliHaftalar.map(Number);
+    if (!haftalar) return havuz;
+    const set = new Set(haftalar);
+    const suzulmus = havuz.filter((s) => s.tur === 'klasik' || set.has(C.normalizeHaftaNo(s.hafta, 1)));
+    return suzulmus.filter((s) => s.tur !== 'klasik').length >= 2 ? suzulmus : havuz;
+  }
+
   async function senkronizeEtOnlineSinavSunucu(sinavTanimi) {
     if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
     try {
@@ -7838,10 +7884,7 @@
       if (dersSorulari.length === 0 && yapi && Array.isArray(yapi.tumSeciliSorular) && yapi.tumSeciliSorular.length > 0) {
         dersSorulari = yapi.tumSeciliSorular;
       }
-      if (sinavTanimi.haftaKapsam === 'vize') {
-        const vizeSorular = dersSorulari.filter((s) => C.normalizeHaftaNo(s.hafta, 1) <= 7);
-        if (vizeSorular.length >= 2) dersSorulari = vizeSorular;
-      }
+      dersSorulari = onlineHaftaFiltresi(dersSorulari, sinavTanimi.haftaKapsam);
       const dyAdet = sinavTanimi.dySayisi !== undefined ? Number(sinavTanimi.dySayisi) : (yapi ? yapi.dySayisi : 10);
       const testAdet = sinavTanimi.testSayisi !== undefined ? Number(sinavTanimi.testSayisi) : (yapi ? yapi.testSayisi : 10);
       const klasikAdet = sinavTanimi.klasikSayisi !== undefined ? Number(sinavTanimi.klasikSayisi) : 0;
@@ -7850,7 +7893,8 @@
         gosterOnlineSoruYokUyarisi();
         return false;
       }
-      const havuzSorulari = dersSorulari;
+      const ortakSet = C.uretKisiyeOzelOnlineSinav(dersSorulari, dyAdet, testAdet, 'SABIT', sinavTanimi.sinavId || 'SINAV-2026-VIZE');
+      const havuzSorulari = [...ortakSet, ...dersSorulari.filter((s) => s.tur === 'klasik')];
       const seciliSorular = C.uretKisiyeOzelOnlineSinav(
         havuzSorulari,
         dyAdet,
@@ -9837,6 +9881,15 @@
     }
 
     const btnHocaGirisYap = document.getElementById('btn-hoca-giris-yap');
+    // Kullanıcı adı / şifre kutusunda Enter = Giriş Yap
+    ['hoca-giris-kullanici', 'hoca-giris-sifre'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el && btnHocaGirisYap) {
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); btnHocaGirisYap.click(); }
+        });
+      }
+    });
     if (btnHocaGirisYap) {
       btnHocaGirisYap.addEventListener('click', async () => {
         const kullaniciAdi = (document.getElementById('hoca-giris-kullanici').value || '').trim();
@@ -9935,6 +9988,20 @@
         guncelleHocaYonetimPaneliUI();
         bilgiKutu.textContent = `✅ Hoş geldiniz ${durum.hocaHesap.adSoyad} (${durum.hocaHesap.kullaniciAdi}). Öğretmen oturumu doğrulandı.`;
         bilgiKutu.style.display = 'block';
+        // Doğrulama sonrası doğrudan uygulamaya girilir; yalnız yöneticinin onay bekleyen başvurusu varsa pencere açık kalır
+        {
+          const yonetici = String(durum.hocaHesap.rol || '').toLowerCase() === 'yonetici';
+          const bekleyenVar = yonetici && (durum.hocaListesi || []).some((h) => h && String(h.durum || '').toLowerCase() === 'beklemede');
+          if (!bekleyenVar) {
+            setTimeout(() => {
+              const girisModal = document.getElementById('modal-hoca-giris');
+              const kapatBtn = document.getElementById('btn-modal-hoca-kapat');
+              if (durum.hocaOturumAcik && girisModal && girisModal.style.display !== 'none' && kapatBtn) kapatBtn.click();
+            }, 450);
+          } else {
+            bilgiKutu.textContent += ' Onay bekleyen öğretmen başvurusu var (aşağıdaki Yönetici Onay Paneli).';
+          }
+        }
         await bulutKasadanYukle(false).catch(() => {});
         girisSonrasiTelefonBaglaTeklifEt();
       });

@@ -187,6 +187,14 @@ async function girisYap(pc) {
       await pc.evaluate(() => { document.getElementById('kural-cift-sik-dogru').value = ''; document.getElementById('btn-yeniden-puanla').click(); });
       await bekle(300);
 
+      // B1) Arşiv listesinde derse kaydedilen sınav TEK satırdır: "Derste kayıtlı · ders", kağıt sayısı ve "Derste aç"
+      await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-arsiv"]').click());
+      await bekle(300);
+      const tekSatir = await pc.evaluate((kod) => {
+        const satirlar = Array.from(document.querySelectorAll('#arsiv-liste tbody tr')).filter((tr) => tr.textContent.includes(kod));
+        return { n: satirlar.length, metin: satirlar.map((tr) => tr.textContent.replace(/\s+/g, ' ').trim()) };
+      }, KOD);
+      kontrol('B1) Arşivde derse kaydedilen telefon sınavı tek satır: "Derste kayıtlı", 3 kağıt, "Derste aç"', tekSatir.n === 1 && /Derste kayıtlı/.test(tekSatir.metin[0]) && /Derste aç/.test(tekSatir.metin[0]) && / 3 /.test(` ${tekSatir.metin[0]} `), JSON.stringify(tekSatir));
       // Taslağa dönünce dersin kendi okumaları geri gelir; tekrar seçince telefon sınavı
       await pc.evaluate(() => { const s = document.getElementById('sec-kayitli-sinav-ust'); s.value = ''; s.dispatchEvent(new Event('change', { bubbles: true })); });
       await bekle(500);
@@ -314,6 +322,21 @@ async function girisYap(pc) {
       await bekle(300);
       const c5 = await dn();
       kontrol('C5) Sayfa yenilenince dönemler ve aktif dönem kalıcı', c5.donem === '2026-2027-BAHAR' && c5.arsiv.includes('2026-2027-GUZ'), JSON.stringify(c5));
+    }
+
+    // ---------------- Giriş: Enter ile giriş, doğrulanınca pencere kendiliğinden kapanır ----------------
+    {
+      await pc.evaluate(() => document.getElementById('btn-hoca-kilitle').click());
+      await bekle(500);
+      await pc.evaluate(() => { const m = document.getElementById('modal-hoca-giris'); if (m && m.style.display === 'none') { const b = document.getElementById('btn-hoca-giris-ac'); if (b) b.click(); } });
+      await bekle(300);
+      await pc.evaluate(() => { document.getElementById('hoca-giris-kullanici').value = 'hoca'; document.getElementById('hoca-giris-sifre').value = ''; });
+      await pc.focus('#hoca-giris-sifre');
+      await pc.keyboard.type('Demo!Hoca2026');
+      await pc.keyboard.press('Enter');
+      await bekle(2200);
+      const g = await pc.evaluate(() => ({ acik: document.body.classList.contains('hoca-oturum-acik'), modal: (document.getElementById('modal-hoca-giris') || {}).style ? document.getElementById('modal-hoca-giris').style.display : '' }));
+      kontrol('Giriş: şifre kutusunda Enter giriş yapar ve doğrulanınca giriş penceresi kendiliğinden kapanır', g.acik && g.modal === 'none', JSON.stringify(g));
     }
 
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));

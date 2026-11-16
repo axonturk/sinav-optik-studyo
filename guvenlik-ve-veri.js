@@ -8934,32 +8934,37 @@
      1. Bankada yeterli soru varsa her öğrenciye FARKLI sorular seçer, ancak her öğrencide tüm ÖÇ'ler en az 1 soru ile kapsanır
      2. Aynı soru denk gelse bile SORU SIRASINI değiştirir
      3. Her test sorusunda ŞIK SIRASINI (A..E) öğrenciye özel karıştırır */
-  function uretKisiyeOzelOnlineSinav(tumHavuzSorulari, dySayisi, testSayisi, ogrNo, sinavId = 'SINAV-2026') {
+  /* Online sınav kuralı: TÜM öğrencilere AYNI sorular; öğrenciye göre yalnız soru sırası ve şık yerleri değişir.
+     Soru seti sınav kimliğiyle (öğrenciden bağımsız) bir kez seçilir: seçili haftalar + her ÖÇ'den en az 1 soru.
+     Doğru şıklar her öğrencide A–E arasında eşit ve dağınık dağıtılır.
+     (Eskiden havuz büyükse her öğrenciye havuzdan FARKLI sorular seçiliyordu.) */
+  function uretKisiyeOzelOnlineSinav(tumHavuzSorulari, dySayisi, testSayisi, ogrNo, sinavId = 'SINAV-2026', ayarlar = {}) {
     const dyHavuz = tumHavuzSorulari.filter((s) => s.tur === 'dy' && !s.arsivde);
     const testHavuz = tumHavuzSorulari.filter((s) => s.tur === 'test' && !s.arsivde);
 
-    // Öğrenciye özel deterministik karıştırma ile havuzdan farklı sıralama oluştur
-    const karisikDyHavuz = diziKaristirDeterministik(dyHavuz, `HAVUZ-DY-${sinavId}-${ogrNo}`);
-    const karisikTestHavuz = diziKaristirDeterministik(testHavuz, `HAVUZ-TEST-${sinavId}-${ogrNo}`);
-
-    // Bu öğrencinin karıştırılmış havuzu üzerinden Bologna "Her ÖÇ İçin En Az 1 Soru" garantili seçim yap
+    // Ortak (öğrenciden bağımsız) seçim: herkes aynı soru kümesini alır
+    const ortakDyHavuz = diziKaristirDeterministik(dyHavuz, `HAVUZ-DY-${sinavId}`);
+    const ortakTestHavuz = diziKaristirDeterministik(testHavuz, `HAVUZ-TEST-${sinavId}`);
     const ocGarantili = secHaftalikVeKotaliSinavSorulari(
-      [...karisikDyHavuz, ...karisikTestHavuz],
+      [...ortakDyHavuz, ...ortakTestHavuz],
       {
         dySayisi,
         testSayisi,
         klasikSayisi: 0,
         herOcEnAzBirSoru: true,
-        zorlukModu: 'tumu'
+        zorlukModu: 'tumu',
+        seciliHaftalar: Array.isArray(ayarlar.seciliHaftalar) && ayarlar.seciliHaftalar.length ? ayarlar.seciliHaftalar : undefined
       }
     );
 
     const secilenDy = ocGarantili.dy;
     const secilenTest = ocGarantili.test;
 
-    // Her test sorusunun şıklarını da bu öğrenciye özel karıştır (Doğru şık A'dan D'ye geçerse doğru değeriyle taşınır)
-    const kisiyeOzelTest = secilenTest.map((s) =>
-      karistirSoruSiklariVeKoru(s, `SIK-${sinavId}-${ogrNo}-${s.id}`, 5, true)
+    // Öğrenciye özel: test sırası + şık yerleri (doğru şıklar öğrenci içinde dengeli)
+    const ogrTest = diziKaristirDeterministik(secilenTest, `TESTSIRA-${sinavId}-${ogrNo}`);
+    const dengeliHarf = uretDengeliHarfDizisi(ogrTest.length, 5, `SIK-DENGE-${sinavId}-${ogrNo}`);
+    const kisiyeOzelTest = ogrTest.map((s, i) =>
+      karistirSoruSiklariVeKoru(s, `SIK-${sinavId}-${ogrNo}-${s.id}`, 5, true, dengeliHarf[i] || null)
     );
 
     // Tüm soruları birleştirip soru sırasını da öğrenciye özel karıştır
