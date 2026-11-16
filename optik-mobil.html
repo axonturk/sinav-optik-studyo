@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Cep Optik Okuyucu (Mobil OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261116c" />
+  <link rel="stylesheet" href="ortak.css?v=20261116d" />
   <style>
     html, body {
       margin: 0;
@@ -908,6 +908,7 @@
           <span>👥 Ders Öğrenci Listesi</span>
           <span class="rozet rozet-yesil" id="mobil-yoklama-ozet-rozet">0 / 0 Okundu</span>
         </div>
+        <button type="button" class="btn btn-birincil btn-kucuk" id="btn-mobil-okuma-bitir" title="Okuması biten sınavda kağıdı okunmayan öğrencileri bilgisayara &quot;sınava girmedi (GR)&quot; olarak gönderir" style="width:100%; margin-bottom:0.45rem;">✅ Okumayı bitir · okunmayanlar "girmedi (GR)"</button>
         <div style="margin-bottom:0.45rem;">
           <input type="text" id="girdi-mobil-sinif-ara" placeholder="Ders listesinde numara veya ad ara..." style="width:100%; font-size:0.8rem; box-sizing:border-box;" />
         </div>
@@ -1023,7 +1024,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261116c"></script>
+  <script src="guvenlik-ve-veri.js?v=20261116d"></script>
   <script>
     (function () {
       'use strict';
@@ -4804,9 +4805,11 @@
         tbody.innerHTML = filtreli
           .map((o) => {
             const kayit = okunanHarita.get(String(o.ogrNo || '').trim());
+            const grListe = mobilDurum.sinavYapisi.girmeyenler;
+            const grMi = !kayit && grListe && grListe.kod === String(mobilDurum.sinavYapisi.sinavKodu || '') && Array.isArray(grListe.nolar) && grListe.nolar.includes(String(o.ogrNo || '').trim());
             const durumHtml = kayit
               ? `<span class="rozet rozet-yesil">Okundu · ${kayit.toplamPuan}p</span>`
-              : `<span class="rozet rozet-sari">Okunmadı</span>`;
+              : (grMi ? `<span class="rozet" style="background:#e5e7eb; color:#374151;">GR · girmedi</span>` : `<span class="rozet rozet-sari">Okunmadı</span>`);
             return `
               <tr>
                 <td class="mono" style="font-size:0.76rem; white-space:nowrap;">${C.kacisHTML(String(o.ogrNo || ''))}</td>
@@ -4818,8 +4821,37 @@
           .join('');
       }
 
+      /* Okumayı bitir: kağıdı okunmayan öğrenciler bilgisayara "sınava girmedi (GR)" olarak gönderilir */
+      function okumayiBitirGirmeyenleriGonder() {
+        const ogrenciler = Array.isArray(mobilDurum.ogrenciler) ? mobilDurum.ogrenciler : [];
+        if (!ogrenciler.length) { mobilUyariGoster('⚠️ Bu derste öğrenci listesi yok; önce listeyi yükleyin.'); return false; }
+        const okunan = new Set((mobilDurum.okumaSonuclari || []).filter((x) => x && x.ogrNo && !kagitKimlikBelirsizMi(x)).map((x) => String(x.ogrNo).trim()));
+        const bekleyen = (mobilDurum.okumaSonuclari || []).filter((x) => kagitKimlikBelirsizMi(x)).length;
+        const girmeyen = ogrenciler.filter((o) => !okunan.has(String(o.ogrNo || '').trim()));
+        if (!girmeyen.length) { mobilUyariGoster('✅ Bütün öğrencilerin kağıdı okundu; girmeyen yok.', 'basari'); return false; }
+        const ornek = girmeyen.slice(0, 8).map((o) => `• ${o.ogrNo} ${o.adSoyad || ''}`).join('\n');
+        const mesaj = `Kağıdı okunmayan ${girmeyen.length} öğrenci "sınava girmedi (GR)" olarak bilgisayara gönderilsin mi?\n\n${ornek}${girmeyen.length > 8 ? `\n… ve ${girmeyen.length - 8} kişi daha` : ''}`
+          + (bekleyen ? `\n\nDikkat: ${bekleyen} kağıt hâlâ öğrenci seçimi bekliyor; önce onları eşleştirin, yoksa o öğrenciler de GR sayılır.` : '');
+        if (!window.confirm(mesaj)) return false;
+        const nolar = girmeyen.map((o) => String(o.ogrNo).trim());
+        for (let i = 0; i < nolar.length; i += 40) {
+          kuyrugaAlMobilSenkronOlayi('YOKLAMA', {
+            sayfa: Math.floor(i / 40) + 1, toplamSayfa: Math.ceil(nolar.length / 40), kaynak: 'okuma-bitir',
+            satirlar: nolar.slice(i, i + 40).map((no) => ({ ogrNo: no, durum: 'gelmedi', gr: true }))
+          });
+        }
+        mobilDurum.sinavYapisi.girmeyenler = { kod: String(mobilDurum.sinavYapisi.sinavKodu || ''), nolar };
+        guncelleMobilDersPaketKaydi();
+        kaydetYerelDepoya();
+        guncelleMobilSonucListesi();
+        mobilUyariGoster(`✅ ${nolar.length} öğrenci "girmedi (GR)" olarak bilgisayara gönderiliyor. Sonradan kağıdı okunan olursa okuması geçerli olur.`, 'basari');
+        return true;
+      }
+
       /* Etkinlik Bağlantıları */
       document.addEventListener('DOMContentLoaded', () => {
+        const btnOkumaBitir = document.getElementById('btn-mobil-okuma-bitir');
+        if (btnOkumaBitir) btnOkumaBitir.addEventListener('click', okumayiBitirGirmeyenleriGonder);
         // Pencereler hangi sekmede olursak olalım görünsün: sekme panelinden çıkarılıp sayfanın üst katmanına taşınır
         ['mobil-dogrulama', 'mobil-sinav-olustur', 'mobil-sinav-secici', 'mobil-yoklama'].forEach((id) => {
           const el = document.getElementById(id);

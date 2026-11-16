@@ -115,6 +115,20 @@ async function girisYap(pc) {
         const k = t[kod] || Object.values(t).find((x) => x && x.okumalar && x.okumalar.X2);
         return k ? Object.keys(k.okumalar) : null;
       }, KOD);
+      // GR: telefonda "Okumayı bitir" → girmeyen öğrenci arşiv detayında GR satırı olur
+      await api('/api/v2/sinav-senkron', { olaylar: [{ eventId: 'A5-GR', sinavKodu: KOD, tur: 'YOKLAMA', kaynakCihaz: 'mobil', zamanMs: Date.now(), veri: { sayfa: 1, toplamSayfa: 1, kaynak: 'okuma-bitir', satirlar: [{ ogrNo: '247419053', durum: 'gelmedi', gr: true }] } }] }, HB);
+      await pc.evaluate(async () => { await window.__masaustuV2SenkronSimdi(); });
+      await bekle(400);
+      await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-arsiv"]').click());
+      await bekle(300);
+      const grDetay = await pc.evaluate((kod) => {
+        const tr = Array.from(document.querySelectorAll('#arsiv-liste tbody tr')).find((t) => t.textContent.includes(kod));
+        const ac = tr && tr.querySelector('[data-arsiv-ac]'); if (ac) ac.click();
+        const d = document.getElementById('arsiv-detay');
+        return d ? d.textContent.replace(/\s+/g, ' ') : '';
+      }, KOD);
+      kontrol('GR) Telefondan "girmedi" gönderilen öğrenci arşiv detayında GR satırı olarak görünür', /1 girmedi \(GR\)/.test(grDetay) && /247419053/.test(grDetay) && /—GR/.test(grDetay), grDetay.slice(0, 300));
+      await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-stüdyo"]').click());
       kontrol('A5) Eşleşmeden gelen eski okuma, aynı kağıt öğrenciye yerleşince düşer; telefonda silinen okuma da düşer (kalan: yalnız X2)', Array.isArray(kova) && kova.length === 1 && kova[0] === 'X2', JSON.stringify(kova));
     }
 
@@ -231,6 +245,23 @@ async function girisYap(pc) {
       }
       const b5 = await pc.$eval('#etiket-elle-kagit', (e) => e.textContent);
       kontrol('B5) "Kağıdı elle gir": öğrenci seçilip cevaplar yazılınca kağıt anahtarla puanlanıp eklenir (90 puan)', secenekSay > 0 && /90 puan eklendi/.test(b5), `${secenekSay} · ${b5}`);
+    }
+
+    // GR) Daha önce gönderilmiş sınav: dersin listesinde kağıdı olmayan öğrenci arşiv detayında ve Excel'de GR
+    {
+      await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-ogrenciler"]').click());
+      await bekle(200);
+      await pc.evaluate(() => { document.getElementById('ogr-ekle-no').value = '247419010'; document.getElementById('ogr-ekle-ad').value = 'VEDAT ENES SAVAŞ'; document.getElementById('btn-tek-ogrenci-ekle').click(); });
+      await bekle(300);
+      await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-arsiv"]').click());
+      await bekle(300);
+      const det = await pc.evaluate(() => {
+        const tr = Array.from(document.querySelectorAll('#arsiv-liste tbody tr')).find((t) => t.textContent.includes('BTEST-VIZE-2026'));
+        const ac = tr && tr.querySelector('[data-arsiv-ac]'); if (ac) ac.click();
+        const d = document.getElementById('arsiv-detay');
+        return d ? d.textContent.replace(/\s+/g, ' ') : '';
+      });
+      kontrol('GR) Önceden gönderilmiş sınavda dersin listesinde kağıdı olmayan öğrenci (VEDAT ENES SAVAŞ) GR görünür', /girmedi \(GR\)/.test(det) && /247419010VEDAT ENES SAVAŞ—+GR/.test(det.replace(/\s/g, '').replace(/247419010VEDATENESSAVAŞ/, '247419010VEDAT ENES SAVAŞ')), det.slice(0, 400));
     }
 
     // ---------------- B4: kopya eşiği (popüler yanlışlar sayılmaz) ----------------
