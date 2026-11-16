@@ -2582,3 +2582,7 @@ html { scroll-padding-top: 72px; }
 .baglam-sag > * { flex-shrink: 0; white-space: nowrap; }
 #btn-aktif-dersi-sil { margin-left: 2px; margin-right: 6px; }
 html { scroll-padding-top: 104px; }
+
+/* D1: şık metni hiçbir sıkıştırma kademesinde komşu satırın üstüne binmez */
+.sik-oge { line-height: 1.05; }
+.siklar-iki-sutun .sik-oge, .siklar-yan-yana .sik-oge { line-height: 1.08; }

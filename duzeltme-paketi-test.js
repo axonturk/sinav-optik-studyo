@@ -236,6 +236,32 @@ async function girisYap(pc) {
       kontrol('B4) Gerçek vize (14 kağıt): kopya çifti 26 → ≤ 6; kalanların hepsi ortak cevap kümesinden', c.length > 0 && c.length <= 6 && c.every((x) => kume.has(x.ogrenci1No) && kume.has(x.ogrenci2No)), JSON.stringify(c.map((x) => `${x.ogrenci1No}-${x.ogrenci2No}`)));
     }
 
+    // ---------------- D1: uzun şıklar iki sütunda satır kaydırınca tek sütuna geçer (üst üste binmez) ----------------
+    {
+      const d1 = await pc.evaluate(() => {
+        const kap = document.createElement('div');
+        kap.className = 'sorular-govde';
+        kap.style.cssText = 'position:absolute; left:0; top:0; width:230px; font-size:9pt; line-height:0.93; background:#fff;';
+        const siklar = ['TPID alanı (0x8100)', 'Allowed VLAN listesi', '802.1Q etiketi', 'VTP Transparent kip', 'Trunk bağlantısı'];
+        const yap = (sinif) => `<div class="${sinif}">${siklar.map((m, i) => `<div class="sik-oge"><span class="sik-harf">${'ABCDE'[i]})</span><span>${m}</span></div>`).join('')}</div>`;
+        kap.innerHTML = yap('siklar-iki-sutun') + '<div style="height:8px"></div>' + `<div class="siklar-iki-sutun"><div class="sik-oge"><span class="sik-harf">A)</span><span>TCP</span></div><div class="sik-oge"><span class="sik-harf">B)</span><span>UDP</span></div></div>`;
+        document.body.appendChild(kap);
+        window.__onarSatirKaydiranSiklar(kap);
+        const [uzun, kisa] = kap.querySelectorAll(':scope > div[class^="siklar"]');
+        const r = Array.from(uzun.querySelectorAll('.sik-oge')).map((o) => o.getBoundingClientRect());
+        let ust = 0;
+        for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) {
+          const x = Math.min(r[i].right, r[j].right) - Math.max(r[i].left, r[j].left);
+          const y = Math.min(r[i].bottom, r[j].bottom) - Math.max(r[i].top, r[j].top);
+          if (x > 1 && y > 1) ust++;
+        }
+        const sonuc = { uzun: uzun.className, kisa: kisa.className, ust, lh: getComputedStyle(uzun.querySelector('.sik-oge')).lineHeight };
+        kap.remove();
+        return sonuc;
+      });
+      kontrol('D1) Satır kaydıran uzun şıklar tek sütuna geçer, şıklar üst üste binmez; kısa şıklar iki sütunda kalır', d1.uzun === 'siklar-alt-alta' && d1.kisa === 'siklar-iki-sutun' && d1.ust === 0, JSON.stringify(d1));
+    }
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;

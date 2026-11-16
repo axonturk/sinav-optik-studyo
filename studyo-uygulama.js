@@ -2990,7 +2990,7 @@
       let sikSinif = 'siklar-alt-alta';
       if (enUzunSik <= 10 && !sembolVar) {
         sikSinif = 'siklar-yan-yana';
-      } else if (enUzunSik <= 20 && !sembolVar) {
+      } else if (enUzunSik <= 15 && !sembolVar) {
         sikSinif = 'siklar-iki-sutun';
       }
 
@@ -3955,6 +3955,25 @@
      Uzun soru/şık metinlerinde .a4-sayfa yüksekliği (1123px) aşılırsa Sayfa 1 <-> Sayfa 2
      blok aktarımını ve kademeli tipografik sıkıştırmayı birlikte yürüterek
      scrollHeight <= clientHeight ve 1 A4 (Ön/Arka 2 sayfa) hedefini garanti altına alır. */
+  /* D1: iki sütun / satır içi şıklardan biri satır kaydırıyorsa o sorunun şıkları tek sütuna geçer */
+  function onarSatirKaydiranSiklar(govde) {
+    if (!govde) return;
+    govde.querySelectorAll('.siklar-iki-sutun, .siklar-yan-yana').forEach((el) => {
+      const ogeler = Array.from(el.querySelectorAll('.sik-oge'));
+      if (!ogeler.length) return;
+      const fs = parseFloat(getComputedStyle(ogeler[0]).fontSize) || 10;
+      const kaydiran = ogeler.some((o) => o.getBoundingClientRect().height > fs * 1.9);
+      if (!kaydiran) return;
+      el.classList.remove('siklar-iki-sutun', 'siklar-yan-yana');
+      el.classList.add('siklar-alt-alta');
+      el.style.display = 'flex';
+      el.style.flexDirection = 'column';
+      el.style.gridTemplateColumns = '';
+      el.style.gap = '1px';
+    });
+  }
+  window.__onarSatirKaydiranSiklar = onarSatirKaydiranSiklar;
+
   function dengeleVeSigdirA4Sayfalari(kapsayiciEl, ekSecenekler = {}) {
     if (!kapsayiciEl) return;
     const ilkSayfalar = Array.from(kapsayiciEl.querySelectorAll('.a4-sayfa'));
@@ -4044,12 +4063,12 @@
           const sikMetinler = Array.from(el.querySelectorAll('.sik-oge')).map((o) => (o.textContent || '').trim());
           const enUzun = sikMetinler.reduce((m, s) => Math.max(m, Math.max(0, s.length - 3)), 0);
           const sembolVar = sikMetinler.some((s) => /[=<>+\-*/^_\\{}[\]|]|->|::/.test(s));
-          if (k.sikSatirIci && enUzun <= 12 && !sembolVar) {
+          if (k.sikSatirIci && enUzun <= 10 && !sembolVar) {
             el.style.display = 'flex';
             el.style.flexDirection = 'row';
             el.style.flexWrap = 'wrap';
             el.style.gap = '0px 5px';
-          } else if ((k.sikSatirIci || k.sikIkiSutun) && enUzun <= 20 && !sembolVar) {
+          } else if ((k.sikSatirIci || k.sikIkiSutun) && enUzun <= 15 && !sembolVar) {
             el.style.display = 'grid';
             el.style.gridTemplateColumns = '1fr 1fr';
             el.style.gap = '0.5px 4px';
@@ -4072,6 +4091,9 @@
           optikSvg.style.width = '100%';
         }
       }
+      // D1: iki sütun / satır içi dizilen şıklardan biri satır kaydırıyorsa o sorunun şıkları tek sütuna geçer
+      // (sıkı satır aralığında kayan satırlar komşu şıkkın üstüne biniyordu)
+      onarSatirKaydiranSiklar(govde);
       if (k.klasikMinYuk) {
         govde.querySelectorAll('.klasik-cevap-alan, .klasik-cevap-kutusu, .klasik-alan').forEach((el) => {
           el.style.minHeight = k.klasikMinYuk;
@@ -4217,6 +4239,9 @@
         grupBaslangic = grupBitis;
       }
     }
+
+    // D1: son düzende satır kaydıran iki sütunlu şık kalmasın (üst üste binme yerine tek sütun)
+    kapsayiciEl.querySelectorAll('.sorular-govde').forEach((g) => onarSatirKaydiranSiklar(g));
 
     // 3. Adım: Kalan taşma durumunu denetle ve 1 A4 (Önlü-Arkalı) Kalkan Uyarısını senkronize et
     const kalanTasmaVar = Array.from(kapsayiciEl.querySelectorAll('.a4-sayfa')).some((sf) => tasiyorMu(sf));
