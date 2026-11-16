@@ -160,6 +160,32 @@ function kontrol(ad, kosul, detay = '') {
     }
     kontrol('Kaydet makbuzu: ders · sınav · kağıt sayısı · bulut yedeği', /Kaydedildi: 74112317 · 74112317 — Kablolama · 2 kağıt · buluta yedeklendi ✓/.test(makbuz), makbuz);
 
+    // Paket 3: Baskı Öncesi Kontrol yeni kural maddelerini listeler; uzun şık işareti yalnız ekranda
+    await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-stüdyo"]').click());
+    await bekle(300);
+    await pc.evaluate(() => document.getElementById('btn-ucus-kontrolu-ac').click());
+    await bekle(400);
+    const ucus = await pc.evaluate(() => Array.from(document.querySelectorAll('#liste-ucus-kontrolleri .ucus-kontrol-satir')).map((r) => r.textContent.replace(/\s+/g, ' ').trim()));
+    await pc.evaluate(() => document.getElementById('btn-ucus-kontrolu-kapat').click());
+    kontrol('Baskı Öncesi Kontrol: ÖÇ kapsamı, seçili haftalarda yeterli soru, tahmin edilebilir şık, uzun şık maddeleri var',
+      ['Her öğrenim çıktısının havuzda sorusu var', 'Seçili haftalarda yeterli soru', 'Doğru şık dizisi tahmin edilemez', 'Uzun şıklı sorular'].every((b) => ucus.some((t) => t.includes(b))), JSON.stringify(ucus.map((t) => t.slice(0, 60))));
+    const uzun = await pc.evaluate(() => {
+      const sahne = document.getElementById('a4-onizleme-sahne');
+      const kap = document.createElement('div');
+      kap.innerHTML = '<div class="siklar-iki-sutun" style="display:grid; grid-template-columns:1fr 1fr; width:300px; font-size:10px;"><span class="sik-oge">A) ' + 'çok uzun bir şık metni '.repeat(8) + '</span><span class="sik-oge">B) kısa</span></div>';
+      sahne.appendChild(kap);
+      window.__onarSatirKaydiranSiklar(kap);
+      const el = kap.querySelector('.siklar-uzun-isaret');
+      const r = { isaretli: Boolean(el), ekran: el ? getComputedStyle(el).outlineStyle : '' };
+      window.__uzunTestKap = kap;
+      return r;
+    });
+    await pc.emulateMediaType('print');
+    const baskida = await pc.evaluate(() => { const el = window.__uzunTestKap.querySelector('.siklar-uzun-isaret'); return el ? getComputedStyle(el).outlineStyle : ''; });
+    await pc.emulateMediaType('screen');
+    await pc.evaluate(() => window.__uzunTestKap.remove());
+    kontrol('Uzun şıklı soru önizlemede sarı çerçeveyle işaretlenir; baskıda işaret görünmez', uzun.isaretli && uzun.ekran === 'dashed' && baskida === 'none', `${JSON.stringify(uzun)} · baskı:${baskida}`);
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;

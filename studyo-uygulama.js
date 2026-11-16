@@ -4047,7 +4047,8 @@
       const kaydiran = ogeler.some((o) => o.getBoundingClientRect().height > fs * 1.9);
       if (!kaydiran) return;
       el.classList.remove('siklar-iki-sutun', 'siklar-yan-yana');
-      el.classList.add('siklar-alt-alta');
+      el.classList.add('siklar-alt-alta', 'siklar-uzun-isaret');
+      el.title = 'Şıklar uzun olduğu için alt alta dizildi (sayfada yer kaplar). Bu işaret baskıda görünmez.';
       el.style.display = 'flex';
       el.style.flexDirection = 'column';
       el.style.gridTemplateColumns = '';
@@ -16530,6 +16531,53 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
           aksiyonEtiket: ''
         }
       ];
+      // K3 + Ö6 + Ö4: kural uyarıları (havuz kapsamı, seçili haftalarda yeterli soru, tahmin edilebilir şık dizisi, uzun şıklar)
+      if (typeof C.hesaplaBaskiOncesiKuralUyarilari === 'function') {
+        const havuz = (durum.sorular || []).filter((q) => q && !q.arsivde && (q.dersId === yapi.ders.id || q.dersId === 'genel'));
+        const ku = C.hesaplaBaskiOncesiKuralUyarilari({
+          havuz,
+          seciliHaftalar: durum.seciliHaftalar || [],
+          ihtiyac: { dy: yapi.dySayisi, test: yapi.testSayisi, klasik: yapi.klasikSayisi },
+          ocler: yapi.dersOgrenimCiktilari || [],
+          cevapAnahtarlari: yapi.cevapAnahtarlari || {}
+        });
+        const turAd = { dy: 'Doğru/Yanlış', test: 'Test', klasik: 'Klasik' };
+        maddeler.push({
+          ok: ku.sorusuzOcler.length === 0,
+          baslik: 'Her öğrenim çıktısının havuzda sorusu var',
+          aciklama: ku.sorusuzOcler.length ? `Sorusu olmayan ÖÇ: ${ku.sorusuzOcler.join(', ')}. Bu ÖÇ sınavda ölçülemez; Soru Bankası'na soru ekleyin.` : 'Dersin bütün ÖÇ\'lerinin havuzda sorusu var.',
+          aksiyonId: '',
+          aksiyonEtiket: ''
+        });
+        const haftaSorun = ku.yetersizTurler.length > 0 || ku.bosHaftalar.length > 0;
+        maddeler.push({
+          ok: !haftaSorun,
+          baslik: 'Seçili haftalarda yeterli soru',
+          aciklama: haftaSorun
+            ? [ku.yetersizTurler.map((x) => `${turAd[x.tur]}: ${x.gerek} gerekli, seçili haftalarda ${x.var} var`).join(' · '),
+              ku.bosHaftalar.length ? `Sorusu olmayan hafta: ${ku.bosHaftalar.join(', ')}` : ''].filter(Boolean).join(' · ')
+            : 'Seçili haftaların havuzu istenen soru sayısını karşılıyor.',
+          aksiyonId: '',
+          aksiyonEtiket: ''
+        });
+        maddeler.push({
+          ok: ku.tahminEdilebilir.length === 0,
+          baslik: 'Doğru şık dizisi tahmin edilemez',
+          aciklama: ku.tahminEdilebilir.length
+            ? `${ku.tahminEdilebilir.map((x) => `${x.grup} kitapçığı ${x.bolum}: ${x.neden}`).join(' · ')}. Soru sırasını karıştırın ya da "Doğru şıkları dengele"yi kullanın.`
+            : 'Doğru cevaplar kalıp oluşturmuyor.',
+          aksiyonId: '',
+          aksiyonEtiket: ''
+        });
+        const uzunSik = sahne ? sahne.querySelectorAll('.siklar-uzun-isaret').length : 0;
+        maddeler.push({
+          ok: uzunSik === 0,
+          baslik: 'Uzun şıklı sorular',
+          aciklama: uzunSik ? `${uzunSik} soruda şıklar uzun olduğu için alt alta dizildi (önizlemede sarı çerçeveli). Sayfa taşarsa bu şıkları kısaltın.` : 'Bütün şıklar yan yana / iki sütuna sığıyor.',
+          aksiyonId: '',
+          aksiyonEtiket: ''
+        });
+      }
 
       const hataSayi = maddeler.filter((m) => !m.ok).length;
       if (etiketUcusDurum) {

@@ -71,6 +71,25 @@ try {
   kontrol('4) Online: her öğrencide doğru şıklar A–E eşit dağılmış', online.every((o) => dengeliMi(o.filter((s) => s.tur === 'test').map((s) => s.dogruHarf))));
   kontrol('4) Online: aynı sorunun şık yeri öğrenciler arasında değişiyor', (() => { const id = online[0].find((s) => s.tur === 'test').id; return new Set(online.map((o) => o.find((s) => s.id === id).dogruHarf)).size >= 3; })());
   kontrol('4) Online: doğru cevap metni doğru harfte (kayma yok)', online.every((o) => o.filter((s) => s.tur === 'test').every((s) => String(s.siklar['ABCDE'.indexOf(s.dogruHarf)]).startsWith('doğru'))));
+  // 5) K3 + Ö6: basım öncesi kural uyarıları
+  const T = C.bulTahminEdilebilirDizi;
+  kontrol('5) Tahmin edilebilir dizi: art arda aynı şık (AAAA) yakalanır', /art arda 4/.test(T('BAAAAC', 'test')), T('BAAAAC', 'test'));
+  kontrol('5) Tahmin edilebilir dizi: ABCDE tekrarı yakalanır', /ABCDE kalıbı/.test(T('ABCDEABCDE', 'test')), T('ABCDEABCDE', 'test'));
+  kontrol('5) Tahmin edilebilir dizi: AABB tekrarı yakalanır', /AABB kalıbı/.test(T('AABBAABBA', 'test')), T('AABBAABBA', 'test'));
+  kontrol('5) Tahmin edilebilir dizi: tek şık baskın (6/10 "C") yakalanır', /6\/10/.test(T('CACCBCDCEC', 'test')), T('CACCBCDCEC', 'test'));
+  kontrol('5) Tahmin edilebilir dizi: D/Y dönüşümlü (DYDYDY) yakalanır', /DY kalıbı/.test(T('DYDYDYDY', 'dy')), T('DYDYDYDY', 'dy'));
+  kontrol('5) Dengeli üretilmiş diziler neredeyse hiç uyarı vermez (200 denemede ≤ 10)', (() => { let n = 0; for (let i = 0; i < 200; i++) { if (T(C.uretDengeliHarfDizisi(10, 5, `S-${i}`), 'test')) n++; } return n <= 10; })());
+  kontrol('5) Karışık gerçekçi dizi uyarı vermez', T('BDAECADBEC', 'test') === '' && T('DYYDYDDYDY', 'dy') === '', `${T('BDAECADBEC', 'test')}|${T('DYYDYDDYDY', 'dy')}`);
+  const ku = C.hesaplaBaskiOncesiKuralUyarilari({
+    havuz: [{ tur: 'test', hafta: 1, ocKodu: 'ÖÇ-1' }, { tur: 'test', hafta: 2, ocKodu: 'ÖÇ-2' }, { tur: 'dy', hafta: 1, ocKodu: 'ÖÇ-1' }],
+    seciliHaftalar: [1, 2, 3], ihtiyac: { dy: 2, test: 2, klasik: 0 },
+    ocler: [{ kod: 'ÖÇ-1' }, { kod: 'ÖÇ-2' }, { kod: 'ÖÇ-3' }],
+    cevapAnahtarlari: { A: { test: ['A', 'A', 'A', 'A', 'B'], dy: ['D', 'Y', 'D', 'Y', 'Y'] } }
+  });
+  kontrol('5) K3: havuzda sorusu olmayan ÖÇ bulunur', ku.sorusuzOcler.join() === 'ÖÇ-3', JSON.stringify(ku.sorusuzOcler));
+  kontrol('5) K3: sorusu olmayan seçili hafta bulunur', ku.bosHaftalar.join() === '3', JSON.stringify(ku.bosHaftalar));
+  kontrol('5) K3: seçili haftalarda yetersiz soru türü bulunur (D/Y 2 gerekli, 1 var)', ku.yetersizTurler.length === 1 && ku.yetersizTurler[0].tur === 'dy' && ku.yetersizTurler[0].var === 1, JSON.stringify(ku.yetersizTurler));
+  kontrol('5) Ö6: A kitapçığı test dizisi tahmin edilebilir bulunur', ku.tahminEdilebilir.length === 1 && ku.tahminEdilebilir[0].grup === 'A' && ku.tahminEdilebilir[0].bolum === 'test', JSON.stringify(ku.tahminEdilebilir));
 } catch (e) {
   hata++;
   console.log('  ✗ HATA beklenmeyen:', e.stack || e.message);

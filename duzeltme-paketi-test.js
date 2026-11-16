@@ -336,7 +336,7 @@ async function girisYap(pc) {
         kap.remove();
         return sonuc;
       });
-      kontrol('D1) Satır kaydıran uzun şıklar tek sütuna geçer, şıklar üst üste binmez; kısa şıklar iki sütunda kalır', d1.uzun === 'siklar-alt-alta' && d1.kisa === 'siklar-iki-sutun' && d1.ust === 0, JSON.stringify(d1));
+      kontrol('D1) Satır kaydıran uzun şıklar tek sütuna geçer (ve ekranda işaretlenir), şıklar üst üste binmez; kısa şıklar iki sütunda kalır', d1.uzun.split(' ').includes('siklar-alt-alta') && d1.uzun.split(' ').includes('siklar-uzun-isaret') && d1.kisa === 'siklar-iki-sutun' && d1.ust === 0, JSON.stringify(d1));
     }
 
     // ---------------- C: eğitim-öğretim yılı / dönem ----------------
