@@ -150,6 +150,31 @@ function kontrol(ad, kosul, detay = '') {
     kontrol('Ders seçilince o dersin son sınavı açılır (taslak değil); sınavı olmayan derste yeni sınav açık', yeniAcik === '' && geriAcik.deger === `TEL-${KOD}`, `${yeniAcik} · ${JSON.stringify(geriAcik)}`);
     kontrol('Sınav seçicinin ilk seçeneği "＋ Yeni sınav (taslak)"; telefon sınavında tarih boş kalmaz', geriAcik.ilk === '＋ Yeni sınav (taslak)' && !/· \)$/.test(geriAcik.secili), JSON.stringify(geriAcik));
 
+    // Ö1: değerlendirme kuralları sınavla saklanır; başka sınava taşınmaz; sayfa yenilense de durur; not çizelgesinde yazar
+    const kuralYaz = (deger) => pc.evaluate((v) => { const el = document.getElementById('kural-iptal-soru'); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }, deger);
+    const kuralOku = () => pc.evaluate(() => document.getElementById('kural-iptal-soru').value);
+    const sinavSec = (id) => pc.evaluate((v) => { const s = document.getElementById('sec-kayitli-sinav-ust'); s.value = v; s.dispatchEvent(new Event('change', { bubbles: true })); }, id);
+    await kuralYaz('TEST-2');
+    await sinavSec('');
+    await bekle(300);
+    const taslakKural = await kuralOku();
+    await sinavSec(`TEL-${KOD}`);
+    await bekle(300);
+    const geriKural = await kuralOku();
+    kontrol('Ö1) İptal kuralı sınavla saklanır: yeni sınava taşınmaz, sınava dönünce geri gelir', taslakKural === '' && geriKural === 'TEST-2', `${taslakKural} / ${geriKural}`);
+    const notCsv = await pc.evaluate(async () => {
+      try { localStorage.setItem('SINAV_INDIR_BICIM_V1', 'csv'); } catch (_) {}
+      let blob = null;
+      const eskiClick = HTMLAnchorElement.prototype.click; const eskiUrl = URL.createObjectURL;
+      URL.createObjectURL = (b) => { blob = b; return 'blob:test'; };
+      HTMLAnchorElement.prototype.click = function () {};
+      document.getElementById('btn-csv-indir').click();
+      document.getElementById('indir-bicim-csv').click();
+      HTMLAnchorElement.prototype.click = eskiClick; URL.createObjectURL = eskiUrl;
+      return blob ? (await blob.text()).slice(0, 400) : '';
+    });
+    kontrol('Ö1) Not çizelgesinde uygulanan kurallar yazar', /"Uygulanan kurallar";"İptal: TEST-2"/.test(notCsv), notCsv.slice(0, 200));
+
     // Kaydet makbuzu
     await pc.evaluate(() => document.getElementById('btn-genel-kaydet-uygula').click());
     let makbuz = '';
@@ -159,6 +184,20 @@ function kontrol(ad, kosul, detay = '') {
       if (/Kaydedildi:/.test(makbuz)) break;
     }
     kontrol('Kaydet makbuzu: ders · sınav · kağıt sayısı · bulut yedeği', /Kaydedildi: 74112317 · 74112317 — Kablolama · 2 kağıt · buluta yedeklendi ✓/.test(makbuz), makbuz);
+
+    // Ö1: sayfa yenilenince kural yerinde
+    await pc.reload({ waitUntil: 'networkidle0' });
+    await pc.evaluate(() => {
+      document.getElementById('hoca-giris-kullanici').value = 'hoca';
+      document.getElementById('hoca-giris-sifre').value = 'Demo!Hoca2026';
+      document.getElementById('btn-hoca-giris-yap').click();
+    });
+    await bekle(1600);
+    await pc.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k && document.getElementById('modal-hoca-giris').style.display !== 'none') k.click(); });
+    await pc.evaluate((id) => { const s2 = document.getElementById('aktif-ders-sec'); s2.value = id; s2.dispatchEvent(new Event('change', { bubbles: true })); }, kablolamaId);
+    await bekle(400);
+    const yenidenKural = await pc.evaluate(() => { document.querySelector('.sekme-btn[data-sekme="sekme-analiz"]').click(); return { sinav: document.getElementById('sec-kayitli-sinav-ust').value, kural: document.getElementById('kural-iptal-soru').value }; });
+    kontrol('Ö1) Sayfa yenilenince sınavın kuralı yerinde', yenidenKural.sinav === `TEL-${KOD}` && yenidenKural.kural === 'TEST-2', JSON.stringify(yenidenKural));
 
     // Paket 3: Baskı Öncesi Kontrol yeni kural maddelerini listeler; uzun şık işareti yalnız ekranda
     await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-stüdyo"]').click());

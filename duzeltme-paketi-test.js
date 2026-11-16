@@ -383,9 +383,14 @@ async function girisYap(pc) {
       await bekle(500);
       const c4 = await dn();
       kontrol('C4) Arşiv dönemi açılıp görüntülenebilir; üstte "arşiv dönemi" bandı çıkar', c4.donem === '2026-2027-GUZ' && c4.bant && c4.telSinav, JSON.stringify(c4));
+      const kilitIdler = ['btn-genel-kaydet-uygula', 'btn-aktif-dersi-sil', 'btn-elle-kagit-ekle', 'input-omr-foto', 'kural-iptal-soru', 'kural-cift-sik-dogru'];
+      const arsivKilit = await pc.evaluate((ids) => ids.map((id) => { const e = document.getElementById(id); return e ? e.disabled : null; }), kilitIdler);
+      kontrol('Ö3) Arşiv dönemi salt okunur: Kaydet, ders silme, elle kağıt, kağıt okuma ve kural alanları kapalı', arsivKilit.every((x) => x === true), JSON.stringify(arsivKilit));
       await pc.evaluate(() => { const s = document.getElementById('aktif-donem-sec'); s.value = '2026-2027-BAHAR'; s.dispatchEvent(new Event('change', { bubbles: true })); });
       await bekle(400);
       await pc.evaluate(() => { window.confirm = window.__eskiConfirmC; });
+      const acikKilit = await pc.evaluate((ids) => ids.map((id) => { const e = document.getElementById(id); return e ? e.disabled : null; }), kilitIdler);
+      kontrol('Ö3) Aktif döneme dönünce bu alanlar yeniden açılır', acikKilit.every((x) => x === false), JSON.stringify(acikKilit));
       await pc.reload({ waitUntil: 'networkidle0' });
       await girisYap(pc);
       await bekle(300);

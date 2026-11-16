@@ -468,7 +468,8 @@
       haftaKotalari: Object.assign({}, durum.haftaKotalari || {}),
       ozelSeciliSoruIdleri: JSON.parse(JSON.stringify(durum.ozelSeciliSoruIdleri || { dy: [], test: [], klasik: [] })),
       sabitlenenSoruIdleri: (durum.sabitlenenSoruIdleri || []).slice(),
-      sinavGizliAnahtar: mevcut.sinavGizliAnahtar || (typeof C.uretSinavGizliAnahtari === 'function' ? uretBenzersizSinavGizliAnahtari() : '')
+      sinavGizliAnahtar: mevcut.sinavGizliAnahtar || (typeof C.uretSinavGizliAnahtari === 'function' ? uretBenzersizSinavGizliAnahtari() : ''),
+      kurallar: mevcut.kurallar
     };
   }
 
@@ -1910,6 +1911,60 @@
     return durum.dersTaslakSinavlari[hedefId].sinavGizliAnahtar;
   }
 
+  /* Ö1: Değerlendirme kuralları (götürme, iptal, çift doğru / işaretleyen doğru) açık sınavla birlikte saklanır.
+     Sınav değişince alanlar o sınavın kurallarıyla dolar; kuralı olmayan sınavda varsayılana döner (başka sınavın kuralı taşınmaz). */
+  const KURAL_ALANLARI = { test: 'kural-test-goturme', dy: 'kural-dy-goturme', iptal: 'kural-iptal-soru', cift: 'kural-cift-sik-dogru' };
+  let kuralVarsayilan = null;
+  let kuralYukluAnahtar = null;
+  function sinavKuralHedefi() {
+    if (durum.aktifKayitliSinavId) return (durum.kayitliSinavlar || []).find((k) => k && k.id === durum.aktifKayitliSinavId) || null;
+    const id = durum.aktifDersId || 'genel';
+    if (!durum.dersTaslakSinavlari || typeof durum.dersTaslakSinavlari !== 'object') durum.dersTaslakSinavlari = {};
+    if (!durum.dersTaslakSinavlari[id] || typeof durum.dersTaslakSinavlari[id] !== 'object') durum.dersTaslakSinavlari[id] = {};
+    return durum.dersTaslakSinavlari[id];
+  }
+  function okuKuralAlanlari() {
+    const o = {};
+    Object.keys(KURAL_ALANLARI).forEach((k) => { const el = document.getElementById(KURAL_ALANLARI[k]); o[k] = el ? String(el.value || '') : ''; });
+    return o;
+  }
+  function sinavKurallariniEsitleVeSakla() {
+    if (!document.getElementById(KURAL_ALANLARI.iptal)) return;
+    if (!kuralVarsayilan) kuralVarsayilan = Object.assign(okuKuralAlanlari(), { iptal: '', cift: '' });
+    const anahtar = `${durum.aktifDersId || 'genel'}::${durum.aktifKayitliSinavId || 'taslak'}`;
+    const hedef = sinavKuralHedefi();
+    if (anahtar !== kuralYukluAnahtar) {
+      kuralYukluAnahtar = anahtar;
+      const kr = Object.assign({}, kuralVarsayilan, (hedef && hedef.kurallar) || {});
+      Object.keys(KURAL_ALANLARI).forEach((k) => { const el = document.getElementById(KURAL_ALANLARI[k]); if (el) el.value = kr[k]; });
+      return;
+    }
+    if (hedef) hedef.kurallar = okuKuralAlanlari();
+  }
+  // Alan değişince kural hemen açık sınava yazılır (sınav değiştirmeden önce okunmamış olsa bile kaybolmaz)
+  if (document.getElementById(KURAL_ALANLARI.iptal)) kuralVarsayilan = Object.assign(okuKuralAlanlari(), { iptal: '', cift: '' });
+  ['input', 'change'].forEach((olay) => Object.values(KURAL_ALANLARI).forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener(olay, () => {
+      const anahtar = `${durum.aktifDersId || 'genel'}::${durum.aktifKayitliSinavId || 'taslak'}`;
+      if (kuralYukluAnahtar !== null && kuralYukluAnahtar !== anahtar) return;
+      if (!kuralVarsayilan) kuralVarsayilan = Object.assign(okuKuralAlanlari(), { iptal: '', cift: '' });
+      kuralYukluAnahtar = anahtar;
+      const hedef = sinavKuralHedefi();
+      if (hedef) hedef.kurallar = okuKuralAlanlari();
+    });
+  }));
+  function kurallarNotMetni() {
+    const kr = okuKuralAlanlari();
+    const parca = [];
+    if (kr.iptal.trim()) parca.push(`İptal: ${kr.iptal.trim()}`);
+    if (kr.cift.trim()) parca.push(`Çift doğru / işaretleyen doğru: ${kr.cift.trim()}`);
+    if (kr.test && kr.test !== '0') parca.push(`Test götürme: ${kr.test}`);
+    if (kr.dy && kr.dy !== '0') parca.push(`D/Y götürme: ${kr.dy}`);
+    return parca.join(' · ');
+  }
+
   /* Kağıttaki sınav kimlik kodu (köşe deseni, 12 bit) gizli anahtardan türer. Telefon kağıdın hangi sınava ait olduğunu bu
      koddan bulur; iki sınav aynı kodu taşırsa kağıt yanlış sınavın anahtarıyla puanlanabilir. Bu yüzden:
      - yeni gizli anahtar, bu hesaptaki hiçbir sınavın koduyla çakışmayacak biçimde seçilir;
@@ -2139,6 +2194,7 @@
       dersAd: yapi.ders.ad,
       sinavKodu: yeniSinavKodu,
       sinavGizliAnahtar: yeniSinavGizliAnahtar,
+      kurallar: okuKuralAlanlari(),
       basildiKilidi: false,
       kayitTarihi: new Date().toLocaleString('tr-TR').slice(0, 16),
       ayarlar: {
@@ -2421,6 +2477,7 @@
     const islemBosluguPx = parseInt((document.getElementById('ayar-islem-boslugu') && document.getElementById('ayar-islem-boslugu').value) || '0', 10) || 0;
     document.documentElement.style.setProperty('--kagit-islem-bosluk', `${islemBosluguPx}px`);
 
+    sinavKurallariniEsitleVeSakla();
     const testGoturmeOrani = parseFloat(document.getElementById('kural-test-goturme').value) || 0;
     const dyGoturmeOrani = parseFloat(document.getElementById('kural-dy-goturme').value) || 0;
     const iptalMetin = (document.getElementById('kural-iptal-soru').value || '').toUpperCase();
@@ -8320,6 +8377,28 @@
     }
   }
 
+  /* Ö3: Arşiv dönemi salt okunurdur: kaydet, sil, kağıt okuma, elle giriş ve kural değişikliği kapanır (görüntüleme açık) */
+  const ARSIV_KILITLI_IDLER = ['btn-genel-kaydet-uygula', 'btn-aktif-dersi-sil', 'btn-kayitli-sinav-sil', 'btn-sinavi-kaydet-snapshot',
+    'btn-sinav-basildi-kilitle', 'btn-elle-kagit-ekle', 'input-omr-foto', 'input-omr-ogretmen-kagit-foto', 'btn-omr-kameradan-anahtar-oku',
+    'input-omr-anahtar-csv-yukle', 'btn-omr-harici-anahtar-temizle', 'kural-test-goturme', 'kural-dy-goturme', 'kural-iptal-soru', 'kural-cift-sik-dogru',
+    'btn-masam-yeni-sinav'];
+  function arsivDonemiAcikMi() { const d = aktifDonem(); return Boolean(d && d.arsivlendi); }
+  function uygulaArsivSaltOkunur(kilitli) {
+    document.body.classList.toggle('arsiv-salt-okunur', kilitli);
+    ARSIV_KILITLI_IDLER.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (kilitli) {
+        if (!el.disabled) el.dataset.arsivKilitledi = '1';
+        el.disabled = true;
+        el.title = 'Arşiv dönemi salt okunurdur. Değişiklik için dönemi aktif yapın.';
+      } else if (el.dataset.arsivKilitledi === '1') {
+        el.disabled = false;
+        delete el.dataset.arsivKilitledi;
+      }
+    });
+  }
+
   function doldurDonemSecici() {
     const sec = document.getElementById('aktif-donem-sec');
     const liste = (durum.donemler || []).slice().sort((x, y) => String(y.id).localeCompare(String(x.id)));
@@ -8341,6 +8420,7 @@
     }
     const rozet = document.getElementById('rozet-aktif-donem');
     if (rozet && d) rozet.textContent = `${d.ad}${d.arsivlendi ? ' · arşiv' : ' · aktif'}`;
+    uygulaArsivSaltOkunur(Boolean(d && d.arsivlendi));
     const kutu = document.getElementById('liste-donemler');
     if (kutu) {
       kutu.innerHTML = liste.map((x) => {
@@ -12593,7 +12673,9 @@ Yine de çıktı alınsın mı?`)) {
       const ders = (durum.dersler || []).find((x) => x && x.id === durum.aktifDersId) || {};
       const kod = (ks && ks.sinavKodu) || ders.kod || 'sinav';
       const ad = (ks && ks.ad) || [ders.kod, ders.ad].filter(Boolean).join(' ') || 'Not Çizelgesi';
+      const kuralNotu = kurallarNotMetni();
       indirCsvDosyasi(`${sinavAdKod(kod, ad).dosyaAdi}_Not_Cizelgesi`, csvBasliklari(kod, ad)
+        .concat(kuralNotu ? [['Uygulanan kurallar', kuralNotu]] : [])
         .concat([['Öğrenci No', 'Ad Soyad', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Klasik Puan', 'Toplam Puan']])
         .concat((durum.okumaSonuclari || []).map((r) => [r.ogrNo, r.adSoyad, r.grup, r.dyDogru, r.dyYanlis, r.testDogru, r.testYanlis, r.klasikToplamPuan, r.toplamPuan])));
     });
@@ -15871,6 +15953,10 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
     const masamTikla = (e) => {
       const notlar = e.target.closest('[data-masam-notlar]');
       if (notlar) { const [dId, sId] = notlar.getAttribute('data-masam-notlar').split('|'); masamNotlariAc(dId, sId); return; }
+      if (arsivDonemiAcikMi() && e.target.closest('[data-masam-esitle], [data-masam-telkaydet], [data-masam-hazirla]')) {
+        guncelleKayitDurumCubuguUI('hata', '🗄️ Arşiv dönemi salt okunurdur. Değişiklik için dönemi aktif yapın.');
+        return;
+      }
       const esitle = e.target.closest('[data-masam-esitle]');
       if (esitle) {
         const n = masamTelefonEsitle(esitle.getAttribute('data-masam-esitle'));
