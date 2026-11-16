@@ -128,12 +128,29 @@ async function girisYap(pc) {
           const eskiClick = HTMLAnchorElement.prototype.click; const eskiUrl = URL.createObjectURL;
           URL.createObjectURL = (b) => { blob = b; return 'blob:test'; };
           HTMLAnchorElement.prototype.click = function () { ad = this.download; };
+          try { localStorage.removeItem('SINAV_INDIR_BICIM_V1'); } catch (_) {}
           document.getElementById('btn-telefon-sinavi-csv').click();
+          const pencereAcildi = Boolean(document.getElementById('indir-bicim-pencere')) && !ad;
+          const varsayilanExcel = document.activeElement && document.activeElement.id === 'indir-bicim-xlsx';
+          document.getElementById('indir-bicim-csv').click();
+          const pencereKapandi = !document.getElementById('indir-bicim-pencere');
+          const makbuz = document.getElementById('rozet-kayit-durumu').textContent;
+          const csvAd = ad;
+          const csvBlob = blob;
+          ad = '';
+          document.getElementById('btn-telefon-sinavi-csv').click();
+          const hatirlandi = document.activeElement && document.activeElement.id === 'indir-bicim-csv';
+          document.getElementById('indir-bicim-xlsx').click();
+          const xlsxAd = ad;
+          ad = csvAd;
+          blob = csvBlob;
           HTMLAnchorElement.prototype.click = eskiClick; URL.createObjectURL = eskiUrl;
           const secenek = (Array.from(sec.options).find((o) => o.value === '74191113-VIZE-2026') || {}).textContent || '';
           const uyari = document.getElementById('telefon-sinavlari-kutu').textContent;
-          return { ad, metin: blob ? (await blob.text()).slice(0, 200) : '', secenek, uyari: /telefondaki ders kodu/.test(uyari) };
+          return { ad, metin: blob ? (await blob.text()).slice(0, 200) : '', secenek, uyari: /telefondaki ders kodu/.test(uyari), pencereAcildi, varsayilanExcel, pencereKapandi, makbuz, hatirlandi, xlsxAd };
         });
+        kontrol('İndirme sürprizsiz: önce biçim sorulur (Excel varsayılan), seçince indirilir, makbuz gösterilir, son seçim hatırlanır',
+          csv.pencereAcildi && csv.varsayilanExcel && csv.pencereKapandi && /İndirildi: .*\.csv/.test(csv.makbuz) && csv.hatirlandi && /^Ağ_Teknolojilerine_Giriş_74191113-VIZE-2026\.xlsx$/.test(csv.xlsxAd), JSON.stringify(csv));
         kontrol('Excel: dosya adı sınav adı + kodu; ilk satırlarda "Sınav" ve "Sınav kodu"; seçicide kağıt kodu; kod farkı uyarısı', /^Ağ_Teknolojilerine_Giriş_74191113-VIZE-2026\.csv$/.test(csv.ad) && /"Sınav";"74191113 — Ağ Teknolojilerine Giriş"/.test(csv.metin) && /"Sınav kodu";"74191113-VIZE-2026"/.test(csv.metin) && /^74191113 — Ağ Teknolojilerine Giriş/.test(csv.secenek) && csv.uyari, JSON.stringify(csv));
       }
       // GR: telefonda "Okumayı bitir" → girmeyen öğrenci arşiv detayında GR satırı olur

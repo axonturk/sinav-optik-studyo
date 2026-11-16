@@ -1985,13 +1985,13 @@
     const seciliKayit = dersKayitlari.find((k) => k.id === durum.aktifKayitliSinavId) || null;
 
     const opsiyonHTML = [
-      '<option value="">Taslak (kaydedilmedi)</option>',
+      '<option value="">＋ Yeni sınav (taslak)</option>',
       ...dersKayitlari.map((k) => {
         const kilitSimge = k.basildiKilidi ? '[Kilitli] ' : '';
         const soruTop = (Number(k.ayarlar && k.ayarlar.dySayisi) || 0)
           + (Number(k.ayarlar && k.ayarlar.testSayisi) || 0)
           + (Number(k.ayarlar && k.ayarlar.klasikSayisi) || 0);
-        return `<option value="${C.kacisHTML(k.id)}" ${k.id === durum.aktifKayitliSinavId ? 'selected' : ''}>${kilitSimge}${C.kacisHTML(k.ad)} (${soruTop} Soru · ${C.kacisHTML(k.kayitTarihi || '')})</option>`;
+        return `<option value="${C.kacisHTML(k.id)}" ${k.id === durum.aktifKayitliSinavId ? 'selected' : ''}>${kilitSimge}${C.kacisHTML(k.ad)} (${soruTop} Soru · ${C.kacisHTML(k.kayitTarihi || (kayitliSinavZamaniMs(k) ? new Date(kayitliSinavZamaniMs(k)).toLocaleString('tr-TR').slice(0, 16) : ''))})</option>`;
       })
     ].join('');
 
@@ -4818,6 +4818,58 @@
         </table>
       </div>`;
   }
+  /* Kayıt zamanı: açık alan yoksa "KS-<zaman36><2 harf>" kimliğinden çıkarılır */
+  function kayitliSinavZamaniMs(k) {
+    const acik = Number(k && (k.guncellemeMs || k.olusturmaMs || k.zamanMs)) || 0;
+    if (acik) return acik;
+    const m = /^KS-([0-9A-Z]+)$/i.exec(String((k && k.id) || ''));
+    const t = m && m[1].length > 2 ? parseInt(m[1].slice(0, -2), 36) : 0;
+    return Number.isFinite(t) && t > 1e12 && t < 1e13 ? t : 0;
+  }
+  /* Sınavın okumaları: telefon sınavı kendi kovasında; stüdyo sınavları dersin ortak okuma listesini paylaşır */
+  function kayitliSinavOkumalari(k) {
+    if (!k) return [];
+    const aktifMi = k.id === durum.aktifKayitliSinavId && k.dersId === durum.aktifDersId;
+    if (aktifMi) return durum.okumaSonuclari || [];
+    const h = durum.okumaSonuclariHaritasi || {};
+    const liste = k.kaynak === 'telefon' ? h[`${k.dersId}::${k.id}`] : h[k.dersId];
+    return Array.isArray(liste) ? liste : [];
+  }
+  function dersinSinavlariYenidenEskiye(dersId) {
+    return (durum.kayitliSinavlar || []).filter((k) => k && k.dersId === dersId)
+      .map((k, i) => ({ k, i, t: kayitliSinavZamaniMs(k) }))
+      .sort((a, b) => (b.t - a.t) || (a.i - b.i))
+      .map((x) => x.k);
+  }
+  function dersinAcilacakSinavi(dersId) {
+    const liste = dersinSinavlariYenidenEskiye(dersId);
+    return liste.find((k) => kayitliSinavOkumalari(k).length > 0) || liste[0] || null;
+  }
+  /* Ders seçilince o dersin son sınavı açılır (okuması olan öncelikli); sınavı yoksa yeni sınav (taslak) açık kalır */
+  function dersSecSonSinaviAc(dersId) {
+    if (!dersId) return;
+    if (dersId !== durum.aktifDersId) degistirAktifDersGuvenli(dersId);
+    const sec = document.getElementById('aktif-ders-sec');
+    if (sec) sec.value = dersId;
+    const hedef = dersinAcilacakSinavi(dersId);
+    if (hedef && hedef.id !== durum.aktifKayitliSinavId) yukleKayitliSinavSnapshot(hedef.id);
+  }
+  /* Dersin sınava girmeyenleri: ders listesinde olup kağıdı okunmayanlar + telefondan "girmedi" gelenler */
+  function dersSinaviGirmeyenSayisi(dersId, k, okumalar) {
+    const okunan = new Set((okumalar || []).map((o) => String(o.ogrNo || '').trim()));
+    const gr = new Set();
+    (durum.ogrenciKayitlari || []).forEach((o) => {
+      if (!o || !o.ogrNo) return;
+      const listede = !Array.isArray(o.dersIdler) || o.dersIdler.length === 0 || o.dersIdler.includes(dersId);
+      if (listede && !okunan.has(String(o.ogrNo).trim())) gr.add(String(o.ogrNo).trim());
+    });
+    const kod = k && k.sinavKodu;
+    (durum.yoklamalar || []).forEach((y) => {
+      if (y && y.gr && kod && y.sinavKodu === kod && !okunan.has(String(y.ogrNo).trim())) gr.add(String(y.ogrNo).trim());
+    });
+    return gr.size;
+  }
+
   /* Sınava girmeyenler (GR) — tek kaynak: telefondan gelen "Okumayı bitir" kayıtları + sınavın dersinin listesinde kağıdı olmayanlar */
   function sinavGirmeyenleri(sinavKodu, ad, okumalar, listedenDe = true) {
     const okunanNo = new Set((okumalar || []).map((o) => String(o.ogrNo)));
@@ -5086,7 +5138,55 @@
     const tutBtn = kutu.querySelector('[data-kopya-tutanak]');
     if (tutBtn) tutBtn.addEventListener('click', () => yazdirKopyaTutanagi(s, okumalar, ciftler));
   }
+  /* Liste indirme: önce biçim sorulur (sürpriz CSV olmaz). Son seçim hatırlanır ve hazır seçili gelir. */
+  const INDIR_BICIM_DEPO = 'SINAV_INDIR_BICIM_V1';
   function indirCsvDosyasi(ad, satirlar) {
+    const taban = String(ad || 'liste').replace(/\.(csv|xlsx)$/i, '');
+    let sonBicim = 'xlsx';
+    try { sonBicim = localStorage.getItem(INDIR_BICIM_DEPO) === 'csv' ? 'csv' : 'xlsx'; } catch (_) {}
+    const eski = document.getElementById('indir-bicim-pencere');
+    if (eski) eski.remove();
+    const kutu = document.createElement('div');
+    kutu.id = 'indir-bicim-pencere';
+    kutu.setAttribute('role', 'dialog');
+    kutu.setAttribute('aria-modal', 'true');
+    kutu.setAttribute('aria-label', 'İndirme biçimi');
+    kutu.style.cssText = 'position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,0.45); padding:16px;';
+    kutu.innerHTML = `<div style="background:var(--bg-kart, #fff); color:var(--metin, #111); border-radius:12px; padding:18px; max-width:420px; width:100%; box-shadow:0 10px 30px rgba(0,0,0,0.25);">
+        <div style="font-weight:700; margin-bottom:4px;">Ne indirilecek?</div>
+        <div style="font-size:var(--yazi-sm, 14px); color:var(--metin-ikincil, #555); margin-bottom:12px; word-break:break-word;">${C.kacisHTML(taban)} · ${Math.max(0, (satirlar || []).length - 1)} satır</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn ${sonBicim === 'xlsx' ? 'btn-birincil' : ''}" id="indir-bicim-xlsx">Excel (.xlsx)</button>
+          <button type="button" class="btn ${sonBicim === 'csv' ? 'btn-birincil' : ''}" id="indir-bicim-csv">CSV (.csv)</button>
+          <button type="button" class="btn btn-hayalet" id="indir-bicim-vazgec">Vazgeç</button>
+        </div>
+      </div>`;
+    document.body.appendChild(kutu);
+    const kapat = () => { kutu.remove(); };
+    const indir = (bicim) => {
+      try { localStorage.setItem(INDIR_BICIM_DEPO, bicim); } catch (_) {}
+      kapat();
+      let dosyaAdi = `${taban}.${bicim}`;
+      if (bicim === 'xlsx' && window.XLSX && window.XLSX.utils) {
+        const sayfa = window.XLSX.utils.aoa_to_sheet((satirlar || []).map((r) => r.map((h) => (h === null || h === undefined ? '' : (typeof h === 'number' ? h : String(h))))));
+        const kitap = window.XLSX.utils.book_new();
+        window.XLSX.utils.book_append_sheet(kitap, sayfa, 'Liste');
+        window.XLSX.writeFile(kitap, dosyaAdi);
+      } else {
+        dosyaAdi = `${taban}.csv`;
+        indirCsvMetinDosyasi(dosyaAdi, satirlar);
+      }
+      guncelleKayitDurumCubuguUI('kaydedildi', `⬇️ İndirildi: ${dosyaAdi}`);
+    };
+    kutu.querySelector('#indir-bicim-xlsx').addEventListener('click', () => indir('xlsx'));
+    kutu.querySelector('#indir-bicim-csv').addEventListener('click', () => indir('csv'));
+    kutu.querySelector('#indir-bicim-vazgec').addEventListener('click', kapat);
+    kutu.addEventListener('click', (e) => { if (e.target === kutu) kapat(); });
+    kutu.addEventListener('keydown', (e) => { if (e.key === 'Escape') kapat(); });
+    const odak = kutu.querySelector(sonBicim === 'csv' ? '#indir-bicim-csv' : '#indir-bicim-xlsx');
+    if (odak) odak.focus();
+  }
+  function indirCsvMetinDosyasi(ad, satirlar) {
     const temiz = (v) => (C.temizleCsvFormulEnjeksiyon ? C.temizleCsvFormulEnjeksiyon(String(v ?? '')) : String(v ?? ''));
     const csv = '﻿' + satirlar.map((r) => r.map((h) => `"${temiz(h).replace(/"/g, '""')}"`).join(';')).join('\r\n');
     const a = document.createElement('a');
@@ -5251,10 +5351,20 @@
     const el = document.getElementById('rozet-okunan-kagit');
     if (!el) return;
     let tel = 0;
+    let eslesmeyen = 0;
     const tum = telefonSinavlariniYukle();
-    Object.keys(tum).forEach((k) => { tel += Object.keys(tum[k].okumalar || {}).length; });
+    const aktifTel = aktifTelefonKayitliSinavi();
+    Object.keys(tum).forEach((k) => {
+      if (aktifTel && aktifTel.sinavKodu === k) return; // açık sınavın kağıtları zaten stüdyo listesinde
+      const ks = (durum.kayitliSinavlar || []).find((x) => x && x.kaynak === 'telefon' && x.sinavKodu === k);
+      const dersId = (ks && ks.dersId) || telefonSinavininDersiniBul(tum[k], k);
+      if (!dersId) { eslesmeyen += 1; return; }
+      if (dersId === durum.aktifDersId && !ks) tel += Object.keys(tum[k].okumalar || {}).length;
+    });
     el.textContent = String((durum.okumaSonuclari || []).length + tel);
-    el.title = tel ? `${(durum.okumaSonuclari || []).length} stüdyo + ${tel} telefondan gelen` : '';
+    el.title = `Seçili dersin kağıtları${tel ? ` (${(durum.okumaSonuclari || []).length} açık sınav + ${tel} telefondan, derse kaydedilmemiş)` : ''}${eslesmeyen ? ` · ${eslesmeyen} telefon sınavı hiçbir derse eşleşmedi (Masam'a bakın)` : ''}`;
+    const masamRozet = document.getElementById('rozet-masam-uyari');
+    if (masamRozet) { masamRozet.hidden = !eslesmeyen; masamRozet.textContent = String(eslesmeyen); }
   }
 
   /* Gerçek (okunabilir) Vektörel QR SVG üretici — qrcode-generator kütüphanesi (MIT) */
@@ -5895,6 +6005,17 @@
     // Girmeyen · GR sayısı ve mutabakat özeti
     const okunanNoKumesi = new Set((durum.okumaSonuclari || []).map((r) => String(r.ogrNo || '').trim()));
     const girmeyenOgrenciler = (durum.ogrenciler || []).filter((o) => o && !okunanNoKumesi.has(String(o.ogrNo || '').trim()));
+    const aktifTelGr = aktifTelefonKayitliSinavi();
+    if (aktifTelGr && aktifTelGr.sinavKodu) {
+      const listedeki = new Set(girmeyenOgrenciler.map((o) => String(o.ogrNo || '').trim()));
+      (durum.yoklamalar || []).forEach((y) => {
+        const no = String((y && y.ogrNo) || '').trim();
+        if (y && y.gr && y.sinavKodu === aktifTelGr.sinavKodu && no && !okunanNoKumesi.has(no) && !listedeki.has(no)) {
+          girmeyenOgrenciler.push({ ogrNo: no, adSoyad: ogrAdiBul(no), telefondanGr: true });
+          listedeki.add(no);
+        }
+      });
+    }
     const elGrSayi = document.getElementById('ist-girmeyen-gr');
     if (elGrSayi) elGrSayi.textContent = String(girmeyenOgrenciler.length);
     const icerikGr = document.getElementById('icerik-gr-mutabakat');
@@ -9125,7 +9246,11 @@
         kaydetAktifDersIzoleDurumu(durum.aktifDersId);
         verileriKaydet({ mesaj: `🟢 Tüm değişiklikler uygulandı ve kaydedildi · ${saatMetniUret()}` });
         yenileTumSekmePanelleriUI();
-        await bulutKasayaSenkronla(false);
+        const bulutSonuc = await bulutKasayaSenkronla(false);
+        const ksMakbuz = (durum.kayitliSinavlar || []).find((k) => k && k.id === durum.aktifKayitliSinavId);
+        const dersMakbuz = (durum.dersler || []).find((x) => x && x.id === durum.aktifDersId);
+        const kagitSayisi = (durum.okumaSonuclari || []).length;
+        guncelleKayitDurumCubuguUI('kaydedildi', `✅ Kaydedildi: ${[dersMakbuz && dersMakbuz.kod, ksMakbuz ? ksMakbuz.ad : 'yeni sınav (taslak)'].filter(Boolean).join(' · ')}${kagitSayisi ? ` · ${kagitSayisi} kağıt` : ''} · ${bulutSonuc && bulutSonuc.basarili ? 'buluta yedeklendi ✓' : 'bu bilgisayarda (bulut yedeği alınamadı)'}`);
       });
     }
 
@@ -9318,6 +9443,8 @@
         const hedef = document.getElementById(hedefId);
         if (hedef) hedef.classList.add('aktif');
         if (typeof window.__guncelleDerslerVeBosDurumUI === 'function') window.__guncelleDerslerVeBosDurumUI();
+        if (typeof window.__guncelleYasamDongusuRozetUI === 'function') window.__guncelleYasamDongusuRozetUI();
+        if (hedefId === 'sekme-masam' && typeof window.__cizMasam === 'function') window.__cizMasam();
       });
     });
 
@@ -9404,7 +9531,7 @@
     }
 
     document.getElementById('aktif-ders-sec').addEventListener('change', (e) => {
-      degistirAktifDersGuvenli(e.target.value);
+      dersSecSonSinaviAc(e.target.value);
       verileriKaydet();
       yenileTumSekmePanelleriUI();
     });
@@ -12461,17 +12588,13 @@ Yine de çıktı alınsın mı?`)) {
     }
 
     document.getElementById('btn-csv-indir').addEventListener('click', () => {
-      const temizHucre = (v) => (typeof C.temizleCsvFormulEnjeksiyon === 'function' ? C.temizleCsvFormulEnjeksiyon(String(v ?? '')) : String(v ?? ''));
-      const baslik = 'OgrenciNo;AdSoyad;Kitapcik;DY_Dogru;DY_Yanlis;Test_Dogru;Test_Yanlis;Klasik_Puan;Toplam_Puan\r\n';
-      const satirlar = durum.okumaSonuclari
-        .map((s) => [s.ogrNo, s.adSoyad, s.grup, s.dyDogru, s.dyYanlis, s.testDogru, s.testYanlis, s.klasikToplamPuan, s.toplamPuan].map(temizHucre).join(';'))
-        .join('\r\n');
-      const blob = new Blob(['\ufeff' + baslik + satirlar], { type: 'text/csv;charset=utf-8' });
-      const url = C.olusturGuvenliBlobUrl(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Sinif_Not_Cizelgesi_${Date.now()}.csv`;
-      a.click();
+      const ks = (durum.kayitliSinavlar || []).find((k) => k && k.id === durum.aktifKayitliSinavId);
+      const ders = (durum.dersler || []).find((x) => x && x.id === durum.aktifDersId) || {};
+      const kod = (ks && ks.sinavKodu) || ders.kod || 'sinav';
+      const ad = (ks && ks.ad) || [ders.kod, ders.ad].filter(Boolean).join(' ') || 'Not Çizelgesi';
+      indirCsvDosyasi(`${sinavAdKod(kod, ad).dosyaAdi}_Not_Cizelgesi`, csvBasliklari(kod, ad)
+        .concat([['Öğrenci No', 'Ad Soyad', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Klasik Puan', 'Toplam Puan']])
+        .concat((durum.okumaSonuclari || []).map((r) => [r.ogrNo, r.adSoyad, r.grup, r.dyDogru, r.dyYanlis, r.testDogru, r.testYanlis, r.klasikToplamPuan, r.toplamPuan])));
     });
 
     // Sekme 5: Öğrenci Ekleme / Silme
@@ -15610,7 +15733,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         return { kod: 'kesinlesti', etiket: 'Kesinleşti', sinif: 'rozet rozet-yesil', cta: 'OBS Çizelgesi İndir' };
       }
       if ((durum.okumaSonuclari || []).length > 0) {
-        return { kod: 'okunuyor', etiket: 'Okunuyor', sinif: 'rozet rozet-mavi', cta: 'Sonuçları Gör' };
+        return { kod: 'okunuyor', etiket: 'Okunuyor', sinif: 'rozet rozet-mavi', cta: 'Notları gör' };
       }
       if (seciliKayit && seciliKayit.basildiKilidi) {
         return { kod: 'basildi', etiket: 'Basıldı', sinif: 'rozet rozet-sari', cta: 'Okumayı Başlat' };
@@ -15640,8 +15763,146 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       if (btnCta) {
         btnCta.textContent = asama.cta;
         btnCta.dataset.asama = asama.kod;
+        // Değerlendirme zaten açıkken "Notları gör" bir işe yaramaz: gizlenir
+        const aktifPanel = document.querySelector('.sekme-panel.aktif');
+        btnCta.hidden = asama.kod === 'okunuyor' && Boolean(aktifPanel && aktifPanel.id === 'sekme-analiz');
       }
     };
+
+    /* ── MASAM: her dersin son sınavı tek kartta (okunan / girmeyen / şüpheli / telefon-ders sayısı), tek dokunuşla Notlar ── */
+    const masamNotlariAc = (dersId, ksId) => {
+      const dd = (durum.dersler || []).find((x) => x && x.id === dersId);
+      if (dd && dd.donemId && dd.donemId !== durum.aktifDonemId) durum.aktifDonemId = dd.donemId;
+      if (dersId && dersId !== durum.aktifDersId) degistirAktifDersGuvenli(dersId);
+      if (ksId && ksId !== durum.aktifKayitliSinavId) yukleKayitliSinavSnapshot(ksId);
+      verileriKaydet();
+      yenileTumSekmePanelleriUI();
+      gecisSekmeYardimci('sekme-analiz');
+      const notlarBtn = document.querySelector('#analiz-alt-sekmeler [data-alt="ogrenciler"]');
+      if (notlarBtn) notlarBtn.click();
+    };
+    // Telefondan sonradan gelen kağıtlar derse eklenir; dersteki (düzeltilmiş olabilecek) kağıtlara dokunulmaz
+    const masamTelefonEsitle = (ksId) => {
+      const k = (durum.kayitliSinavlar || []).find((x) => x && x.id === ksId && x.kaynak === 'telefon');
+      if (!k) return 0;
+      const mevcut = kayitliSinavOkumalari(k);
+      const varOlan = new Set(mevcut.map((o) => String(o.ogrNo || '').trim()));
+      const yeniler = telefonSinavOkumalari(k.sinavKodu).filter((o) => !varOlan.has(String(o.ogrNo || '').trim())).map((o) => Object.assign({}, o, {
+        adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad),
+        dyDetay: (o.dyDetay || []).map((x) => Object.assign({}, x)),
+        testDetay: (o.testDetay || []).map((x) => Object.assign({}, x)),
+        hamCevaplar: { dy: (o.dyDetay || []).map((x) => x.verilen || '-'), test: (o.testDetay || []).map((x) => x.verilen || '-') },
+        numaraEslesmediMi: Boolean(o.bekliyor)
+      }));
+      if (!yeniler.length) return 0;
+      const anahtar = `${k.dersId}::${k.id}`;
+      if (!durum.okumaSonuclariHaritasi || typeof durum.okumaSonuclariHaritasi !== 'object') durum.okumaSonuclariHaritasi = {};
+      if (k.id === durum.aktifKayitliSinavId && k.dersId === durum.aktifDersId) {
+        durum.okumaSonuclari = (durum.okumaSonuclari || []).concat(yeniler);
+      }
+      durum.okumaSonuclariHaritasi[anahtar] = (Array.isArray(durum.okumaSonuclariHaritasi[anahtar]) ? durum.okumaSonuclariHaritasi[anahtar] : []).concat(yeniler);
+      verileriKaydet();
+      return yeniler.length;
+    };
+    window.__cizMasam = () => {
+      const kutu = document.getElementById('masam-kartlar');
+      const uyari = document.getElementById('masam-uyari');
+      if (!kutu) return;
+      const k = C.kacisHTML;
+      const tum = telefonSinavlariniYukle();
+      const kayitliTelKodlar = new Set((durum.kayitliSinavlar || []).filter((x) => x && x.kaynak === 'telefon').map((x) => x.sinavKodu));
+      const eslesmeyen = [];
+      const dersBekleyenTel = {};
+      Object.keys(tum).forEach((kod) => {
+        if (kayitliTelKodlar.has(kod)) return;
+        const dersId = telefonSinavininDersiniBul(tum[kod], kod);
+        const satir = { kod, ad: sinavAdKod(kod, tum[kod].ad).gorunen, adet: Object.keys(tum[kod].okumalar || {}).length };
+        if (!dersId) eslesmeyen.push(satir);
+        else (dersBekleyenTel[dersId] = dersBekleyenTel[dersId] || []).push(satir);
+      });
+      if (uyari) {
+        uyari.hidden = eslesmeyen.length === 0;
+        uyari.innerHTML = eslesmeyen.length ? `<div class="uyari-kutu" style="padding:10px 12px; border-radius:8px; background:rgba(234,179,8,0.12); border:1px solid rgba(234,179,8,0.45);">
+          <strong>⚠️ ${eslesmeyen.length} telefon sınavı hiçbir derse eşleşmedi.</strong> Hangi derse ait olduğunu seçin:
+          ${eslesmeyen.map((x) => `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px;"><span>${k(x.ad)} · ${x.adet} kağıt</span><button type="button" class="btn btn-kucuk" data-masam-telkaydet="${k(x.kod)}">Açık derse kaydet</button></div>`).join('')}
+        </div>` : '';
+      }
+      const dersler = aktifDonemDersleri();
+      if (!dersler.length) {
+        kutu.innerHTML = '<div style="color:var(--metin-soluk); font-size:var(--yazi-sm);">Henüz ders yok. Dersler sayfasından ilk dersinizi oluşturun.</div>';
+        return;
+      }
+      kutu.innerHTML = dersler.map((dd) => {
+        const ks = dersinAcilacakSinavi(dd.id);
+        const bekleyen = dersBekleyenTel[dd.id] || [];
+        const baslik = `<div style="font-weight:700;">${k(dd.kod || '')} — ${k(dd.ad || '')}</div>`;
+        const telSatir = bekleyen.map((x) => `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; font-size:var(--yazi-sm);"><span>📱 ${k(x.ad)} · ${x.adet} kağıt telefondan geldi</span><button type="button" class="btn btn-kucuk btn-birincil" data-masam-telkaydet="${k(x.kod)}">Derse kaydet</button></div>`).join('');
+        if (!ks) {
+          return `<div class="kart" data-masam-ders="${k(dd.id)}" style="margin:0; padding:12px;">${baslik}
+            <div style="color:var(--metin-ikincil); font-size:var(--yazi-sm); margin:6px 0;">Henüz kayıtlı sınav yok.</div>${telSatir}
+            <button type="button" class="btn btn-kucuk" data-masam-hazirla="${k(dd.id)}" style="margin-top:8px;">Sınav hazırla</button></div>`;
+        }
+        const okumalar = kayitliSinavOkumalari(ks);
+        const gr = dersSinaviGirmeyenSayisi(dd.id, ks, okumalar);
+        const supheli = okumalar.filter((r) => r && (/^BEKLEYEN/i.test(String(r.ogrNo || '')) || r.supheliMi || r.durum === 'BEKLEYEN' || r.numaraEslesmediMi)).length;
+        const kesin = Boolean((durum.kesinlesmisSinavHaritasi || {})[`${dd.id}::${ks.id}`]);
+        let telBilgi = '';
+        if (ks.kaynak === 'telefon') {
+          // Açık sınavın kağıtları doğrudan derse işlenir; açık değilken gelenler telefon kovasında bekler
+          const dersteNo = new Set(okumalar.map((o) => String(o.ogrNo || '').trim()));
+          const eksik = telefonSinavOkumalari(ks.sinavKodu).filter((o) => !dersteNo.has(String(o.ogrNo || '').trim())).length;
+          const telToplam = okumalar.length + eksik;
+          telBilgi = eksik === 0
+            ? `<div data-masam-esit="1" style="margin-top:6px; font-size:var(--yazi-sm); color:var(--basari, #15803d);">📱 Telefondan ${telToplam} · Derste ${okumalar.length} ✓</div>`
+            : `<div data-masam-esit="0" style="margin-top:6px; font-size:var(--yazi-sm); color:var(--tehlike, #b91c1c); display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span>📱 Telefondan ${telToplam} · Derste ${okumalar.length}</span><button type="button" class="btn btn-kucuk btn-tehlike" data-masam-esitle="${k(ks.id)}">Eşitle</button></div>`;
+        }
+        return `<div class="kart" data-masam-ders="${k(dd.id)}" style="margin:0; padding:12px;">${baslik}
+          <div style="font-size:var(--yazi-sm); color:var(--metin-ikincil); margin:2px 0 8px;">${k(ks.ad || ks.sinavKodu || 'Sınav')}${kesin ? ' · <strong>Kesinleşti ✓</strong>' : ''}</div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; font-variant-numeric:tabular-nums;" data-masam-sayilar>
+            <span><strong>${okumalar.length}</strong> okundu</span><span><strong>${gr}</strong> girmedi</span>${supheli ? `<span style="color:var(--tehlike, #b91c1c);"><strong>${supheli}</strong> şüpheli</span>` : ''}
+          </div>${telBilgi}${telSatir}
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+            <button type="button" class="btn btn-birincil btn-kucuk" data-masam-notlar="${k(dd.id)}|${k(ks.id)}">Notları aç</button>
+            <button type="button" class="btn btn-kucuk" data-masam-hazirla="${k(dd.id)}">＋ Yeni sınav</button>
+          </div></div>`;
+      }).join('');
+    };
+    const masamTikla = (e) => {
+      const notlar = e.target.closest('[data-masam-notlar]');
+      if (notlar) { const [dId, sId] = notlar.getAttribute('data-masam-notlar').split('|'); masamNotlariAc(dId, sId); return; }
+      const esitle = e.target.closest('[data-masam-esitle]');
+      if (esitle) {
+        const n = masamTelefonEsitle(esitle.getAttribute('data-masam-esitle'));
+        yenileTumSekmePanelleriUI();
+        guncelleKayitDurumCubuguUI('kaydedildi', n ? `✅ Telefondan gelen ${n} yeni kağıt derse eklendi` : 'ℹ️ Eklenecek yeni kağıt yok');
+        window.__cizMasam();
+        return;
+      }
+      const telKaydet = e.target.closest('[data-masam-telkaydet]');
+      if (telKaydet) {
+        const r = telefonSinaviniDerseKaydet(telKaydet.getAttribute('data-masam-telkaydet'));
+        if (r && r.basarili) masamNotlariAc(r.dersId, r.id);
+        else { if (r && r.mesaj) guncelleKayitDurumCubuguUI('hata', `⚠️ ${r.mesaj}`); window.__cizMasam(); }
+        return;
+      }
+      const hazirla = e.target.closest('[data-masam-hazirla]');
+      if (hazirla) {
+        const dId = hazirla.getAttribute('data-masam-hazirla');
+        if (dId && dId !== durum.aktifDersId) degistirAktifDersGuvenli(dId);
+        yukleKayitliSinavSnapshot('');
+        verileriKaydet();
+        yenileTumSekmePanelleriUI();
+        gecisSekmeYardimci('sekme-stüdyo');
+      }
+    };
+    ['masam-kartlar', 'masam-uyari'].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener('click', masamTikla); });
+    const btnMasamYeni = document.getElementById('btn-masam-yeni-sinav');
+    if (btnMasamYeni) btnMasamYeni.addEventListener('click', () => {
+      yukleKayitliSinavSnapshot('');
+      verileriKaydet();
+      yenileTumSekmePanelleriUI();
+      gecisSekmeYardimci('sekme-stüdyo');
+    });
 
     // 4. İlk Kurulum Boş Durumu ve Dersler Sekmesi (#sekme-dersler)
     window.__guncelleDerslerVeBosDurumUI = () => {
@@ -15710,7 +15971,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         if (!kart) return;
         const yeniId = kart.getAttribute('data-sec-ders-kart');
         if (!yeniId) return;
-        degistirAktifDersGuvenli(yeniId);
+        dersSecSonSinaviAc(yeniId);
         verileriKaydet();
         yenileTumSekmePanelleriUI();
       });
@@ -16423,6 +16684,8 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
           if (btnObs) btnObs.click();
         } else if (asama === 'okunuyor') {
           gecisSekmeYardimci('sekme-analiz');
+          const notlarBtn = document.querySelector('#analiz-alt-sekmeler [data-alt="ogrenciler"]');
+          if (notlarBtn) notlarBtn.click();
         } else if (asama === 'basildi') {
           gecisSekmeYardimci('sekme-omr');
         } else {

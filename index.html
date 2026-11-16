@@ -96,6 +96,13 @@
       <button type="button" class="btn btn-basari" id="btn-telefon-bagla" title="Telefonu tek karekodla bu hesaba bağla; dersler ve cevap anahtarları telefona iner" style="margin:0.35rem 0.6rem 0.2rem; justify-content:center; gap:0.4rem; font-weight:800;">
         <span aria-hidden="true">📱</span><span data-telefon-bagla-etiket>Telefonu Bağla</span>
       </button>
+      <div class="yan-menu-liste">
+        <button type="button" class="sekme-btn" data-sekme="sekme-masam" title="Masam: sınavlarınız, notlar ve telefon durumu tek yerde">
+          <svg class="ui-ikon"><use href="#i-chart"></use></svg>
+          <span class="yan-menu-metin">Masam</span>
+          <span class="sekme-rozet" id="rozet-masam-uyari" hidden title="Derse eşleşmeyen telefon sınavı">0</span>
+        </button>
+      </div>
       <div class="yan-menu-grup-baslik" title="Ders → sorular → öğrenciler → sınav kağıdı">1 · Hazırla</div>
       <div class="yan-menu-liste">
         <button type="button" class="sekme-btn" data-sekme="sekme-dersler" title="Dersler ve Bologna Öğrenim Çıktıları">
@@ -207,7 +214,7 @@
             <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-aktif-dersi-sil" title="Seçili dersi sil (Sorular arşive aktarılır; geri alınabilir)">Sil</button>
             <span class="baglam-ayrac" aria-hidden="true">›</span>
             <select id="sec-kayitli-sinav-ust" class="baglam-secici" aria-label="Aktif Sınav">
-              <option value="">Taslak (kaydedilmedi)</option>
+              <option value="">＋ Yeni sınav (taslak)</option>
             </select>
             <span class="rozet rozet-mavi" id="rozet-yasam-dongusu" title="Sınav Yaşam Döngüsü Durumu">Taslak</span>
           </div>
@@ -301,6 +308,16 @@
         <!-- ====================================================================
              SEKME 0: DERSLER & BOLOGNA ÖĞRENİM ÇIKTILARI ÖZETİ
              ==================================================================== -->
+        <section class="sekme-panel" id="sekme-masam">
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>Masam</span>
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-masam-yeni-sinav">＋ Yeni sınav</button>
+            </div>
+            <div id="masam-uyari" hidden style="margin-bottom:10px;"></div>
+            <div id="masam-kartlar" style="display:grid; gap:10px; grid-template-columns:repeat(auto-fill, minmax(min(100%, 300px), 1fr));"></div>
+          </div>
+        </section>
         <section class="sekme-panel" id="sekme-dersler">
           <div class="iki-sutun-duzen">
             <div class="kart">

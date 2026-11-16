@@ -85,8 +85,16 @@ const OLAYLAR = [
     await pc.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k && document.getElementById('modal-hoca-giris').style.display !== 'none') k.click(); });
     await pc.evaluate(async () => { await window.__masaustuV2SenkronSimdi(); });
     await bekle(500);
-    const rozet = await pc.$eval('#rozet-okunan-kagit', (e) => e.textContent);
-    kontrol('Kenar çubuğundaki Okuma sayacı telefondan gelen kağıtları da sayar (4)', rozet === '4', rozet);
+    // Okuma sayacı yalnız SEÇİLİ dersin kağıtlarını sayar; hiçbir derse eşleşmeyen telefon sınavı sayaca katılmaz,
+    // sayacın açıklamasında ve Masam rozetinde ayrıca gösterilir (kağıtlar kaybolmuş gibi görünmez)
+    const sayac = await pc.evaluate(() => {
+      const e = document.getElementById('rozet-okunan-kagit');
+      const m = document.getElementById('rozet-masam-uyari');
+      const kova = JSON.parse(localStorage.getItem('SINAV_TELEFON_SINAVLARI_V1') || '{}');
+      return { n: e.textContent, t: e.title, masam: m && !m.hidden ? m.textContent : '', kovaSinav: Object.keys(kova).length, kovaKagit: Object.values(kova).reduce((t, k) => t + Object.keys((k && k.okumalar) || {}).length, 0) };
+    });
+    kontrol('Okuma sayacı seçili dersi sayar; derse eşleşmeyen telefon kağıtları (4) açıklamada ve Masam rozetinde gösterilir',
+      sayac.kovaKagit === 4 && sayac.n === '0' && /hiçbir derse eşleşmedi/.test(sayac.t) && Number(sayac.masam) === sayac.kovaSinav, JSON.stringify(sayac));
 
     // Sınav Arşivi
     await pc.click('.sekme-btn[data-sekme="sekme-arsiv"]');

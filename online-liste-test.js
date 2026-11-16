@@ -53,12 +53,11 @@ const tikla = async (sayfa, sec) => { await sayfa.$eval(sec, (e) => e.scrollInto
     let d = await satir();
     kontrol('Başlangıç: ▶️ Başlat, Planlandı, "Durdur" kapalı', /Başlat/.test(d.btn) && /Planlandı/.test(d.durum) && d.dur === true && d.bas === false, JSON.stringify(d));
     await tikla(sayfa, '[data-online-sec-baslat]');
-    await bekle(500);
-    d = await satir();
+    // Sabit bekleme yerine durum değişimini bekle (sunucu yanıtı makineye göre gecikebilir)
+    for (let i = 0; i < 20; i++) { await bekle(200); d = await satir(); if (/Durdur/.test(d.btn)) break; }
     kontrol('Aktif edilince düğme ⏸️ Durdur olur, durum Aktif, "Başlat" kapanır', /Durdur/.test(d.btn) && /Aktif/.test(d.durum) && d.bas === true && d.dur === false, JSON.stringify(d));
     await tikla(sayfa, '[data-online-sec-baslat]');
-    await bekle(500);
-    d = await satir();
+    for (let i = 0; i < 20; i++) { await bekle(200); d = await satir(); if (/Başlat/.test(d.btn)) break; }
     kontrol('Durdurulunca düğme tekrar ▶️ Başlat olur', /Başlat/.test(d.btn) && /Planlandı/.test(d.durum) && d.bas === false && d.dur === true, JSON.stringify(d));
 
     // Aktifken forma "Durdur" düğmesiyle durdur
