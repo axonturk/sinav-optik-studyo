@@ -109,7 +109,11 @@ const OLAYLAR = [
     kontrol('Yan yana cevaplarda ortak yanlış 13 soru kırmızı işaretli', kirmizi === 13, String(kirmizi));
     await pc.evaluate(() => { window.open = () => ({ document: { open() {}, write() {}, close() {} }, focus() {}, print() {} }); });
     await pc.click('#arsiv-detay [data-kopya-tutanak]');
-    await bekle(300);
+    await bekle(200);
+    const raporSecim = await pc.evaluate(() => Boolean(document.getElementById('rapor-bicim-pencere')));
+    await pc.evaluate(() => document.getElementById('rapor-bicim-pdf').click());
+    await bekle(200);
+    kontrol('Kopya tutanağında biçim sorulur (PDF / Word) ve PDF seçilince pencere kapanır', raporSecim && !(await pc.evaluate(() => Boolean(document.getElementById('rapor-bicim-pencere')))));
     const tutanak = await pc.evaluate(() => window.__sonKopyaTutanakHTML || '');
     kontrol('Kopya şüphe tutanağı (yazdırılabilir): yöntem açıklaması, cevap tablosu ve imza alanları', /Tutanak Eki/.test(tutanak) && /Nadir ortak yanlış \(şüpheye sayılan\): <strong>13/.test(tutanak) && /Gözetmen \(Ad Soyad \/ İmza\)/.test(tutanak) && /tek başına hüküm değildir/.test(tutanak));
     // Arşive kaydet ve yeniden açınca kalıcı

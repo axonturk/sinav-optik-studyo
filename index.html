@@ -1886,6 +1886,19 @@
       </div>
 
       <!-- Sınava Girmeyen (GR) Mutabakat ve Kesinleştirme Kartı -->
+      <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="ogrenciler" id="kutu-ogrenci-sonuc-yayin">
+        <div class="kart-baslik">
+          <span>Öğrencilere sonuç</span>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-sonuc-yayinla">📤 Sonuçları öğrencilere aç</button>
+            <button type="button" class="btn btn-kucuk" id="btn-sonuc-geri-al">Geri al</button>
+            <button type="button" class="btn btn-kucuk" id="btn-itirazlar-yenile">İtirazlar</button>
+          </div>
+        </div>
+        <div style="font-size:var(--yazi-xs); color:var(--metin-ikincil);">Her öğrenci yalnız kendi sonucunu görür (öğrenci hesabıyla giriş yapınca): doğru/yanlış/boş, puan, soru soru kendi cevabı ve doğru cevap. Kopya şüphesi öğrenciye hiçbir zaman gösterilmez. Siz açmadan hiçbir sonuç görünmez.</div>
+        <div id="sonuc-yayin-mesaj" style="margin-top:6px; font-size:var(--yazi-sm);"></div>
+        <div id="liste-itirazlar" style="margin-top:6px;"></div>
+      </div>
       <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="ogrenciler" id="kutu-gr-mutabakat">
         <div class="kart-baslik">
           <span>Sınava girmeyenler (GR) ve yoklama</span>
@@ -1976,7 +1989,7 @@
             <span title="PUKÖ: Planla – Uygula – Kontrol et – Önlem al (sürekli iyileştirme)">Ders iyileştirme raporu (PUKÖ)</span>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button type="button" class="btn btn-kucuk" id="btn-puko-kopyala">Metni Kopyala</button>
-              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-puko-txt-indir">PUKÖ Tutanağı (.txt)</button>
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-puko-txt-indir">PUKÖ Tutanağı (PDF / Word)</button>
             </div>
           </div>
           <textarea id="metin-puko-raporu" rows="7" readonly style="font-size:var(--yazi-xs); line-height:1.45; background:var(--bg-ikincil);" placeholder="Optik okuma veya sınav verisi geldiğinde YÖKAK / MEDEK / MÜDEK uyumlu PUKÖ özdeğerlendirme metni otomatik üretilir..."></textarea>
@@ -1987,7 +2000,7 @@
                 <option value="">— Öğrenci Seçin —</option>
               </select>
             </div>
-            <button type="button" class="btn btn-kucuk" id="btn-maddi-hata-kanit-indir">Maddi Hata Kanıt Tutanağı (.txt)</button>
+            <button type="button" class="btn btn-kucuk" id="btn-maddi-hata-kanit-indir">Maddi Hata Kanıt Tutanağı (PDF / Word)</button>
           </div>
         </div>
       </div>
@@ -2743,8 +2756,12 @@
         <div id="kiosk-hesap-adimlari" hidden>
           <div id="kiosk-h-girisli" hidden style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--kenar); border-radius:8px; margin-bottom:12px;">
             <span>Giriş yapıldı: <strong id="kiosk-h-girisli-ad"></strong></span>
-            <button type="button" class="btn btn-kucuk" id="btn-kiosk-h-cikis">Başka öğrenci</button>
+            <span style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-kucuk btn-birincil" id="btn-kiosk-sonuclarim">📄 Sonuçlarım</button>
+              <button type="button" class="btn btn-kucuk" id="btn-kiosk-h-cikis">Başka öğrenci</button>
+            </span>
           </div>
+          <div id="kiosk-sonuclarim" hidden style="margin-bottom:12px;"></div>
           <div id="kiosk-h-adim-numara" class="kiosk-h-adim">
             <label class="etiket" for="kiosk-h-ogr-no">Öğrenci numaran</label>
             <div style="display:flex; gap:8px;">

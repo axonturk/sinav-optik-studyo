@@ -225,6 +225,34 @@ function kontrol(ad, kosul, detay = '') {
     await pc.evaluate(() => window.__uzunTestKap.remove());
     kontrol('Uzun şıklı soru önizlemede sarı çerçeveyle işaretlenir; baskıda işaret görünmez', uzun.isaretli && uzun.ekran === 'dashed' && baskida === 'none', `${JSON.stringify(uzun)} · baskı:${baskida}`);
 
+    // Paket 6: öğretmen sonuçları öğrencilere açar (onay sorulur); rapor biçimi sorulur (PDF / Word)
+    await pc.evaluate((id) => { const s2 = document.getElementById('aktif-ders-sec'); s2.value = id; s2.dispatchEvent(new Event('change', { bubbles: true })); }, kablolamaId);
+    await bekle(300);
+    await pc.evaluate(() => { document.querySelector('.sekme-btn[data-sekme="sekme-analiz"]').click(); document.querySelector('#analiz-alt-sekmeler [data-alt="ogrenciler"]').click(); });
+    await bekle(200);
+    await pc.evaluate(() => document.getElementById('btn-sonuc-yayinla').click());
+    let yayinMesaj = '';
+    for (let i = 0; i < 20; i++) { await bekle(200); yayinMesaj = await pc.evaluate(() => document.getElementById('sonuc-yayin-mesaj').textContent); if (yayinMesaj) break; }
+    kontrol('Öğretmen "Sonuçları öğrencilere aç" ile açık sınavın sonuçlarını açar', /2 öğrencinin sonucu açıldı/.test(yayinMesaj), yayinMesaj);
+    await pc.evaluate(() => document.getElementById('btn-itirazlar-yenile').click());
+    await bekle(600);
+    const itirazMetin = await pc.evaluate(() => document.getElementById('liste-itirazlar').textContent);
+    kontrol('İtirazlar listesi açılır (henüz itiraz yok)', /İtiraz yok/.test(itirazMetin), itirazMetin);
+    await pc.evaluate(() => { try { localStorage.removeItem('SINAV_RAPOR_BICIM_V1'); } catch (_) {} document.querySelector('#analiz-alt-sekmeler [data-alt="raporlar"]').click(); });
+    const rapor = await pc.evaluate(async () => {
+      let ad = ''; let blob = null;
+      const eskiClick = HTMLAnchorElement.prototype.click; const eskiUrl = URL.createObjectURL;
+      URL.createObjectURL = (b) => { blob = b; return 'blob:test'; };
+      HTMLAnchorElement.prototype.click = function () { ad = this.download; };
+      document.getElementById('btn-puko-txt-indir').click();
+      const pencere = Boolean(document.getElementById('rapor-bicim-pencere'));
+      const varsayilanPdf = document.activeElement && document.activeElement.id === 'rapor-bicim-pdf';
+      document.getElementById('rapor-bicim-word').click();
+      HTMLAnchorElement.prototype.click = eskiClick; URL.createObjectURL = eskiUrl;
+      return { pencere, varsayilanPdf, ad, word: blob ? /urn:schemas-microsoft-com:office:word/.test(await blob.text()) : false, makbuz: document.getElementById('rozet-kayit-durumu').textContent };
+    });
+    kontrol('Rapor indirmede biçim sorulur (PDF varsayılan); Word seçilince .doc iner ve makbuz gösterilir', rapor.pencere && rapor.varsayilanPdf && /_YOKAK_MEDEK_PUKO_Raporu\.doc$/.test(rapor.ad) && rapor.word && /İndirildi: .*\.doc/.test(rapor.makbuz), JSON.stringify(rapor));
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;

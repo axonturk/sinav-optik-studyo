@@ -56,6 +56,8 @@ const sunucuDurumu = {
   omrImzaSirri: crypto.randomBytes(32).toString('hex'),
   omrTokenlar: new Map(),
   hizSinirlari: new Map(),
+  ogrenciSonuclari: new Map(), // `${yayinId}|${ogrNo}` -> { baslik, veri, yayinMs, hoca }
+  ogrenciItirazlari: [],
   aktifHocaTokenlar: new Set(),
   aktifHocaOturumlari: new Map(), // hocaToken -> { kullaniciAdi, adSoyad, rol }
   aktifTokenlar: new Map(), // token -> { ogrNo, adSoyad, kurtarmaAnahtariHash, bitisMs, cevaplar, bitti }
@@ -102,6 +104,21 @@ async function gonderOgrenciEpostasi(ep) {
   } catch (_) {
     return { gonderildi: false, hataKodu: 503 };
   }
+}
+
+function sunucuTemizleSonucKaydi(r) {
+  if (!r || typeof r !== 'object') return null;
+  const ogrNo = String(r.ogrNo || '').trim().slice(0, 40);
+  if (!ogrNo || /^BEKLEYEN/i.test(ogrNo) || ogrNo.includes('?')) return null;
+  const sayi = (x) => Math.max(0, Math.min(1000, Number(x) || 0));
+  const durumlar = ['dogru', 'yanlis', 'bos', 'iptal', 'herkese'];
+  const sorular = (Array.isArray(r.sorular) ? r.sorular : []).slice(0, 150).map((q) => ({
+    no: String((q && q.no) || '').slice(0, 10),
+    verilen: String((q && q.verilen) || '').replace(/[^A-EDY]/gi, '').toUpperCase().slice(0, 3),
+    dogru: String((q && q.dogru) || '').replace(/[^A-EDY|*]/gi, '').toUpperCase().slice(0, 9),
+    durum: durumlar.includes(q && q.durum) ? q.durum : 'bos'
+  }));
+  return { ogrNo, adSoyad: String(r.adSoyad || '').slice(0, 96), puan: Math.round(sayi(r.puan) * 100) / 100, dogru: sayi(r.dogru), yanlis: sayi(r.yanlis), bos: sayi(r.bos), sorular };
 }
 
 function ogrenciGirisTokenDogrula(token, ogrNo) {
@@ -1283,6 +1300,56 @@ function istekIsleyici(req, res) {
 
   // 1. Öğrenci Online Sınav Oturumu Başlatma (Zero-Trust + Tekil Oturum Kilidi)
   // ---- Öğrenci hesabı: ayar / durum / ilk kayıt + e-posta kodu / giriş / şifre yenileme / öğretmen paneli ----
+  // ---- Öğrenci sonuçları (worker.js ile aynı kurallar; bellekte) ----
+  if (req.method === 'POST' && (yol === '/api/sonuc-yayinla' || yol === '/api/itirazlar')) {
+    okuJsonGovde(req)
+      .catch(() => ({}))
+      .then((govde) => {
+        const token = cozHocaTokenIstekten(req, govde, urlNesne);
+        if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token)) return gonderJson(res, 401, { hata: 'Öğretmen oturumu gerekli.' });
+        const hoca = String(((sunucuDurumu.aktifHocaOturumlari.get(token) || {}).kullaniciAdi) || '').trim().toLowerCase();
+        if (!hoca) return gonderJson(res, 401, { hata: 'Öğretmen oturumu gerekli.' });
+        if (yol === '/api/itirazlar') {
+          return gonderJson(res, 200, { basarili: true, itirazlar: sunucuDurumu.ogrenciItirazlari.filter((x) => x.hoca === hoca).slice(-200).reverse().map((x) => ({ yayinId: x.yayinId, sinavAdi: x.sinavAdi, ogrNo: x.ogrNo, soruNo: x.soruNo, aciklama: x.aciklama, zamanMs: x.zamanMs })) });
+        }
+        const sinavId = String((govde && govde.sinavId) || '').trim().slice(0, 80);
+        if (!sinavId) return gonderJson(res, 400, { hata: 'Sınav belirtilmedi.' });
+        const yayinId = Cekirdek.uretDelilLogHash(`${hoca}|${sinavId}`, 'SONUC-YAYIN').slice(0, 24);
+        for (const k of Array.from(sunucuDurumu.ogrenciSonuclari.keys())) if (k.startsWith(`${yayinId}|`)) sunucuDurumu.ogrenciSonuclari.delete(k);
+        if (govde.geriAl) return gonderJson(res, 200, { basarili: true, geriAlindi: true });
+        const sonuclar = (Array.isArray(govde.sonuclar) ? govde.sonuclar : []).slice(0, 400).map(sunucuTemizleSonucKaydi).filter(Boolean);
+        const baslik = { sinavAdi: String(govde.sinavAdi || '').slice(0, 120), dersAdi: String(govde.dersAdi || '').slice(0, 120), kurallarNotu: String(govde.kurallarNotu || '').slice(0, 300) };
+        const zaman = Date.now();
+        sonuclar.forEach((r) => sunucuDurumu.ogrenciSonuclari.set(`${yayinId}|${r.ogrNo}`, { baslik, veri: r, yayinMs: zaman, hoca }));
+        return gonderJson(res, 200, { basarili: true, yayinlanan: sonuclar.length, yayinId });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+  if (req.method === 'POST' && (yol === '/api/ogrenci/sonuclarim' || yol === '/api/ogrenci/itiraz')) {
+    okuJsonGovde(req)
+      .catch(() => ({}))
+      .then((govde) => {
+        const ogrNo = String((govde && govde.ogrNo) || '').trim().slice(0, 40);
+        if (!ogrNo || !ogrenciGirisTokenDogrula(String(govde.girisToken || ''), ogrNo)) return gonderJson(res, 401, { hata: 'Önce öğrenci hesabınla giriş yap.' });
+        const satirlar = [];
+        sunucuDurumu.ogrenciSonuclari.forEach((v, k) => { if (k.endsWith(`|${ogrNo}`)) satirlar.push(Object.assign({ yayinId: k.split('|')[0], yayinMs: v.yayinMs, sinavAdi: v.baslik.sinavAdi, dersAdi: v.baslik.dersAdi, kurallarNotu: v.baslik.kurallarNotu, _hoca: v.hoca }, v.veri)); });
+        satirlar.sort((a, b) => b.yayinMs - a.yayinMs);
+        if (yol === '/api/ogrenci/sonuclarim') return gonderJson(res, 200, { basarili: true, sonuclar: satirlar.slice(0, 50).map((x) => { const y = Object.assign({}, x); delete y._hoca; return y; }) });
+        const hedef = satirlar.find((x) => x.yayinId === String(govde.yayinId || ''));
+        if (!hedef) return gonderJson(res, 404, { hata: 'Bu sınavın sonucu sana açık değil.' });
+        const soruNo = String(govde.soruNo || '').trim().slice(0, 12);
+        const aciklama = String(govde.aciklama || '').trim().slice(0, 300);
+        if (!soruNo || aciklama.length < 3) return gonderJson(res, 400, { hata: 'Soruyu ve kısa bir açıklama yaz.' });
+        const sinir = kontrolHizSiniri(`itiraz:${ogrNo}`, 10, 24 * 60 * 60 * 1000);
+        if (!sinir.izinli) return gonderJson(res, 429, { hata: 'Bugün çok fazla itiraz gönderdin. Yarın tekrar dene.' });
+        sunucuDurumu.ogrenciItirazlari.push({ hoca: hedef._hoca, yayinId: hedef.yayinId, sinavAdi: hedef.sinavAdi, ogrNo, soruNo, aciklama, zamanMs: Date.now() });
+        return gonderJson(res, 200, { basarili: true });
+      })
+      .catch((err) => gonderJson(res, 400, { hata: err.message }));
+    return;
+  }
+
   if (req.method === 'GET' && yol === '/api/ogrenci-hesap/ayar') {
     return gonderJson(res, 200, { hesapZorunlu: ogrenciHesabiZorunluMu(), epostaHazir: epostaServisiHazirMi() });
   }

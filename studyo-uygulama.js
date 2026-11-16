@@ -5170,7 +5170,7 @@
       <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;"><span>${C.kacisHTML(s.sinavKodu ? sinavAdKod(s.sinavKodu, s.ad).gorunen : s.ad)}</span>
         <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
           <button type="button" class="btn btn-basari btn-kucuk" data-arsiv-csv="1">Excel (.csv)</button>
-          ${ciftler.length ? '<button type="button" class="btn btn-tehlike btn-kucuk" data-kopya-tutanak="1">Kopya şüphe tutanağı (yazdır / PDF)</button>' : ''}
+          ${ciftler.length ? '<button type="button" class="btn btn-tehlike btn-kucuk" data-kopya-tutanak="1">Kopya şüphe tutanağı (PDF / Word)</button>' : ''}
         </div></div>
       <div style="font-size:0.8rem; color:var(--metin-ikincil); margin-bottom:0.5rem;">${okumalar.length} kağıt${girmeyenler.length ? ` · <strong>${girmeyenler.length} girmedi (GR)</strong>` : ''} · ortalama ${ort} · ${C.kacisHTML(s.kaynak)}</div>
       <h4 style="margin:0.4rem 0;">🔎 Kopya Şüphe Raporu ${ciftler.length ? `<span class="rozet rozet-kirmizi">${ciftler.length} şüpheli çift</span>` : '<span class="rozet rozet-yesil">şüpheli çift yok</span>'}</h4>
@@ -5244,6 +5244,62 @@
     const odak = kutu.querySelector(sonBicim === 'csv' ? '#indir-bicim-csv' : '#indir-bicim-xlsx');
     if (odak) odak.focus();
   }
+  /* Rapor indirme: önce biçim sorulur. PDF: yazdırma penceresi açılır ("PDF olarak kaydet"); Word: .doc dosyası iner. */
+  const RAPOR_BICIM_DEPO = 'SINAV_RAPOR_BICIM_V1';
+  function raporBelgesiHTML(baslik, govdeHtml, wordMu) {
+    const stil = 'body{font-family:Arial,sans-serif;margin:16mm;color:#000;font-size:10.5pt}h1{font-size:14pt;margin:0 0 6px}table{border-collapse:collapse;width:100%;margin:6px 0}td,th{border:1px solid #444;padding:3px 5px;font-size:9.5pt}pre{white-space:pre-wrap;font-family:Arial,sans-serif;font-size:10pt}button{display:none}';
+    const bas = wordMu ? '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">' : '<!doctype html><html lang="tr">';
+    return `${bas}<head><meta charset="utf-8"><title>${C.kacisHTML(baslik)}</title><style>${stil}</style></head><body>${govdeHtml}</body></html>`;
+  }
+  function indirRaporSecmeli(baslik, govdeHtml, dosyaTabani) {
+    const taban = String(dosyaTabani || baslik || 'rapor').replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_').slice(0, 90);
+    let son = 'pdf';
+    try { son = localStorage.getItem(RAPOR_BICIM_DEPO) === 'word' ? 'word' : 'pdf'; } catch (_) {}
+    const eski = document.getElementById('rapor-bicim-pencere');
+    if (eski) eski.remove();
+    const kutu = document.createElement('div');
+    kutu.id = 'rapor-bicim-pencere';
+    kutu.setAttribute('role', 'dialog');
+    kutu.setAttribute('aria-modal', 'true');
+    kutu.style.cssText = 'position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center; background:rgba(15,23,42,0.45); padding:16px;';
+    kutu.innerHTML = `<div style="background:var(--bg-kart, #fff); color:var(--metin, #111); border-radius:12px; padding:18px; max-width:420px; width:100%;">
+        <div style="font-weight:700; margin-bottom:4px;">Rapor hangi biçimde?</div>
+        <div style="font-size:var(--yazi-sm, 14px); color:var(--metin-ikincil, #555); margin-bottom:12px;">${C.kacisHTML(baslik)}</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn ${son === 'pdf' ? 'btn-birincil' : ''}" id="rapor-bicim-pdf">PDF</button>
+          <button type="button" class="btn ${son === 'word' ? 'btn-birincil' : ''}" id="rapor-bicim-word">Word (.doc)</button>
+          <button type="button" class="btn btn-hayalet" id="rapor-bicim-vazgec">Vazgeç</button>
+        </div></div>`;
+    document.body.appendChild(kutu);
+    const kapat = () => kutu.remove();
+    kutu.querySelector('#rapor-bicim-pdf').addEventListener('click', () => {
+      try { localStorage.setItem(RAPOR_BICIM_DEPO, 'pdf'); } catch (_) {}
+      kapat();
+      const w = window.open('', '_blank');
+      if (!w) { guncelleKayitDurumCubuguUI('hata', '⚠️ Açılır pencere engellendi; tarayıcıda bu siteye izin verin.'); return; }
+      w.document.open();
+      w.document.write(raporBelgesiHTML(taban, govdeHtml, false));
+      w.document.close();
+      setTimeout(() => { try { w.focus(); w.print(); } catch (_) {} }, 300);
+      guncelleKayitDurumCubuguUI('kaydedildi', `🖨️ ${taban}: yazdırma penceresinde "PDF olarak kaydet"i seçin`);
+    });
+    kutu.querySelector('#rapor-bicim-word').addEventListener('click', () => {
+      try { localStorage.setItem(RAPOR_BICIM_DEPO, 'word'); } catch (_) {}
+      kapat();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['\ufeff', raporBelgesiHTML(taban, govdeHtml, true)], { type: 'application/msword;charset=utf-8' }));
+      a.download = `${taban}.doc`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      guncelleKayitDurumCubuguUI('kaydedildi', `⬇️ İndirildi: ${taban}.doc`);
+    });
+    kutu.querySelector('#rapor-bicim-vazgec').addEventListener('click', kapat);
+    kutu.addEventListener('click', (e) => { if (e.target === kutu) kapat(); });
+    kutu.addEventListener('keydown', (e) => { if (e.key === 'Escape') kapat(); });
+    const odak = kutu.querySelector(son === 'word' ? '#rapor-bicim-word' : '#rapor-bicim-pdf');
+    if (odak) odak.focus();
+  }
   function indirCsvMetinDosyasi(ad, satirlar) {
     const temiz = (v) => (C.temizleCsvFormulEnjeksiyon ? C.temizleCsvFormulEnjeksiyon(String(v ?? '')) : String(v ?? ''));
     const csv = '﻿' + satirlar.map((r) => r.map((h) => `"${temiz(h).replace(/"/g, '""')}"`).join(';')).join('\r\n');
@@ -5279,12 +5335,8 @@
   function yazdirKopyaTutanagi(s, okumalar, ciftler) {
     const html = uretKopyaTutanakHTML(s, okumalar, ciftler);
     window.__sonKopyaTutanakHTML = html;
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-    setTimeout(() => { try { w.focus(); w.print(); } catch (_) {} }, 300);
+    const govde = (html.match(/<body[^>]*>([\s\S]*)<\/body>/i) || [])[1] || html;
+    indirRaporSecmeli('Kopya Şüphe Tutanağı', govde, `${sinavAdKod(s.sinavKodu || 'sinav', s.ad).dosyaAdi}_Kopya_Tutanagi`);
   }
 
   /* ---- KAYITLAR: değiştirilemez işlem ve delil kayıtları (tek zaman çizelgesi) ---- */
@@ -5380,11 +5432,7 @@
       ${dosya.yoklama.length ? `<ul style="margin:0; padding-left:1.1rem; font-size:0.82rem;">${dosya.yoklama.map((y) => `<li>${tarihMetni(y.zamanMs)} · ${C.kacisHTML(y.sinavKodu || '')} · ${y.durum === 'geldi' ? '✅ geldi' : (y.durum === 'gelmedi' ? '❌ gelmedi' : '⚠️ belirsiz')}</li>`).join('')}</ul>` : '<div style="color:var(--metin-ikincil);">Yoklama kaydı yok.</div>'}`;
     const yz = document.getElementById('btn-ogr-dosya-yazdir');
     if (yz) yz.addEventListener('click', () => {
-      const w = window.open('', '_blank');
-      if (!w) return;
-      w.document.write(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Öğrenci Dosyası</title><style>body{font-family:Arial,sans-serif;margin:16mm;font-size:10.5pt}table{border-collapse:collapse;width:100%}td,th{border:1px solid #555;padding:3px 5px}.kart{border:1px solid #999;padding:5px;margin:4px 0}button{display:none}</style></head><body><h2>Öğrenci Dosyası</h2>${kutu.innerHTML}</body></html>`);
-      w.document.close();
-      setTimeout(() => { try { w.focus(); w.print(); } catch (_) {} }, 300);
+      indirRaporSecmeli('Öğrenci Dosyası', `<h1>Öğrenci Dosyası</h1>${kutu.innerHTML}`, `Ogrenci_Dosyasi_${dosya.ogrNo || ''}`);
     });
   }
   /* Sayfa açılınca güncel veriyi çiz */
@@ -7887,6 +7935,14 @@
     setTimeout(() => { const el = document.getElementById(odak); if (el) el.focus(); }, 30);
   }
 
+  if (!window.__kioskSonucBagli) {
+    window.__kioskSonucBagli = true;
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btn-kiosk-sonuclarim')) { cizKioskSonuclarim(); return; }
+      const it = e.target.closest('[data-itiraz-yayin]');
+      if (it) gonderKioskItiraz(it.getAttribute('data-itiraz-yayin'), it.getAttribute('data-itiraz-soru'));
+    });
+  }
   function kioskHesapGirisTamam(ogrNo, adSoyad, girisToken) {
     const form = document.getElementById('kiosk-giris-formu');
     durum.kioskGirisToken = girisToken || '';
@@ -7905,7 +7961,58 @@
     if (typeof guncelleKioskOgrenciSinavListesiUI === 'function') guncelleKioskOgrenciSinavListesiUI();
   }
 
+  /* Öğrenci "Sonuçlarım": öğretmenin açtığı sonuçlar; soru soru kendi cevabı, doğru cevap ve itiraz */
+  async function cizKioskSonuclarim() {
+    const kutu = document.getElementById('kiosk-sonuclarim');
+    if (!kutu) return;
+    let kayit = {};
+    try { kayit = JSON.parse(sessionStorage.getItem('KIOSK_OGR_GIRIS_V1') || '{}'); } catch (_) {}
+    const ogrNo = kayit.ogrNo || '';
+    kutu.hidden = false;
+    kutu.innerHTML = '<div style="color:var(--metin-ikincil);">Sonuçlar alınıyor…</div>';
+    try {
+      const y = await fetch('/api/ogrenci/sonuclarim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ogrNo, girisToken: durum.kioskGirisToken || kayit.girisToken || '' }) });
+      const v = await y.json().catch(() => ({}));
+      if (!y.ok) { kutu.innerHTML = `<div style="color:var(--tehlike);">${C.kacisHTML(v.hata || 'Sonuçlar alınamadı.')}</div>`; return; }
+      const liste = Array.isArray(v.sonuclar) ? v.sonuclar : [];
+      if (!liste.length) { kutu.innerHTML = '<div style="color:var(--metin-ikincil);">Henüz açıklanmış sonucun yok.</div>'; return; }
+      const k = C.kacisHTML;
+      const sonucEtiket = { dogru: '✓ Doğru', yanlis: '✗ Yanlış', bos: '— Boş', iptal: 'İptal (herkese sayıldı)', herkese: '✓ İşaretleyen doğru sayıldı' };
+      const balon = (q) => {
+        const secenek = /^D\/Y/.test(q.no) ? ['D', 'Y'] : ['A', 'B', 'C', 'D', 'E'];
+        return secenek.map((h) => {
+          const isaretli = String(q.verilen || '').includes(h);
+          const dogruMu = String(q.dogru || '').split('|').includes(h);
+          return `<span style="display:inline-block; width:20px; height:20px; line-height:18px; text-align:center; border-radius:50%; margin:0 1px; font-size:11px; border:2px solid ${dogruMu ? '#15803d' : '#94a3b8'}; background:${isaretli ? '#111827' : 'transparent'}; color:${isaretli ? '#fff' : 'inherit'};">${h}</span>`;
+        }).join('');
+      };
+      kutu.innerHTML = liste.map((r) => `<div class="kart" data-sonuc-yayin="${k(r.yayinId)}" style="margin:0 0 10px; padding:12px;">
+          <div style="font-weight:700;">${k(r.sinavAdi || 'Sınav')} <span style="font-weight:400; color:var(--metin-ikincil);">${k(r.dersAdi || '')}</span></div>
+          <div style="margin:6px 0; font-size:1.1rem;"><strong>${k(r.puan)}</strong> puan · ${k(r.dogru)} doğru · ${k(r.yanlis)} yanlış · ${k(r.bos)} boş</div>
+          ${r.kurallarNotu ? `<div style="font-size:var(--yazi-xs); color:var(--metin-ikincil); margin-bottom:6px;">Uygulanan kurallar: ${k(r.kurallarNotu)}</div>` : ''}
+          <div style="font-size:var(--yazi-xs); color:var(--metin-ikincil); margin-bottom:4px;">Siyah daire senin işaretin, yeşil çerçeve doğru cevap.</div>
+          <div class="tablo-sarmal" style="overflow:auto;"><table class="veri-tablo"><thead><tr><th>Soru</th><th>Kağıdındaki işaret</th><th>Sonuç</th><th></th></tr></thead><tbody>
+          ${(r.sorular || []).map((q) => `<tr><td>${k(q.no)}</td><td style="white-space:nowrap;">${balon(q)}</td><td>${k(sonucEtiket[q.durum] || q.durum)}</td><td><button type="button" class="btn btn-kucuk btn-hayalet" data-itiraz-yayin="${k(r.yayinId)}" data-itiraz-soru="${k(q.no)}">İtiraz</button></td></tr>`).join('')}
+          </tbody></table></div></div>`).join('');
+    } catch (_) {
+      kutu.innerHTML = '<div style="color:var(--tehlike);">Sunucuya ulaşılamadı.</div>';
+    }
+  }
+  async function gonderKioskItiraz(yayinId, soruNo) {
+    let kayit = {};
+    try { kayit = JSON.parse(sessionStorage.getItem('KIOSK_OGR_GIRIS_V1') || '{}'); } catch (_) {}
+    const aciklama = window.prompt(`${soruNo}. soru için itirazını kısaca yaz (en fazla 300 karakter):`, '');
+    if (!aciklama || aciklama.trim().length < 3) return;
+    try {
+      const y = await fetch('/api/ogrenci/itiraz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ogrNo: kayit.ogrNo || '', girisToken: durum.kioskGirisToken || kayit.girisToken || '', yayinId, soruNo, aciklama: aciklama.trim().slice(0, 300) }) });
+      const v = await y.json().catch(() => ({}));
+      window.alert(y.ok ? 'İtirazın öğretmenine iletildi.' : (v.hata || 'İtiraz gönderilemedi.'));
+    } catch (_) { window.alert('Sunucuya ulaşılamadı.'); }
+  }
+
   function kioskHesapCikis() {
+    const sonucKutu = document.getElementById('kiosk-sonuclarim');
+    if (sonucKutu) { sonucKutu.hidden = true; sonucKutu.innerHTML = ''; }
     const form = document.getElementById('kiosk-giris-formu');
     durum.kioskGirisToken = '';
     try { sessionStorage.removeItem('KIOSK_OGR_GIRIS_V1'); } catch (_) {}
@@ -15245,7 +15352,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       btnPukoTxtIndir.addEventListener('click', () => {
         const yapi = okuAktifSinavYapisi();
         const pukoEl = document.getElementById('metin-puko-raporu');
-        indirDelilDosyasi(`${yapi.ders.kod}_YOKAK_MEDEK_PUKO_Raporu.txt`, (pukoEl && pukoEl.value) || '', 'text/plain;charset=utf-8');
+        indirRaporSecmeli('PUKÖ Tutanağı', `<h1>PUKÖ Tutanağı — ${C.kacisHTML(yapi.ders.kod)} ${C.kacisHTML(yapi.ders.ad)}</h1><pre>${C.kacisHTML((pukoEl && pukoEl.value) || '')}</pre>`, `${yapi.ders.kod}_YOKAK_MEDEK_PUKO_Raporu`);
       });
     }
 
@@ -15258,7 +15365,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         if (!kayit || typeof C.uretMaddiHataItirazKanitRaporuTXT !== 'function') return;
         const yapi = okuAktifSinavYapisi();
         const raporTxt = C.uretMaddiHataItirazKanitRaporuTXT(kayit, yapi);
-        indirDelilDosyasi(`${yapi.ders.kod}_Maddi_Hata_Kanit_Tutanagi_${ogrNo}.txt`, raporTxt, 'text/plain;charset=utf-8');
+        indirRaporSecmeli('Maddi Hata Kanıt Tutanağı', `<h1>Maddi Hata Kanıt Tutanağı</h1><pre>${C.kacisHTML(raporTxt)}</pre>`, `${yapi.ders.kod}_Maddi_Hata_Kanit_Tutanagi_${ogrNo}`);
       });
     }
 
@@ -15991,6 +16098,70 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       verileriKaydet();
       yenileTumSekmePanelleriUI();
       gecisSekmeYardimci('sekme-stüdyo');
+    });
+
+    /* ── Öğrencilere sonuç: açık (kayıtlı) sınavın sonuçlarını öğrenci hesaplarına açar; kopya şüphesi gönderilmez ── */
+    const sonucYayinMesaj = (m, iyi = true) => { const el = document.getElementById('sonuc-yayin-mesaj'); if (el) { el.textContent = m; el.style.color = iyi ? 'var(--basari, #15803d)' : 'var(--tehlike, #b91c1c)'; } };
+    const yayinSonuclariniHazirla = () => {
+      const yapi = okuAktifSinavYapisi();
+      const iptal = new Set((yapi.iptalEdilenSorular || []).map((x) => String(x || '').trim().toUpperCase()));
+      const ciftMetin = String((document.getElementById('kural-cift-sik-dogru') || {}).value || '').toUpperCase();
+      const herkese = new Set((ciftMetin.match(/(TEST|DY)-\d+\s*:\s*\*/g) || []).map((x) => x.split(':')[0].trim()));
+      return (durum.okumaSonuclari || []).map((r) => {
+        const an = (yapi.cevapAnahtarlari && yapi.cevapAnahtarlari[r.grup || 'A']) || { dy: [], test: [] };
+        const sorular = [];
+        let dogru = 0; let yanlis = 0; let bos = 0;
+        [['DY', r.dyDetay || [], an.dy || []], ['TEST', r.testDetay || [], an.test || []]].forEach(([on, liste, anahtarDizi]) => {
+          liste.forEach((x, i) => {
+            const kod = `${on}-${i + 1}`;
+            const verilen = String((x && x.verilen) || '').trim();
+            let durumu = x && x.sonuc === 'DOGRU' ? 'dogru' : (x && x.sonuc === 'YANLIS' ? 'yanlis' : 'bos');
+            if (iptal.has(kod)) durumu = 'iptal';
+            else if (herkese.has(kod) && verilen) durumu = 'herkese';
+            if (durumu === 'dogru' || durumu === 'herkese') dogru += 1; else if (durumu === 'yanlis') yanlis += 1; else if (durumu === 'bos') bos += 1;
+            sorular.push({ no: on === 'DY' ? `D/Y ${i + 1}` : `${i + 1}`, verilen, dogru: String(anahtarDizi[i] || ''), durum: durumu });
+          });
+        });
+        return { ogrNo: r.ogrNo, adSoyad: r.adSoyad, puan: r.toplamPuan, dogru, yanlis, bos, sorular };
+      }).filter((x) => x.ogrNo && !/^BEKLEYEN/i.test(String(x.ogrNo)) && !String(x.ogrNo).includes('?'));
+    };
+    const btnSonucYayinla = document.getElementById('btn-sonuc-yayinla');
+    if (btnSonucYayinla) btnSonucYayinla.addEventListener('click', async () => {
+      const ks = (durum.kayitliSinavlar || []).find((k) => k && k.id === durum.aktifKayitliSinavId);
+      if (!ks) { sonucYayinMesaj('Önce sınavı seçin ya da kaydedin (yeni sınav taslağının sonucu açılmaz).', false); return; }
+      const sonuclar = yayinSonuclariniHazirla();
+      if (!sonuclar.length) { sonucYayinMesaj('Açılacak sonuç yok (numarası kesinleşmiş okuma bulunamadı).', false); return; }
+      if (!window.confirm(`"${ks.ad}" sınavının ${sonuclar.length} öğrenci sonucu öğrenci hesaplarına açılsın mı?\n\nHer öğrenci yalnız kendi sonucunu görür. Kopya şüphesi gösterilmez. İstediğiniz an "Geri al" ile kapatabilirsiniz.`)) return;
+      const ders = (durum.dersler || []).find((x) => x && x.id === durum.aktifDersId) || {};
+      try {
+        const y = await fetch('/api/sonuc-yayinla', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('hoca_token') || ''}` }, body: JSON.stringify({ sinavId: ks.id, sinavAdi: ks.ad, dersAdi: [ders.kod, ders.ad].filter(Boolean).join(' '), kurallarNotu: typeof kurallarNotMetni === 'function' ? kurallarNotMetni() : '', sonuclar }) });
+        const v = await y.json().catch(() => ({}));
+        if (!y.ok) { sonucYayinMesaj(`⚠️ Açılamadı: ${v.hata || y.status}`, false); return; }
+        sonucYayinMesaj(`✅ ${v.yayinlanan} öğrencinin sonucu açıldı. Öğrenciler "Sonuçlarım"dan görebilir.`);
+        guncelleKayitDurumCubuguUI('kaydedildi', `📤 ${ks.ad}: ${v.yayinlanan} öğrenci sonucu açıldı`);
+      } catch (_) { sonucYayinMesaj('⚠️ Sunucuya ulaşılamadı; internet bağlantısını kontrol edin.', false); }
+    });
+    const btnSonucGeriAl = document.getElementById('btn-sonuc-geri-al');
+    if (btnSonucGeriAl) btnSonucGeriAl.addEventListener('click', async () => {
+      const ks = (durum.kayitliSinavlar || []).find((k) => k && k.id === durum.aktifKayitliSinavId);
+      if (!ks) { sonucYayinMesaj('Önce sınavı seçin.', false); return; }
+      if (!window.confirm(`"${ks.ad}" sonuçları öğrencilerden kaldırılsın mı?`)) return;
+      try {
+        const y = await fetch('/api/sonuc-yayinla', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('hoca_token') || ''}` }, body: JSON.stringify({ sinavId: ks.id, geriAl: true }) });
+        sonucYayinMesaj(y.ok ? '✅ Sonuçlar öğrencilerden kaldırıldı.' : '⚠️ Kaldırılamadı.', y.ok);
+      } catch (_) { sonucYayinMesaj('⚠️ Sunucuya ulaşılamadı.', false); }
+    });
+    const btnItirazlar = document.getElementById('btn-itirazlar-yenile');
+    if (btnItirazlar) btnItirazlar.addEventListener('click', async () => {
+      const kutuI = document.getElementById('liste-itirazlar');
+      try {
+        const y = await fetch('/api/itirazlar', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('hoca_token') || ''}` }, body: '{}' });
+        const v = await y.json().catch(() => ({}));
+        const liste = Array.isArray(v.itirazlar) ? v.itirazlar : [];
+        if (kutuI) kutuI.innerHTML = liste.length
+          ? `<table class="veri-tablo"><thead><tr><th>Zaman</th><th>Sınav</th><th>Öğrenci</th><th>Soru</th><th>Açıklama</th></tr></thead><tbody>${liste.map((x) => `<tr><td>${C.kacisHTML(new Date(x.zamanMs).toLocaleString('tr-TR').slice(0, 16))}</td><td>${C.kacisHTML(x.sinavAdi)}</td><td class="mono">${C.kacisHTML(x.ogrNo)} ${C.kacisHTML(ogrAdiBul(x.ogrNo))}</td><td>${C.kacisHTML(x.soruNo)}</td><td>${C.kacisHTML(x.aciklama)}</td></tr>`).join('')}</tbody></table>`
+          : '<div style="color:var(--metin-ikincil); font-size:var(--yazi-sm);">İtiraz yok.</div>';
+      } catch (_) { if (kutuI) kutuI.textContent = '⚠️ İtirazlar alınamadı.'; }
     });
 
     // 4. İlk Kurulum Boş Durumu ve Dersler Sekmesi (#sekme-dersler)
