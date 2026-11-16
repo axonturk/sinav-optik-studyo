@@ -92,7 +92,7 @@ const OLAYLAR = [
     await pc.click('.sekme-btn[data-sekme="sekme-arsiv"]');
     await bekle(300);
     const arsiv = await pc.$eval('#arsiv-liste', (e) => e.textContent.replace(/\s+/g, ' '));
-    kontrol('Sınav Arşivi telefondan gelen sınavı adıyla, 4 kağıt ve "1 çift" şüpheyle listeler', /Güvenlik Duvarı — Vize/.test(arsiv) && /arşive alınmadı/.test(arsiv) && /1 çift/.test(arsiv), arsiv.slice(0, 300));
+    kontrol('Sınav Arşivi telefondan gelen sınavı adıyla, 4 kağıt ve "1 çift" şüpheyle listeler', /Güvenlik Duvarı — Vize/.test(arsiv) && /derse alınmadı/.test(arsiv) && /1 çift/.test(arsiv), arsiv.slice(0, 300));
     await pc.click('#arsiv-liste [data-arsiv-ac]');
     await bekle(300);
     const detayMetni = await pc.$eval('#arsiv-detay', (e) => e.textContent.replace(/\s+/g, ' '));
