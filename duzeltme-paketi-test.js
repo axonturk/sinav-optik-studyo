@@ -115,6 +115,27 @@ async function girisYap(pc) {
         const k = t[kod] || Object.values(t).find((x) => x && x.okumalar && x.okumalar.X2);
         return k ? Object.keys(k.okumalar) : null;
       }, KOD);
+      // Excel çıktısı: dosya adı ve ilk satırlar sınav adı + kodu taşır; görünen ad kağıt koduyla başlar
+      {
+        await api('/api/v2/sinav-senkron', { olaylar: [{ eventId: 'KOD-1', sinavKodu: '74191113-VIZE-2026', tur: 'SINAV_TANIMI', kaynakCihaz: 'mobil', zamanMs: Date.now(), veri: { ad: '74161101 — Ağ Teknolojilerine Giriş', dySayisi: 5, testSayisi: 5 } }, { eventId: 'KOD-2', sinavKodu: '74191113-VIZE-2026', tur: 'OKUDU_GUNCELLE', kaynakCihaz: 'mobil', zamanMs: Date.now(), veri: ok('K1', '247419002', 'KAMİLE BİÇE', '02') }] }, HB);
+        await pc.evaluate(async () => { await window.__masaustuV2SenkronSimdi(); });
+        await bekle(400);
+        const csv = await pc.evaluate(async () => {
+          const sec = document.getElementById('sec-telefon-sinavi');
+          sec.value = '74191113-VIZE-2026'; sec.dispatchEvent(new Event('change', { bubbles: true }));
+          if (typeof window.__cizTelefonSinavlariPaneli === 'function') window.__cizTelefonSinavlariPaneli();
+          let ad = ''; let blob = null;
+          const eskiClick = HTMLAnchorElement.prototype.click; const eskiUrl = URL.createObjectURL;
+          URL.createObjectURL = (b) => { blob = b; return 'blob:test'; };
+          HTMLAnchorElement.prototype.click = function () { ad = this.download; };
+          document.getElementById('btn-telefon-sinavi-csv').click();
+          HTMLAnchorElement.prototype.click = eskiClick; URL.createObjectURL = eskiUrl;
+          const secenek = (Array.from(sec.options).find((o) => o.value === '74191113-VIZE-2026') || {}).textContent || '';
+          const uyari = document.getElementById('telefon-sinavlari-kutu').textContent;
+          return { ad, metin: blob ? (await blob.text()).slice(0, 200) : '', secenek, uyari: /telefondaki ders kodu/.test(uyari) };
+        });
+        kontrol('Excel: dosya adı sınav adı + kodu; ilk satırlarda "Sınav" ve "Sınav kodu"; seçicide kağıt kodu; kod farkı uyarısı', /^Ağ_Teknolojilerine_Giriş_74191113-VIZE-2026\.csv$/.test(csv.ad) && /"Sınav";"74191113 — Ağ Teknolojilerine Giriş"/.test(csv.metin) && /"Sınav kodu";"74191113-VIZE-2026"/.test(csv.metin) && /^74191113 — Ağ Teknolojilerine Giriş/.test(csv.secenek) && csv.uyari, JSON.stringify(csv));
+      }
       // GR: telefonda "Okumayı bitir" → girmeyen öğrenci arşiv detayında GR satırı olur
       await api('/api/v2/sinav-senkron', { olaylar: [{ eventId: 'A5-GR', sinavKodu: KOD, tur: 'YOKLAMA', kaynakCihaz: 'mobil', zamanMs: Date.now(), veri: { sayfa: 1, toplamSayfa: 1, kaynak: 'okuma-bitir', satirlar: [{ ogrNo: '247419053', durum: 'gelmedi', gr: true }] } }] }, HB);
       await pc.evaluate(async () => { await window.__masaustuV2SenkronSimdi(); });
