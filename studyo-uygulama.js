@@ -15,6 +15,8 @@
   const durum = {
     dersler: [],
     aktifDersId: 'genel',
+    donemler: [],
+    aktifDonemId: '',
     sorular: [],
     ogrenciKayitlari: [],
     salonlar: [{ id: 'salon-1', ad: 'Salon 1', kontenjan: 40, gozetmenler: [] }],
@@ -208,6 +210,45 @@
   }
 
   /* Mükerrer (aynı ders kodu + aynı ders adı) dersleri birleştirir ve soruları asıl derse bağlar */
+  /* ── EĞİTİM-ÖĞRETİM DÖNEMİ ──
+     Her ders bir döneme bağlıdır (sınıf listesi, sınavlar ve okumalar derse bağlı olduğu için onlar da). */
+  const YARIYIL_AD = { GUZ: 'Güz', BAHAR: 'Bahar', YAZ: 'Yaz' };
+  function donemNesnesi(basYil, yariyil) {
+    const y = Number(basYil);
+    return { id: `${y}-${y + 1}-${yariyil}`, yil: `${y}-${y + 1}`, yariyil, ad: `${y}-${y + 1} ${YARIYIL_AD[yariyil] || yariyil}`, arsivlendi: false, olusturmaMs: Date.now() };
+  }
+  function donemHesapla(tarih = new Date()) {
+    const yil = tarih.getFullYear();
+    const ay = tarih.getMonth() + 1;
+    if (ay >= 9) return donemNesnesi(yil, 'GUZ');
+    if (ay === 1) return donemNesnesi(yil - 1, 'GUZ');
+    if (ay <= 6) return donemNesnesi(yil - 1, 'BAHAR');
+    return donemNesnesi(yil - 1, 'YAZ');
+  }
+  function donemleriHazirla() {
+    if (!Array.isArray(durum.donemler)) durum.donemler = [];
+    durum.donemler = durum.donemler.filter((x) => x && typeof x === 'object' && x.id);
+    if (!durum.donemler.length) durum.donemler.push(donemHesapla());
+    if (!durum.aktifDonemId || !durum.donemler.some((x) => x.id === durum.aktifDonemId)) {
+      durum.aktifDonemId = (durum.donemler.find((x) => !x.arsivlendi) || durum.donemler[0]).id;
+    }
+    const varsayilan = (durum.donemler.find((x) => !x.arsivlendi) || durum.donemler[0]).id;
+    const eksik = (durum.dersler || []).filter((x) => x && !x.donemId);
+    if (eksik.length) {
+      // Dönem yapısına ilk geçiş: dönemsiz dersler açık döneme bağlanır (önce bir kez yedek alınır, hiçbir kayıt silinmez)
+      try {
+        if (!localStorage.getItem('SINAV_DONEM_GECIS_YEDEK_V1') && localStorage.getItem(DEPO_ANAHTAR)) {
+          localStorage.setItem('SINAV_DONEM_GECIS_YEDEK_V1', localStorage.getItem(DEPO_ANAHTAR));
+        }
+      } catch (_) {}
+      eksik.forEach((x) => { x.donemId = varsayilan; });
+    }
+  }
+  function aktifDonem() { return (durum.donemler || []).find((x) => x.id === durum.aktifDonemId) || null; }
+  function aktifDonemDersleri() {
+    return (durum.dersler || []).filter((x) => x && (!x.donemId || x.donemId === durum.aktifDonemId));
+  }
+
   function birlestirMukerrerDersler() {
     if (!Array.isArray(durum.dersler) || durum.dersler.length < 2) return 0;
     const anahtarHaritasi = new Map();
@@ -217,7 +258,7 @@
     const soruSay = (dId) => (durum.sorular || []).filter((s) => s && !s.arsivde && s.dersId === dId).length;
     durum.dersler.forEach((d) => {
       if (!d || typeof d !== 'object') return;
-      const anahtar = `${String(d.kod || '').trim().toUpperCase()}||${String(d.ad || '').trim().toLocaleLowerCase('tr-TR')}`;
+      const anahtar = `${String(d.donemId || '')}||${String(d.kod || '').trim().toUpperCase()}||${String(d.ad || '').trim().toLocaleLowerCase('tr-TR')}`;
       const mevcut = anahtarHaritasi.get(anahtar);
       if (!mevcut) {
         anahtarHaritasi.set(anahtar, d);
@@ -288,11 +329,11 @@
       return gecerliler;
     };
 
-    ['dersler', 'sorular', 'ogrenciler', 'salonlar', 'arsivDersler', 'onlineSinavListesi', 'okumaSonuclari', 'hocaListesi', 'kioskDelilLoglari', 'kurumsalSablonlar'].forEach((alan) => {
+    ['dersler', 'donemler', 'sorular', 'ogrenciler', 'salonlar', 'arsivDersler', 'onlineSinavListesi', 'okumaSonuclari', 'hocaListesi', 'kioskDelilLoglari', 'kurumsalSablonlar'].forEach((alan) => {
       const d = kurtarDizi(alan);
       if (d !== undefined) kurtarilan[alan] = d;
     });
-    ['aktifDersId', 'dagitimModu', 'davetKodu', 'onlineSinav', 'hocaHesap', 'evrakSablonu'].forEach((alan) => {
+    ['aktifDersId', 'aktifDonemId', 'dagitimModu', 'davetKodu', 'onlineSinav', 'hocaHesap', 'evrakSablonu'].forEach((alan) => {
       if (hamNesne[alan] === undefined) return;
       try {
         const tek = C.semaDogrulaVeTemizle({ [alan]: hamNesne[alan] });
@@ -676,6 +717,7 @@
     };
 
     birlesik.dersler = birlestirIdIle(yerelPaket.dersler, disPaket.dersler, (d) => String(d.id || `${d.kod}-${d.ad}`));
+    birlesik.donemler = birlestirIdIle(yerelPaket.donemler || [], disPaket.donemler || [], (x) => String(x.id));
     birlesik.sorular = birlestirIdIle(yerelPaket.sorular, disPaket.sorular, (s) => String(s.id || s.metin));
     const yerelOgr = Array.isArray(yerelPaket.ogrenciler) ? yerelPaket.ogrenciler : yerelPaket.ogrenciKayitlari;
     const disOgr = Array.isArray(disPaket.ogrenciler) ? disPaket.ogrenciler : disPaket.ogrenciKayitlari;
@@ -709,6 +751,8 @@
     if (!cozulmus || typeof cozulmus !== 'object') return;
     const nesneDizisi = (dizi) => dizi.filter((x) => x && typeof x === 'object' && !Array.isArray(x));
     if (Array.isArray(cozulmus.dersler)) durum.dersler = nesneDizisi(cozulmus.dersler);
+    if (Array.isArray(cozulmus.donemler) && cozulmus.donemler.length) durum.donemler = nesneDizisi(cozulmus.donemler);
+    if (typeof cozulmus.aktifDonemId === 'string' && cozulmus.aktifDonemId) durum.aktifDonemId = cozulmus.aktifDonemId;
     if (typeof cozulmus.aktifDersId === 'string' && cozulmus.aktifDersId) durum.aktifDersId = cozulmus.aktifDersId;
     else if (durum.dersler.length > 0) durum.aktifDersId = durum.dersler[0].id;
     if (Array.isArray(cozulmus.sorular)) durum.sorular = nesneDizisi(cozulmus.sorular);
@@ -883,6 +927,8 @@
       revizyonNo: durum.revizyonNo || 0,
       dersler: durum.dersler,
       aktifDersId: durum.aktifDersId,
+      donemler: durum.donemler || [],
+      aktifDonemId: durum.aktifDonemId || '',
       sorular: durum.sorular,
       ogrenciler: durum.ogrenciKayitlari,
       salonlar: durum.salonlar,
@@ -8000,8 +8046,14 @@
   }
 
   function doldurDersSecici() {
-    const secenekler = durum.dersler.length > 0
-      ? durum.dersler
+    donemleriHazirla();
+    doldurDonemSecici();
+    const donemDersleri = aktifDonemDersleri();
+    if (donemDersleri.length && !donemDersleri.some((x) => x.id === durum.aktifDersId)) {
+      degistirAktifDersGuvenli(donemDersleri[0].id);
+    }
+    const secenekler = donemDersleri.length > 0
+      ? donemDersleri
           .map((d) => {
             const soruAdet = (durum.sorular || []).filter((s) => s && !s.arsivde && s.dersId === d.id).length;
             return `<option value="${C.kacisHTML(d.id)}" ${d.id === durum.aktifDersId ? "selected" : ""}>${C.kacisHTML(d.kod)} \u2014 ${C.kacisHTML(d.ad)} (${soruAdet} Soru)</option>`;
@@ -8023,6 +8075,113 @@
     if (typeof window.__guncelleDerslerVeBosDurumUI === 'function') {
       window.__guncelleDerslerVeBosDurumUI();
     }
+  }
+
+  function doldurDonemSecici() {
+    const sec = document.getElementById('aktif-donem-sec');
+    const liste = (durum.donemler || []).slice().sort((x, y) => String(y.id).localeCompare(String(x.id)));
+    const acik = liste.filter((x) => !x.arsivlendi);
+    const arsiv = liste.filter((x) => x.arsivlendi);
+    if (sec) {
+      const kisa = (x) => `${String(x.yil || '').replace(/^(\d{4})-\d{2}(\d{2})$/, '$1-$2')} ${YARIYIL_AD[x.yariyil] || ''}`.trim();
+      sec.innerHTML = acik.map((x) => `<option value="${C.kacisHTML(x.id)}" ${x.id === durum.aktifDonemId ? 'selected' : ''} title="${C.kacisHTML(x.ad)}">📅 ${C.kacisHTML(kisa(x))}</option>`).join('')
+        + (arsiv.length ? `<optgroup label="Arşiv (eski dönemler)">${arsiv.map((x) => `<option value="${C.kacisHTML(x.id)}" ${x.id === durum.aktifDonemId ? 'selected' : ''} title="${C.kacisHTML(x.ad)}">🗄️ ${C.kacisHTML(kisa(x))}</option>`).join('')}</optgroup>` : '');
+    }
+    const d = aktifDonem();
+    const bant = document.getElementById('bant-arsiv-donem');
+    if (bant) {
+      const arsivde = Boolean(d && d.arsivlendi);
+      bant.hidden = !arsivde;
+      bant.style.display = arsivde ? 'block' : 'none';
+      const ad = document.getElementById('bant-arsiv-donem-ad');
+      if (ad && d) ad.textContent = `${d.ad} (arşiv)`;
+    }
+    const rozet = document.getElementById('rozet-aktif-donem');
+    if (rozet && d) rozet.textContent = `${d.ad}${d.arsivlendi ? ' · arşiv' : ' · aktif'}`;
+    const kutu = document.getElementById('liste-donemler');
+    if (kutu) {
+      kutu.innerHTML = liste.map((x) => {
+        const n = (durum.dersler || []).filter((dd) => dd.donemId === x.id).length;
+        return `<span class="rozet ${x.id === durum.aktifDonemId ? 'rozet-mavi' : (x.arsivlendi ? '' : 'rozet-yesil')}" title="${n} ders">${x.arsivlendi ? '🗄️' : '📅'} ${C.kacisHTML(x.ad)} · ${n} ders</span>`;
+      }).join('');
+    }
+    const yilSec = document.getElementById('yeni-donem-yil');
+    if (yilSec && !yilSec.options.length) {
+      const bu = new Date().getFullYear();
+      yilSec.innerHTML = [bu - 2, bu - 1, bu, bu + 1].map((y) => `<option value="${y}">${y}-${y + 1}</option>`).join('');
+      const sonraki = sonrakiDonemOnerisi();
+      yilSec.value = String(sonraki.bas);
+      const yy = document.getElementById('yeni-donem-yariyil');
+      if (yy) yy.value = sonraki.yariyil;
+    }
+    // Belgelerdeki dönem yazısı aktif dönemden gelir
+    if (d) {
+      const metin = `${d.yil} ${(YARIYIL_AD[d.yariyil] || '').toLocaleUpperCase('tr-TR')}`.trim();
+      const tut = document.getElementById('tut-donem');
+      if (tut && tut.value !== metin) tut.value = metin;
+      if (durum.evrakSablonu && typeof durum.evrakSablonu === 'object') durum.evrakSablonu.donem = metin;
+    }
+  }
+  function sonrakiDonemOnerisi() {
+    const d = aktifDonem() || donemHesapla();
+    const bas = Number(String(d.yil || '').split('-')[0]) || new Date().getFullYear();
+    if (d.yariyil === 'GUZ') return { bas, yariyil: 'BAHAR' };
+    if (d.yariyil === 'BAHAR') return { bas, yariyil: 'YAZ' };
+    return { bas: bas + 1, yariyil: 'GUZ' };
+  }
+  function donemDegistir(yeniId) {
+    if (!yeniId || yeniId === durum.aktifDonemId || !(durum.donemler || []).some((x) => x.id === yeniId)) return;
+    kaydetAktifDersIzoleDurumu(durum.aktifDersId);
+    durum.aktifDonemId = yeniId;
+    const ilk = aktifDonemDersleri()[0];
+    if (ilk) degistirAktifDersGuvenli(ilk.id);
+    verileriKaydet();
+    doldurDersSecici();
+    if (typeof yenileTumSekmePanelleriUI === 'function') yenileTumSekmePanelleriUI();
+  }
+  function yeniDonemBaslat(basYil, yariyil, dersleriTasi) {
+    const yeni = donemNesnesi(basYil, yariyil);
+    if ((durum.donemler || []).some((x) => x.id === yeni.id)) return { basarili: false, mesaj: `${yeni.ad} zaten var.` };
+    kaydetAktifDersIzoleDurumu(durum.aktifDersId);
+    const eskiId = durum.aktifDonemId;
+    durum.donemler.push(yeni);
+    let tasinan = 0;
+    if (dersleriTasi) {
+      (durum.dersler || []).filter((x) => x.donemId === eskiId).forEach((eski) => {
+        const kopya = JSON.parse(JSON.stringify(eski));
+        kopya.id = `ders-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        kopya.donemId = yeni.id;
+        kopya.oncekiDonemDersId = eski.id;
+        durum.dersler.push(kopya);
+        // Soru bankası yeni döneme taşınır (eski dönemin kayıtlı sınavları kendi donmuş soru kopyalarını saklar)
+        (durum.sorular || []).forEach((sr) => { if (sr && sr.dersId === eski.id) sr.dersId = kopya.id; });
+        tasinan++;
+      });
+    }
+    durum.aktifDonemId = yeni.id;
+    const ilk = aktifDonemDersleri()[0];
+    if (ilk) degistirAktifDersGuvenli(ilk.id);
+    else { birakTelefonSinaviAnahtari(); durum.aktifKayitliSinavId = ''; durum.okumaSonuclari = []; }
+    verileriKaydet();
+    doldurDersSecici();
+    if (typeof yenileTumSekmePanelleriUI === 'function') yenileTumSekmePanelleriUI();
+    return { basarili: true, donem: yeni, tasinan };
+  }
+  function donemiArsivle(donemId) {
+    const hedef = (durum.donemler || []).find((x) => x.id === donemId);
+    if (!hedef) return { basarili: false, mesaj: 'Dönem bulunamadı.' };
+    const digerAcik = (durum.donemler || []).filter((x) => !x.arsivlendi && x.id !== donemId);
+    if (!digerAcik.length) return { basarili: false, mesaj: 'Arşivlemeden önce yeni dönemi başlatın (en az bir açık dönem kalmalı).' };
+    hedef.arsivlendi = true;
+    hedef.arsivMs = Date.now();
+    if (durum.aktifDonemId === donemId) {
+      const yeni = digerAcik.sort((x, y) => String(y.id).localeCompare(String(x.id)))[0];
+      donemDegistir(yeni.id);
+    } else {
+      verileriKaydet();
+      doldurDersSecici();
+    }
+    return { basarili: true };
   }
 
   function okuOnlineSinavFormunu() {
@@ -9048,7 +9207,7 @@
       document.documentElement.setAttribute('data-gorunum', uzman ? 'uzman' : 'basit');
       const b = document.getElementById('btn-gorunum-modu');
       if (b) {
-        b.textContent = uzman ? '🛠️ Uzman görünüm' : '🧭 Basit görünüm';
+        b.textContent = uzman ? '🛠️ Uzman' : '🧭 Basit';
         b.setAttribute('aria-pressed', uzman ? 'true' : 'false');
       }
     };
@@ -9096,6 +9255,33 @@
     }
 
     // Aktif Ders Değişimi (Ders Bazlı Taslak Sınav, Salon ve OMR Sonuç İzolasyonu ile)
+    const donemSecEl = document.getElementById('aktif-donem-sec');
+    if (donemSecEl) donemSecEl.addEventListener('change', (e) => donemDegistir(e.target.value));
+    const donemMesaj = (m, iyi) => { const el = document.getElementById('etiket-donem-mesaj'); if (el) { el.textContent = m; el.style.color = iyi ? 'var(--basari)' : 'var(--tehlike)'; } };
+    const btnYeniDonem = document.getElementById('btn-yeni-donem-baslat');
+    if (btnYeniDonem) {
+      btnYeniDonem.addEventListener('click', () => {
+        const yil = (document.getElementById('yeni-donem-yil') || {}).value;
+        const yy = (document.getElementById('yeni-donem-yariyil') || {}).value || 'GUZ';
+        const tasi = Boolean((document.getElementById('yeni-donem-ders-kopyala') || {}).checked);
+        const ad = donemNesnesi(yil, yy).ad;
+        if (!window.confirm(`${ad} dönemi başlatılsın mı?\n\n${tasi ? 'Dersler ve soru bankası yeni döneme taşınır; sınıf listeleri ve sınavlar eski dönemde kalır.' : 'Yeni dönem boş başlar.'}\nEski dönem silinmez.`)) return;
+        const r = yeniDonemBaslat(yil, yy, tasi);
+        donemMesaj(r.basarili ? `✅ ${r.donem.ad} başladı${tasi ? ` (${r.tasinan} ders taşındı)` : ''}. Eski dönemi isterseniz arşivleyebilirsiniz.` : r.mesaj, r.basarili);
+      });
+    }
+    const btnDonemArsivle = document.getElementById('btn-donem-arsivle');
+    if (btnDonemArsivle) {
+      btnDonemArsivle.addEventListener('click', () => {
+        const d = aktifDonem();
+        if (!d) return;
+        if (d.arsivlendi) { donemMesaj('Bu dönem zaten arşivde.'); return; }
+        if (!window.confirm(`${d.ad} arşivlensin mi?\n\nDönem silinmez; menüden kalkar, üstteki dönem seçicinin "Arşiv" bölümünden açılabilir.`)) return;
+        const r = donemiArsivle(d.id);
+        donemMesaj(r.basarili ? `✅ ${d.ad} arşivlendi.` : r.mesaj, r.basarili);
+      });
+    }
+
     document.getElementById('aktif-ders-sec').addEventListener('change', (e) => {
       degistirAktifDersGuvenli(e.target.value);
       verileriKaydet();
@@ -15308,7 +15494,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
 
     // 4. İlk Kurulum Boş Durumu ve Dersler Sekmesi (#sekme-dersler)
     window.__guncelleDerslerVeBosDurumUI = () => {
-      const dersler = Array.isArray(durum.dersler) ? durum.dersler : [];
+      const dersler = aktifDonemDersleri();
       const rozetDersSayisi = document.getElementById('rozet-ders-sayisi');
       if (rozetDersSayisi) rozetDersSayisi.textContent = String(dersler.length);
 

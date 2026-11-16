@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261115f" />
+  <link rel="stylesheet" href="ortak.css?v=20261116a" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -191,12 +191,14 @@
 
     <!-- SAĞ ÇALIŞMA ALANI: 48px BAĞLAM ÇUBUĞU + ANA İÇERİK -->
     <div class="kabuk-sag-alan">
+      <div id="bant-arsiv-donem" class="yazdir-gizle" hidden style="display:none; padding:6px 14px; background:#fef3c7; border-bottom:1px solid #f59e0b; font-size:0.82rem; color:#78350f;">🗄️ <strong id="bant-arsiv-donem-ad">Arşiv dönemi</strong> açık — eski dönem kayıtlarını görüntülüyorsunuz. Yeni sınav için üstteki seçiciden aktif döneme dönün.</div>
       <div id="sabit-kayit-onay-cubuk" class="yazdir-gizle" role="status" aria-live="polite">
         <div class="sabit-kayit-ic">
           <div class="baglam-sol">
             <button type="button" class="btn btn-hayalet btn-kucuk mobil-yan-menu-btn" id="btn-mobil-yan-menu-ac" title="Menüyü aç" aria-label="Menüyü aç">
               <svg class="ui-ikon"><use href="#i-panel-left"></use></svg>
             </button>
+            <select id="aktif-donem-sec" class="baglam-secici" aria-label="Eğitim-öğretim dönemi" title="Eğitim-öğretim yılı ve dönemi: yalnız bu dönemin dersleri görünür"></select>
             <select id="aktif-ders-sec" class="baglam-secici" aria-label="Aktif Ders"></select>
             <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-yeni-ders-modal" title="Yeni Ders Ekle veya Düzenle">
               <svg class="ui-ikon"><use href="#i-plus"></use></svg>
@@ -216,7 +218,7 @@
               <svg class="ui-ikon"><use href="#i-undo"></use></svg>
               <span>Geri Al</span>
             </button>
-            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-gorunum-modu" aria-pressed="false" title="Basit: yalnız temel adımlar görünür. Uzman: tüm gelişmiş ayarlar açılır. Hiçbir özellik silinmez.">🧭 Basit görünüm</button>
+            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-gorunum-modu" aria-pressed="false" title="Basit: yalnız temel adımlar görünür. Uzman: tüm gelişmiş ayarlar açılır. Hiçbir özellik silinmez.">🧭 Basit</button>
             <button type="button" class="btn btn-hayalet btn-kucuk btn-kaydet-onayla-ana" id="btn-genel-kaydet-uygula" title="Değişiklikleri kaydet ve uygula (Ctrl+S)">
               Kaydet
             </button>
@@ -2614,6 +2616,30 @@
              SEKME 8: AYARLAR (YEDEKLEME, BULUT KASA, YETKİLER VE TANILAMA)
              ==================================================================== -->
         <section class="sekme-panel" id="sekme-ayarlar">
+          <div class="kart" id="kart-donem-yonetimi">
+            <div class="kart-baslik">
+              <span>📅 Eğitim-öğretim yılı ve dönem</span>
+              <span class="rozet rozet-mavi" id="rozet-aktif-donem">—</span>
+            </div>
+            <p style="font-size:var(--yazi-sm); color:var(--metin-ikincil); margin:0 0 0.5rem;">Dersler, sınıf listeleri, sınavlar ve okumalar döneme bağlıdır. Menüde yalnız <strong>aktif dönem</strong> görünür. Eski dönemler silinmez; arşivlenir ve üstteki dönem seçicinin "Arşiv" bölümünden açılıp raporu alınabilir.</p>
+            <div id="liste-donemler" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.6rem;"></div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="yeni-donem-yil">Yeni dönem: eğitim-öğretim yılı</label>
+                <select id="yeni-donem-yil"></select>
+              </div>
+              <div>
+                <label class="etiket" for="yeni-donem-yariyil">Yarıyıl</label>
+                <select id="yeni-donem-yariyil"><option value="GUZ">Güz</option><option value="BAHAR">Bahar</option><option value="YAZ">Yaz</option></select>
+              </div>
+            </div>
+            <label style="display:flex; gap:0.35rem; align-items:center; font-size:var(--yazi-sm); margin:0.2rem 0 0.5rem;"><input type="checkbox" id="yeni-donem-ders-kopyala" checked /> Dersleri yeni döneme taşı (ders bilgisi, ÖÇ ve soru bankası gelir; sınıf listesi ve sınavlar eski dönemde kalır)</label>
+            <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-yeni-donem-baslat">Yeni dönemi başlat</button>
+              <button type="button" class="btn btn-kucuk" id="btn-donem-arsivle">Açık dönemi arşivle</button>
+            </div>
+            <div id="etiket-donem-mesaj" role="status" style="font-size:var(--yazi-sm); margin-top:0.4rem; min-height:1.1em;"></div>
+          </div>
           <div class="iki-sutun-duzen">
             <div class="kart">
               <div class="kart-baslik">
@@ -3612,7 +3638,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261115f"></script>
-  <script src="studyo-uygulama.js?v=20261115f"></script>
+  <script src="guvenlik-ve-veri.js?v=20261116a"></script>
+  <script src="studyo-uygulama.js?v=20261116a"></script>
 </body>
 </html>

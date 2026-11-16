@@ -262,6 +262,60 @@ async function girisYap(pc) {
       kontrol('D1) Satır kaydıran uzun şıklar tek sütuna geçer, şıklar üst üste binmez; kısa şıklar iki sütunda kalır', d1.uzun === 'siklar-alt-alta' && d1.kisa === 'siklar-iki-sutun' && d1.ust === 0, JSON.stringify(d1));
     }
 
+    // ---------------- C: eğitim-öğretim yılı / dönem ----------------
+    {
+      const dn = () => pc.evaluate(() => {
+        const s = document.getElementById('aktif-donem-sec');
+        const ders = document.getElementById('aktif-ders-sec');
+        const sinav = document.getElementById('sec-kayitli-sinav-ust');
+        return {
+          donem: s ? s.value : '', acik: s ? Array.from(s.querySelectorAll(':scope > option')).map((o) => o.value) : [],
+          arsiv: s ? Array.from(s.querySelectorAll('optgroup option')).map((o) => o.value) : [],
+          dersler: ders ? Array.from(ders.options).map((o) => o.textContent) : [],
+          telSinav: sinav ? Array.from(sinav.options).some((o) => /^TEL-/.test(o.value)) : false,
+          tutDonem: (document.getElementById('tut-donem') || {}).value || '',
+          bant: !document.getElementById('bant-arsiv-donem').hidden
+        };
+      });
+      const c0 = await dn();
+      kontrol('C1/C2) Üst çubukta dönem seçici var; açılışta bugünün dönemi (2026-2027 Güz) seçili ve dersler görünür', c0.donem === '2026-2027-GUZ' && c0.dersler.some((t) => /74192323/.test(t)), JSON.stringify(c0));
+      kontrol('C2) Belgelerdeki dönem yazısı aktif dönemden gelir', c0.tutDonem === '2026-2027 GÜZ', c0.tutDonem);
+      await pc.evaluate(() => { window.__eskiConfirmC = window.confirm; window.confirm = () => true; });
+      await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-ayarlar"]').click());
+      await bekle(200);
+      await pc.evaluate(() => {
+        document.getElementById('yeni-donem-yil').value = '2026';
+        document.getElementById('yeni-donem-yariyil').value = 'BAHAR';
+        document.getElementById('yeni-donem-ders-kopyala').checked = true;
+        document.getElementById('btn-yeni-donem-baslat').click();
+      });
+      await bekle(600);
+      const c1 = await dn();
+      const mesaj1 = await pc.$eval('#etiket-donem-mesaj', (e) => e.textContent);
+      kontrol('C3) "Yeni dönemi başlat": 2026-2027 Bahar aktif olur, dersler taşınır, eski dönemin telefon sınavı yeni dönemde görünmez', c1.donem === '2026-2027-BAHAR' && c1.dersler.some((t) => /74192323/.test(t)) && !c1.telSinav && /başladı/.test(mesaj1), `${JSON.stringify(c1)} · ${mesaj1}`);
+      kontrol('C2) Yeni dönemde belgelerdeki dönem yazısı kendiliğinden "2026-2027 BAHAR" olur', c1.tutDonem === '2026-2027 BAHAR', c1.tutDonem);
+      await pc.evaluate(() => { const s = document.getElementById('aktif-donem-sec'); s.value = '2026-2027-GUZ'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+      await bekle(600);
+      const c2 = await dn();
+      kontrol('C1) Eski döneme dönünce o dönemin dersleri ve telefon sınavı yerinde (hiçbir kayıt silinmedi)', c2.donem === '2026-2027-GUZ' && c2.telSinav, JSON.stringify(c2));
+      await pc.evaluate(() => document.getElementById('btn-donem-arsivle').click());
+      await bekle(600);
+      const c3 = await dn();
+      kontrol('C4) "Açık dönemi arşivle": Güz arşive geçer, menüden kalkar ("Arşiv" bölümünde), aktif dönem Bahar olur', c3.donem === '2026-2027-BAHAR' && c3.arsiv.includes('2026-2027-GUZ') && !c3.acik.includes('2026-2027-GUZ'), JSON.stringify(c3));
+      await pc.evaluate(() => { const s = document.getElementById('aktif-donem-sec'); s.value = '2026-2027-GUZ'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+      await bekle(500);
+      const c4 = await dn();
+      kontrol('C4) Arşiv dönemi açılıp görüntülenebilir; üstte "arşiv dönemi" bandı çıkar', c4.donem === '2026-2027-GUZ' && c4.bant && c4.telSinav, JSON.stringify(c4));
+      await pc.evaluate(() => { const s = document.getElementById('aktif-donem-sec'); s.value = '2026-2027-BAHAR'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+      await bekle(400);
+      await pc.evaluate(() => { window.confirm = window.__eskiConfirmC; });
+      await pc.reload({ waitUntil: 'networkidle0' });
+      await girisYap(pc);
+      await bekle(300);
+      const c5 = await dn();
+      kontrol('C5) Sayfa yenilenince dönemler ve aktif dönem kalıcı', c5.donem === '2026-2027-BAHAR' && c5.arsiv.includes('2026-2027-GUZ'), JSON.stringify(c5));
+    }
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;

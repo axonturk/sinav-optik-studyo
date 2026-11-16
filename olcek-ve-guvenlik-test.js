@@ -227,11 +227,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v33), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v34), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v33, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v33'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v34, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v34'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
