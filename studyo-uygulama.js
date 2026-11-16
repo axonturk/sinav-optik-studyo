@@ -4724,6 +4724,25 @@
     if (!kova) return [];
     return Object.values(kova.okumalar || {}).sort((a, b) => String(a.ogrNo).localeCompare(String(b.ogrNo), 'tr'));
   }
+  /* Sınavın görünen adı kağıttaki sınav koduyla başlar (telefondaki ders kodu farklı olabilir) */
+  function sinavAdKod(kod, ad) {
+    const sinavKodu = String(kod || '');
+    const kodBasi = (sinavKodu.match(/^(\d{6,9})/) || [])[1] || '';
+    const hamAd = String(ad || '');
+    const adKodu = (hamAd.match(/^\s*(\d{6,9})/) || [])[1] || '';
+    const dersAdi = hamAd.replace(/^\s*\d{6,9}\s*[-—–]?\s*/, '').trim() || hamAd.trim() || sinavKodu;
+    return {
+      gorunen: kodBasi ? `${kodBasi} — ${dersAdi}` : (hamAd || sinavKodu),
+      dersAdi,
+      farkliKod: Boolean(kodBasi && adKodu && kodBasi !== adKodu) ? adKodu : '',
+      dosyaAdi: `${dersAdi}_${sinavKodu}`.replace(/[\/:*?"<>|]+/g, '').replace(/\s+/g, '_').slice(0, 90)
+    };
+  }
+  function csvBasliklari(kod, ad) {
+    const a = sinavAdKod(kod, ad);
+    return [['Sınav', a.gorunen], ['Sınav kodu', String(kod || '')], ['Rapor tarihi', new Date().toLocaleString('tr-TR')], []];
+  }
+
   function cizTelefonSinavlariPaneli() {
     const kutu = document.getElementById('telefon-sinavlari-kutu');
     const sec = document.getElementById('sec-telefon-sinavi');
@@ -4737,7 +4756,7 @@
     const onceki = sec.value;
     sec.innerHTML = kodlar.map((k) => {
       const n = Object.keys(tum[k].okumalar).length;
-      return `<option value="${C.kacisHTML(k)}">${C.kacisHTML(tum[k].ad || k)} · ${n} kağıt</option>`;
+      return `<option value="${C.kacisHTML(k)}">${C.kacisHTML(sinavAdKod(k, tum[k].ad).gorunen)} · ${n} kağıt</option>`;
     }).join('');
     if (onceki && kodlar.includes(onceki)) sec.value = onceki;
     const kod = sec.value;
@@ -4752,6 +4771,7 @@
     const yapiMetni = kova.yapi ? `${kova.yapi.dySayisi} D/Y + ${kova.yapi.testSayisi} Test${kova.yapi.klasikSayisi ? ` + ${kova.yapi.klasikSayisi} Klasik` : ''} · ` : '';
     kutu.innerHTML = `
       <div style="font-size:0.8rem; color:var(--metin-ikincil); margin:0.35rem 0 0.5rem;">Sınav kodu <strong class="mono">${C.kacisHTML(kod)}</strong> · ${yapiMetni}${satirlar.length} kağıt · ortalama ${ort} · puanlar telefonda hesaplandı</div>
+      ${sinavAdKod(kod, kova.ad).farkliKod ? `<div style="font-size:0.78rem; color:#92400e; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; padding:4px 8px; margin-bottom:0.5rem;">⚠️ Kağıttaki sınav kodu <strong>${C.kacisHTML(String(kod).split('-')[0])}</strong>, telefondaki ders kodu <strong>${C.kacisHTML(sinavAdKod(kod, kova.ad).farkliKod)}</strong>. Aynı ders ise sorun yok; derse kaydederken doğru dersi seçtiğinizden emin olun.</div>` : ''}
       <div class="tablo-sarmal" style="max-height:320px; overflow:auto;">
         <table class="veri-tablo" id="tablo-telefon-sinavi">
           <thead><tr><th>Öğr. No</th><th>Ad Soyad</th><th>Kodlanan</th><th>Kitapçık</th><th>D/Y</th><th>Test</th><th>Puan</th></tr></thead>
@@ -4768,12 +4788,13 @@
     const kod = sec.value;
     const ogrAdi = (no) => { const o = (durum.ogrenciKayitlari || []).find((x) => String(x.ogrNo) === String(no)); return o ? o.adSoyad : ''; };
     const temiz = (v) => C.temizleCsvFormulEnjeksiyon ? C.temizleCsvFormulEnjeksiyon(String(v)) : String(v);
-    const satirlar = [['Öğrenci No', 'Ad Soyad', 'Kodlanan', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Puan']]
+    const kova = telefonSinavlariniYukle()[kod] || {};
+    const satirlar = csvBasliklari(kod, kova.ad).concat([['Öğrenci No', 'Ad Soyad', 'Kodlanan', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Puan']])
       .concat(telefonSinavOkumalari(kod).map((s) => [s.ogrNo, ogrAdi(s.ogrNo) || s.adSoyad, s.okunanNoKod, s.grup, s.dyDogru, s.dyYanlis, s.testDogru, s.testYanlis, s.toplamPuan]));
     const csv = '﻿' + satirlar.map((r) => r.map((h) => `"${temiz(h).replace(/"/g, '""')}"`).join(';')).join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `telefon-${kod}.csv`;
+    a.download = `${sinavAdKod(kod, kova.ad).dosyaAdi}.csv`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
@@ -5001,7 +5022,7 @@
     const ort = puanlar.length ? (puanlar.reduce((a, b) => a + b, 0) / puanlar.length).toFixed(1) : '—';
     kutu.dataset.anahtar = anahtar;
     kutu.innerHTML = `
-      <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;"><span>${C.kacisHTML(s.ad)}</span>
+      <div class="kart-baslik" style="flex-wrap:wrap; gap:0.4rem;"><span>${C.kacisHTML(s.sinavKodu ? sinavAdKod(s.sinavKodu, s.ad).gorunen : s.ad)}</span>
         <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
           <button type="button" class="btn btn-basari btn-kucuk" data-arsiv-csv="1">Excel (.csv)</button>
           ${ciftler.length ? '<button type="button" class="btn btn-tehlike btn-kucuk" data-kopya-tutanak="1">Kopya şüphe tutanağı (yazdır / PDF)</button>' : ''}
@@ -5026,7 +5047,7 @@
       ${girmeyenler.map((y) => `<tr style="background:rgba(107,114,128,0.10);"><td class="mono">${C.kacisHTML(y.ogrNo)}</td><td>${C.kacisHTML(ogrAdiBul(y.ogrNo))}</td><td>—</td><td>—</td><td>—</td><td>—</td><td><strong>GR</strong></td></tr>`).join('')}
       </tbody></table></div>`;
     const csvBtn = kutu.querySelector('[data-arsiv-csv]');
-    if (csvBtn) csvBtn.addEventListener('click', () => indirCsvDosyasi(`arsiv-${s.sinavKodu || 'sinav'}.csv`, [['Öğrenci No', 'Ad Soyad', 'Kodlanan', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Puan']].concat(okumalar.map((o) => [o.ogrNo, ogrAdiBul(o.ogrNo, o.adSoyad), o.okunanNoKod || '', o.grup || '', o.dyDogru, o.dyYanlis, o.testDogru, o.testYanlis, o.toplamPuan])).concat(girmeyenler.map((y) => [y.ogrNo, ogrAdiBul(y.ogrNo), '', '', '', '', '', '', 'GR']))));
+    if (csvBtn) csvBtn.addEventListener('click', () => indirCsvDosyasi(`${sinavAdKod(s.sinavKodu || 'sinav', s.ad).dosyaAdi}.csv`, csvBasliklari(s.sinavKodu, s.ad).concat([['Öğrenci No', 'Ad Soyad', 'Kodlanan', 'Kitapçık', 'D/Y Doğru', 'D/Y Yanlış', 'Test Doğru', 'Test Yanlış', 'Puan']].concat(okumalar.map((o) => [o.ogrNo, ogrAdiBul(o.ogrNo, o.adSoyad), o.okunanNoKod || '', o.grup || '', o.dyDogru, o.dyYanlis, o.testDogru, o.testYanlis, o.toplamPuan])).concat(girmeyenler.map((y) => [y.ogrNo, ogrAdiBul(y.ogrNo), '', '', '', '', '', '', 'GR'])))));
     const tutBtn = kutu.querySelector('[data-kopya-tutanak]');
     if (tutBtn) tutBtn.addEventListener('click', () => yazdirKopyaTutanagi(s, okumalar, ciftler));
   }
