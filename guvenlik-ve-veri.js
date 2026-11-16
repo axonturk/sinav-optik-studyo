@@ -7466,12 +7466,22 @@
         anahtarEksikSayisi: sayAnahtarEksikSorular(s.tumSeciliSorular || yapiKaynak.tumSeciliSorular),
         sinavKimlikKodu: uretSinavKimlikKodu(String(yapiKaynak.sinavGizliAnahtar || s.sinavGizliAnahtar || '').trim()),
         kayitAdi: String(s.ad || s.sinavAdi || '').slice(0, 96),
-        guncellemeMs: Number(s.guncellemeMs || s.olusturmaMs || s.zamanMs) || 0
+        guncellemeMs: kayitliSinavZamani(s)
       };
     };
 
+    // Kayıt zamanı: açık alan yoksa "KS-<zaman36><2 harf>" kimliğinden çıkarılır (sıralama ve telefonda en yeni seçimi için)
+    function kayitliSinavZamani(s) {
+      const acik = Number(s && (s.guncellemeMs || s.olusturmaMs || s.zamanMs)) || 0;
+      if (acik) return acik;
+      const m = /^KS-([0-9A-Z]+)$/i.exec(String((s && s.id) || ''));
+      const t = m && m[1].length > 2 ? parseInt(m[1].slice(0, -2), 36) : 0;
+      return Number.isFinite(t) && t > 1e12 && t < 1e13 ? t : 0;
+    }
+    // Telefon yalnız AKTİF dönemin derslerini görür (arşiv dönemi dersleri pakete girmez)
+    const aktifDonemId = String(v.aktifDonemId || '').trim();
     const dersler = hamDersler.length > 0
-      ? hamDersler.filter((d) => d && typeof d === 'object' && d.id).map((d) => ({
+      ? hamDersler.filter((d) => d && typeof d === 'object' && d.id && (!aktifDonemId || !d.donemId || d.donemId === aktifDonemId)).map((d) => ({
           id: String(d.id).trim(),
           kod: String(d.kod || 'DERS').trim().slice(0, 32),
           ad: String(d.ad || 'Ders').trim().slice(0, 96),
@@ -7504,9 +7514,13 @@
         (ks) => ks && typeof ks === 'object' && (ks.dersId === ders.id || (!ks.dersId && ders.id === 'genel'))
       );
       const birlesikKayitli = kayitliKaynaklar.length > 0 ? kayitliKaynaklar : ders.ozelKayitliSinavlar;
+      // En yeni 30 sınav (eskiden dizinin SONUNDAKİ 10 alınıyordu; kayıtlar en yeni başta tutulduğu için yeni sınavlar telefona gitmiyordu)
       const kayitliSinavlar = birlesikKayitli
-        .slice(-10)
-        .map((ks, idx) => normalizeSinav(ks, ders, idx));
+        .map((ks, idx) => ({ ks, idx, t: kayitliSinavZamani(ks) }))
+        .sort((a, b) => (b.t - a.t) || (a.idx - b.idx))
+        .slice(0, 30)
+        .reverse()
+        .map((x, idx) => normalizeSinav(x.ks, ders, idx));
 
       const taslak = hamTaslaklar[ders.id] || ders.ozelSinavYapisi;
       const aktifKaynak = kayitliSinavlar.length > 0

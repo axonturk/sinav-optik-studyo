@@ -1207,7 +1207,8 @@
             delete mobilDurum.dersPaketleriHaritasi.varsayilan;
           }
         }
-        const kayitlar = Object.values(mobilDurum.dersPaketleriHaritasi || {});
+        // Arşiv dönemi (bulutta artık aktif olmayan) dersler listelenmez; açık ders her zaman görünür
+        const kayitlar = Object.values(mobilDurum.dersPaketleriHaritasi || {}).filter((d) => d && (!d.pasif || d.id === mobilDurum.dersId));
         if (kayitlar.length === 0) {
           sel.innerHTML = `<option value="varsayilan">Genel Sınav (${mobilDurum.ogrenciler.length} Öğr.)</option>`;
           sel.value = 'varsayilan';
@@ -1448,6 +1449,14 @@
               mobilDurum.ogrenciler = d.ogrenciler.slice();
             }
           });
+          if (veri.dersler.length > 0) {
+            const gelenIdler = new Set(veri.dersler.map((d) => temizDersAnahtari(d.id || d.dersId || d.sinavKodu)));
+            Object.keys(mobilDurum.dersPaketleriHaritasi || {}).forEach((pid) => {
+              const pk = mobilDurum.dersPaketleriHaritasi[pid];
+              if (!pk || pid === 'varsayilan') return;
+              if (gelenIdler.has(pid)) delete pk.pasif; else pk.pasif = true;
+            });
+          }
           if (ilkDersId) {
             const telefonTamamenBos =
               !hashOzelYukVar &&
@@ -1614,8 +1623,15 @@
         return liste;
       }
       function bulKimlikliSinav(kod) {
-        const adaylar = tumMobilSinavlar().filter((x) => x.kimlik === Number(kod));
-        if (!adaylar.length) return null;
+        const tumAdaylar = tumMobilSinavlar().filter((x) => x.kimlik === Number(kod));
+        if (!tumAdaylar.length) return null;
+        const acikDersteki = tumAdaylar.filter((x) => x.dersId === mobilDurum.dersId);
+        const adaylar = acikDersteki.length ? acikDersteki : tumAdaylar;
+        // Aynı sınavın sürümleri gizli anahtarı paylaşır; FARKLI sınavlar aynı kodu taşıyorsa kağıt yanlış anahtarla
+        // puanlanmasın diye hiçbirine kendiliğinden atanmaz (öğretmen "Sınavı değiştir"den seçer)
+        if (new Set(adaylar.map((x) => String(x.sinav.sinavGizliAnahtar || x.sinav.id))).size > 1) {
+          return { belirsiz: true, adaylar };
+        }
         const seciliOlan = adaylar.find((x) => x.paket && x.paket.sinavYapisi && x.paket.sinavYapisi.aktifSinavId === x.sinav.id);
         const secim = seciliOlan || adaylar.sort((a, b) => (Number(b.sinav.guncellemeMs) || 0) - (Number(a.sinav.guncellemeMs) || 0))[0];
         // Aynı sınavın birden çok sürümü aynı kodu taşır (gizli anahtar ortak); anahtarları farklıysa öğretmen uyarılır
@@ -1658,6 +1674,13 @@
         if (yeniAnahtar !== eskiAnahtar) {
           mobilDurum.okumaSonuclari = depodanSinavSonuclari(yeniAnahtar, '');
         }
+        if (Array.isArray(mobilDurum.okumaSonuclari) && mobilDurum.okumaSonuclari.length > 0) {
+          const oncekiPuanlar = mobilDurum.okumaSonuclari.map((o) => o && o.toplamPuan).join('|');
+          uygulaMobil100PuanNormalizasyon(null, true);
+          if (mobilDurum.okumaSonuclari.map((o) => o && o.toplamPuan).join('|') !== oncekiPuanlar) {
+            secenek.anahtarYenidenPuanlandi = mobilDurum.okumaSonuclari.length;
+          }
+        }
         const dyEl = document.getElementById('m-ayar-dy');
         const testEl = document.getElementById('m-ayar-test');
         const klEl = document.getElementById('m-ayar-klasik');
@@ -1677,6 +1700,7 @@
         guncelleMobilDersSeciciUI();
         guncelleMobilHesapKarti();
         if (!secenek.sessiz) mobilUyariGoster(`📝 Seçili sınav: ${paket.ad || ''} · ${sinav.kayitAdi || sinav.sinavAdi || sinav.sinavKodu}`, 'basari');
+        if (secenek.anahtarYenidenPuanlandi) mobilUyariGoster(`🔄 Bu sınavın cevap anahtarı bilgisayarda güncellenmiş; okunmuş ${secenek.anahtarYenidenPuanlandi} kağıt yeni anahtarla yeniden puanlandı.`, 'uyari');
         return true;
       }
       function sinavHazirMi(s) {
@@ -1725,6 +1749,40 @@
         m.hidden = true;
         m.style.display = 'none';
       }
+      /* Kağıdın sınavı telefonda yoksa öğretmene "Senkronize Et" dedirtmek yerine telefon kendisi eşitler (15 sn'de bir en fazla) */
+      let kagitSenkronSonMs = 0;
+      let kagitSenkronSuruyor = false;
+      function bilinmeyenKagitIcinSenkronla(kod, yenidenDene) {
+        if (kagitSenkronSuruyor || Date.now() - kagitSenkronSonMs < 15000) return false;
+        if (!mobilDurum.omrYetkiToken || (typeof navigator !== 'undefined' && navigator.onLine === false)) return false;
+        kagitSenkronSuruyor = true;
+        kagitSenkronSonMs = Date.now();
+        const etiket = C.sinavKimlikEtiketi(kod);
+        mobilUyariGoster(`🔄 Bu kağıdın sınavı (kod ${etiket}) telefonda yok; bilgisayardan alınıyor…`, 'uyari');
+        Promise.resolve(senkronizeEtBulutMobilDersler({ sessiz: true }))
+          .catch(() => false)
+          .then((tamam) => {
+            const hedef = tamam ? bulKimlikliSinav(kod) : null;
+            if (hedef && !hedef.belirsiz) {
+              const ad = `${hedef.paket.ad || ''} · ${hedef.sinav.kayitAdi || hedef.sinav.sinavAdi || ''}`;
+              if (typeof yenidenDene === 'function') {
+                // Fotoğraftan okunan kağıt yeniden okunur; sonucu ekranda kalsın diye bildirim önce verilir
+                mobilUyariGoster(`✅ "${ad}" bilgisayardan alındı; kağıt bu sınavla okunuyor.`, 'basari');
+                setTimeout(() => { try { yenidenDene(); } catch (_) {} }, 0);
+              } else {
+                mobilUyariGoster(`✅ "${ad}" bilgisayardan alındı. Kağıdı yeniden okutun.`, 'basari');
+              }
+            } else if (hedef && hedef.belirsiz) {
+              mobilUyariGoster(`⚠️ Bu kodu (${etiket}) taşıyan ${hedef.adaylar.length} farklı sınav var. "Sınavı değiştir"den doğru sınavı seçin; kağıt kaydedilmedi.`);
+            } else {
+              mobilUyariGoster(tamam
+                ? `⚠️ Bu kağıdın sınavı (kod ${etiket}) bilgisayarda da yok. Bilgisayarda sınavın kayıtlı olduğunu kontrol edin; kağıt kaydedilmedi.`
+                : `⚠️ Bilgisayara ulaşılamadı. İnternet gelince kağıdı yeniden okutun; kağıt kaydedilmedi.`);
+            }
+          })
+          .finally(() => { kagitSenkronSuruyor = false; });
+        return true;
+      }
       /* Okuma kilitliyken (henüz sınav seçilmemiş / anahtar eksik) kağıttaki sınav kodu telefondaki bir sınava uyuyorsa ona geç */
       let sonKagitKesfi = null;
       function kagittanSinavaGec(imgData) {
@@ -1733,7 +1791,11 @@
           sonKagitKesfi = kesif;
           if (!kesif || !kesif.formBulundu || !kesif.sinavKimlikKodu) return false;
           const hedef = bulKimlikliSinav(kesif.sinavKimlikKodu);
-          if (!hedef) return false;
+          if (!hedef) { bilinmeyenKagitIcinSenkronla(kesif.sinavKimlikKodu); return false; }
+          if (hedef.belirsiz) {
+            mobilUyariGoster(`⚠️ Bu kodu (${C.sinavKimlikEtiketi(kesif.sinavKimlikKodu)}) taşıyan ${hedef.adaylar.length} farklı sınav var. "Sınavı değiştir"den doğru sınavı seçin.`);
+            return false;
+          }
           if (hedef.dersId === mobilDurum.dersId && mobilDurum.sinavYapisi.aktifSinavId === hedef.sinav.id) return false;
           mobilSinavSec(hedef.dersId, hedef.sinav.id, { sessiz: true });
           mobilUyariGoster(`📝 Kağıt "${hedef.paket.ad || ''} · ${hedef.sinav.kayitAdi || hedef.sinav.sinavAdi || ''}" sınavına ait; o sınav seçildi.${hedef.surumUyarisi ? ` Bu kodu taşıyan ${hedef.surumUyarisi} sürüm var (en yenisi seçildi); kağıt eski sürümse "Sınavı değiştir"den seçin.` : ''}`, hedef.surumUyarisi ? 'uyari' : 'basari');
@@ -3645,6 +3707,9 @@
         const bekleyenSayi = okuMobilV2OutboxSenkron().length;
         const cevrimdisi = typeof navigator !== 'undefined' && navigator.onLine === false;
         if (senkronOnaylandi && toplam > 0 && bekleyenSayi === 0) {
+          if (sonSenkronOnayliSayi !== toplam && typeof mobilUyariGoster === 'function') {
+            mobilUyariGoster(`✅ ${toplam} kağıt bilgisayara ulaştı (sunucu onayladı).`, 'basari');
+          }
           sonSenkronOnayliSayi = toplam;
           mobilV2EsitlendiMi = true;
         } else if (bekleyenSayi > 0 || toplam !== sonSenkronOnayliSayi) {
@@ -4280,6 +4345,14 @@
           const aktifKimlik = sinavKimligi(mobilDurum.sinavYapisi);
           if (aktifKimlik !== sonuc.sinavKimlikKodu) {
             const hedef = bulKimlikliSinav(sonuc.sinavKimlikKodu);
+            if (hedef && hedef.belirsiz) {
+              if (!seri) {
+                mobilUyariGoster(`⚠️ Bu kodu (${C.sinavKimlikEtiketi(sonuc.sinavKimlikKodu)}) taşıyan ${hedef.adaylar.length} farklı sınav var. "Sınavı değiştir"den doğru sınavı seçin; kağıt kaydedilmedi.`);
+                bipCal(false);
+              }
+              if (vizorDisKutu) vizorDisKutu.classList.remove('vizor-kilitlendi');
+              return null;
+            }
             if (hedef && !mobilGoruntuyuOku.__kimlikGecisi) {
               mobilSinavSec(hedef.dersId, hedef.sinav.id, { sessiz: true });
               mobilUyariGoster(`📝 Kağıt "${hedef.paket.ad || ''} · ${hedef.sinav.kayitAdi || hedef.sinav.sinavAdi || ''}" sınavına ait; o sınav seçildi.${hedef.surumUyarisi ? ` Bu kodu taşıyan ${hedef.surumUyarisi} sürüm var (en yenisi seçildi); kağıt eski sürümse "Sınavı değiştir"den seçin.` : ''}`, hedef.surumUyarisi ? 'uyari' : 'basari');
@@ -4287,10 +4360,13 @@
               try { return mobilGoruntuyuOku(kaynak, kaynakGen, kaynakYuk, seri); } finally { mobilGoruntuyuOku.__kimlikGecisi = false; }
             }
             if (!hedef) {
-              if (!seri) {
+              const resimMi = typeof HTMLImageElement !== 'undefined' && kaynak instanceof HTMLImageElement;
+              const senkronBasladi = bilinmeyenKagitIcinSenkronla(sonuc.sinavKimlikKodu,
+                resimMi ? () => mobilGoruntuyuOku(kaynak, kaynakGen, kaynakYuk, false) : null);
+              if (!seri && !senkronBasladi) {
                 mobilUyariGoster(`⚠️ Bu kağıt telefonda olmayan bir sınava ait (sınav kodu ${C.sinavKimlikEtiketi(sonuc.sinavKimlikKodu)}). Bilgisayarda sınavı kaydedip burada "Senkronize Et"e basın; kağıt kaydedilmedi.`);
-                bipCal(false);
               }
+              if (!seri) bipCal(false);
               if (vizorDisKutu) vizorDisKutu.classList.remove('vizor-kilitlendi');
               return null;
             }
@@ -5998,6 +6074,12 @@
           };
         }
 
+        // Gönderilmemiş kağıt varken sayfa kapatılırsa tarayıcı uyarır (kağıtlar telefonda güvende; yine de bilerek çıkılsın)
+        window.addEventListener('beforeunload', (e) => {
+          try {
+            if (okuMobilV2OutboxSenkron().length > 0) { e.preventDefault(); e.returnValue = ''; }
+          } catch (_) {}
+        });
         window.addEventListener('online', () => {
           guncelleMobilSenkronRozetUI(false);
           if (alAktifMobilHocaToken() && location.protocol.startsWith('http')) {

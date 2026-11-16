@@ -61,6 +61,21 @@ const KASA = {
   const cozEski = C.cozOptikGeometriMatrisi(C.kodlaOptikGeometriMatrisi({ dySayisi: 5, testSayisi: 5 }));
   kontrol('Sınav kimlik kodu matrise yazılıp geri okunur; eski (kodsuz) matris 0 verir', cozV.sinavKimlikKodu === kV && cozEski.sinavKimlikKodu === 0 && kV !== kF, `${kV}/${kF}/${cozEski.sinavKimlikKodu}`);
 
+  // Paket: kayıtlar en yeni başta tutulur (unshift); 12 sınavlı derste en yenisi pakette ve "aktif" olmalı
+  {
+    const t0 = 1763000000000;
+    const ks = [];
+    for (let i = 0; i < 12; i++) {
+      ks.unshift({ id: `KS-${(t0 + i * 60000).toString(36).toUpperCase()}AB`, dersId: 'D1', sinavKodu: `K-${i}`, ad: `Sınav ${i}`, sinavYapisi: yapi(`${String(i).padStart(2, '0')}`.repeat(16), ['A', 'A', 'A', 'A', 'A']) });
+    }
+    const pk = C.uretMobilDersPaketleriOzeti({ dersler: [{ id: 'D1', kod: 'X1', ad: 'Ders' }], kayitliSinavlar: ks })[0];
+    const adlar = pk.kayitliSinavlar.map((x) => x.kayitAdi);
+    kontrol('Pakete dersin EN YENİ sınavları girer (12 sınavın hepsi; eskiden en eski 10 gidiyordu)', pk.kayitliSinavlar.length === 12 && adlar.includes('Sınav 11') && adlar.includes('Sınav 0'), adlar.join(','));
+    kontrol('Paketin aktif sınavı en yeni sınavdır; zaman kimlikten çıkarılır', pk.aktifSinavYapisi.kayitAdi === 'Sınav 11' && pk.kayitliSinavlar[11].guncellemeMs === t0 + 11 * 60000, pk.aktifSinavYapisi.kayitAdi);
+    const donemli = C.uretMobilDersPaketleriOzeti({ aktifDonemId: 'D-26', dersler: [{ id: 'A1', kod: 'Y', ad: 'Yeni', donemId: 'D-26' }, { id: 'E1', kod: 'E', ad: 'Eski', donemId: 'D-25' }, { id: 'S1', kod: 'S', ad: 'Dönemsiz' }] });
+    kontrol('Telefon paketine yalnız aktif dönemin (ve dönemsiz) dersleri girer', donemli.map((x) => x.id).join(',') === 'A1,S1', donemli.map((x) => x.id).join(','));
+  }
+
   const server = await baslatSunucu(0);
   const taban = `http://127.0.0.1:${server.address().port}`;
   const tarayici = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] });
@@ -115,6 +130,16 @@ const KASA = {
     const es = await api('/api/telefon-eslestir/olustur', {}, token);
     await tel.goto(`${taban}/optik-mobil#eslestir=${es.v.kod}`, { waitUntil: 'networkidle0' });
     await bekleKosul(() => tel.$eval('#mobil-hesap-durum', (e) => /güncel/.test(e.textContent)), 10000);
+    // Uyarı geçmişi gözlemcisi (sayfa yeniden yüklenince yeniden kurulur)
+    const uyariSifirla = () => tel.evaluate(() => {
+      window.__uyariGecmisi = [];
+      if (window.__uyariGozlemci) return;
+      const el = document.getElementById('m-uyari');
+      window.__uyariGozlemci = new MutationObserver(() => window.__uyariGecmisi.push(el.textContent));
+      window.__uyariGozlemci.observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    await uyariSifirla();
+    const uyarilar = () => tel.evaluate(() => (window.__uyariGecmisi || []).join(' ¦ '));
 
     let d = await durumOku();
     kontrol('Bağlanınca dersin iki sınavı telefona indi', d.sinavSayisi === 2, JSON.stringify(d));
@@ -148,11 +173,34 @@ const KASA = {
     d = await durumOku();
     kontrol('Vize\'ye dönülünce Vize sonuçları duruyor (sınavlar karışmadı)', d.okumalar.length === 1 && d.okumalar[0].no === '247419053', JSON.stringify(d.okumalar));
 
-    // Telefonda olmayan sınavın kağıdı kaydedilmez
-    await kagitOkut(GIZLI_YABANCI, ['A', 'A', 'A', 'A', 'A'], '205');
+    // Bilgisayarda SONRADAN kaydedilen sınavın (Bütünleme) kağıdı: telefon kendisi senkronlar ve kağıdı okur
+    const GIZLI_BUT = '5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A';
+    const KASA_BUT = JSON.parse(JSON.stringify(KASA));
+    KASA_BUT.kayitliSinavlar.push({ id: 'S-BUT', dersId: 'DERS-AG', sinavKodu: 'BIL101-5-5-0', ad: 'BIL101 Bütünleme · 20.11.2026', guncellemeMs: 3000, sinavYapisi: yapi(GIZLI_BUT, ['C', 'C', 'C', 'C', 'C']) });
+    const mv2 = await api('/api/bulut-kasa', undefined, token);
+    const putBut = await api('/api/bulut-kasa', { veri: KASA_BUT, bazRevizyonNo: Number(mv2.v.revizyonNo) || undefined, silmeOnayi: true, zorlaEz: true }, token, 'PUT');
+    await uyariSifirla();
+    await kagitOkut(GIZLI_BUT, ['C', 'C', 'C', 'C', 'C'], '205');
+    const butGeldi = await bekleKosul(async () => {
+      await tel.evaluate(() => { const b = document.getElementById('btn-mobil-dogrulama-tamam'); const k = document.getElementById('mobil-dogrulama'); if (k && !k.hidden && b) b.click(); });
+      const x = await durumOku();
+      return x.aktifSinavId === 'S-BUT' && x.okumalar.length === 1;
+    }, 10000);
     d = await durumOku();
-    const yabanciUyari = await tel.$eval('#m-uyari', (e) => e.textContent);
-    kontrol('Telefonda olmayan sınavın kağıdı kaydedilmez, "Senkronize Et" denir', d.aktifSinavId === 'S-VIZE' && d.okumalar.length === 1 && /telefonda olmayan bir sınava ait/.test(yabanciUyari), `${JSON.stringify(d)} · ${yabanciUyari}`);
+    const butUyari = await uyarilar();
+    kontrol('Telefonda olmayan sınavın kağıdı: telefon kendisi senkronladı ("bilgisayardan alınıyor")', putBut.s === 200 && /telefonda yok; bilgisayardan alınıyor/.test(butUyari) && /bilgisayardan alındı/.test(butUyari), butUyari);
+    kontrol('Senkron sonrası kağıt Bütünleme anahtarıyla okundu (100 puan), QR gerekmedi', butGeldi && Number(d.okumalar[0] && d.okumalar[0].puan) === 100 && d.okumalar[0].no === '257419205', JSON.stringify(d));
+    await tel.click('#btn-mobil-ders-degistir');
+    await tel.click('#mobil-sinav-secici-liste [data-sinav-id="S-VIZE"]');
+    await bekle(400);
+
+    // Bilgisayarda da olmayan sınavın kağıdı kaydedilmez
+    await uyariSifirla();
+    await kagitOkut(GIZLI_YABANCI, ['A', 'A', 'A', 'A', 'A'], '205');
+    await bekle(1500);
+    d = await durumOku();
+    const yabanciUyari = await uyarilar();
+    kontrol('Hiçbir yerde olmayan sınavın kağıdı kaydedilmez ve öğretmen uyarılır', d.aktifSinavId === 'S-VIZE' && d.okumalar.length === 1 && /bilgisayarda da yok|telefonda olmayan bir sınava ait/.test(yabanciUyari), `${JSON.stringify(d)} · ${yabanciUyari}`);
 
     // Eski (kodsuz) kağıt açık sınavla okunur
     await kagitOkut('', ['A', 'B', 'C', 'D', 'E'], '205', true);
@@ -163,7 +211,7 @@ const KASA = {
     await tel.goto(`${taban}/optik-mobil.html`, { waitUntil: 'networkidle0' });
     await bekle(1500);
     d = await durumOku();
-    kontrol('Telefon kapatılıp açılınca seçili sınav, sınav listesi ve sonuçlar korunur', d.aktifSinavId === 'S-VIZE' && d.sinavSayisi === 2 && d.okumalar.length === 2, JSON.stringify(d));
+    kontrol('Telefon kapatılıp açılınca seçili sınav, sınav listesi ve sonuçlar korunur', d.aktifSinavId === 'S-VIZE' && d.sinavSayisi === 3 && d.okumalar.length === 2, JSON.stringify(d));
 
     // Senkronize Et öğretmenin seçimini ezmez
     await tel.click('#btn-mobil-senkronize');
@@ -180,6 +228,56 @@ const KASA = {
     await kagitOkut(GIZLI_FINAL, ['E', 'E', 'E', 'E', 'E'], '053');
     d = await durumOku();
     kontrol('Final kağıdı tekrar okununca Final\'e geçilir ve ikinci Final kağıdı eklenir', d.aktifSinavId === 'S-FINAL' && d.okumalar.length === 2, JSON.stringify(d));
+
+    // Aynı kağıt kodunu taşıyan iki FARKLI sınav (eski verilerde olabilir): telefon tahmin etmez, öğretmene seçtirir
+    const crypto = require('crypto');
+    const kodHarita = new Map();
+    let cak = null;
+    while (!cak) {
+      const g = crypto.randomBytes(16).toString('hex').toUpperCase();
+      const k = C.uretSinavKimlikKodu(g);
+      if (kodHarita.has(k) && kodHarita.get(k) !== g) cak = [kodHarita.get(k), g];
+      kodHarita.set(k, g);
+    }
+    const KASA_CAK = JSON.parse(JSON.stringify(KASA_BUT));
+    KASA_CAK.kayitliSinavlar.push(
+      { id: 'S-CAK1', dersId: 'DERS-AG', sinavKodu: 'BIL101-5-5-0', ad: 'BIL101 Quiz 1', guncellemeMs: 4000, sinavYapisi: yapi(cak[0], ['B', 'B', 'B', 'B', 'B']) },
+      { id: 'S-CAK2', dersId: 'DERS-AG', sinavKodu: 'BIL101-5-5-0', ad: 'BIL101 Quiz 2', guncellemeMs: 5000, sinavYapisi: yapi(cak[1], ['D', 'D', 'D', 'D', 'D']) }
+    );
+    const mv3 = await api('/api/bulut-kasa', undefined, token);
+    await api('/api/bulut-kasa', { veri: KASA_CAK, bazRevizyonNo: Number(mv3.v.revizyonNo) || undefined, silmeOnayi: true, zorlaEz: true }, token, 'PUT');
+    await tel.click('#btn-mobil-senkronize');
+    await bekleKosul(async () => (await durumOku()).sinavSayisi === 5, 8000);
+    const onceCak = await durumOku();
+    await uyariSifirla();
+    await kagitOkut(cak[0], ['B', 'B', 'B', 'B', 'B'], '053');
+    await bekle(800);
+    const sonraCak = await durumOku();
+    const cakUyari = await uyarilar();
+    kontrol('Aynı kodlu iki farklı sınav varken kağıt hiçbirine atanmaz, kaydedilmez, öğretmen uyarılır',
+      onceCak.sinavSayisi === 5 && sonraCak.aktifSinavId === onceCak.aktifSinavId && sonraCak.okumalar.length === onceCak.okumalar.length && /farklı sınav var/.test(cakUyari),
+      `${JSON.stringify(onceCak)} → ${JSON.stringify(sonraCak)} · ${cakUyari}`);
+
+    // Ö2: aktif dönem dışındaki ders telefonda listelenmez (verisi silinmez)
+    const KASA_DONEM = JSON.parse(JSON.stringify(KASA));
+    KASA_DONEM.dersler.push({ id: 'DERS-ESKI', kod: 'ESK100', ad: 'Eski Ders', donemId: 'D-2025' });
+    KASA_DONEM.dersler[0].donemId = 'D-2026';
+    KASA_DONEM.donemler = [{ id: 'D-2026', ad: '2026-2027 Güz' }, { id: 'D-2025', ad: '2025-2026 Bahar', arsivlendi: true }];
+    const mv4 = await api('/api/bulut-kasa', undefined, token);
+    await api('/api/bulut-kasa', { veri: KASA_DONEM, bazRevizyonNo: Number(mv4.v.revizyonNo) || undefined, silmeOnayi: true, zorlaEz: true }, token, 'PUT');
+    await tel.click('#btn-mobil-senkronize');
+    await bekleKosul(() => tel.$$eval('#mobil-aktif-ders-sec option', (os) => os.some((o) => o.value === 'DERS-ESKI')), 8000);
+    const onceSecenek = await tel.$$eval('#mobil-aktif-ders-sec option', (os) => os.map((o) => o.value));
+    KASA_DONEM.aktifDonemId = 'D-2026';
+    const mv5 = await api('/api/bulut-kasa', undefined, token);
+    await api('/api/bulut-kasa', { veri: KASA_DONEM, bazRevizyonNo: Number(mv5.v.revizyonNo) || undefined, silmeOnayi: true, zorlaEz: true }, token, 'PUT');
+    await tel.click('#btn-mobil-senkronize');
+    await bekleKosul(() => tel.$$eval('#mobil-aktif-ders-sec option', (os) => !os.some((o) => o.value === 'DERS-ESKI')), 8000);
+    const sonraSecenek = await tel.$$eval('#mobil-aktif-ders-sec option', (os) => os.map((o) => o.value));
+    const eskiPaketDuruyor = await tel.evaluate(() => Boolean(window.__mobilDurumOku().dersPaketleriHaritasi['DERS-ESKI']));
+    kontrol('Arşiv dönemine geçen ders telefonda listelenmez; verisi telefonda silinmeden durur',
+      onceSecenek.includes('DERS-ESKI') && !sonraSecenek.includes('DERS-ESKI') && sonraSecenek.includes('DERS-AG') && eskiPaketDuruyor,
+      `${onceSecenek.join(',')} → ${sonraSecenek.join(',')} · paket:${eskiPaketDuruyor}`);
 
     kontrol('Sayfada JavaScript hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {

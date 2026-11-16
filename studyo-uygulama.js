@@ -468,7 +468,7 @@
       haftaKotalari: Object.assign({}, durum.haftaKotalari || {}),
       ozelSeciliSoruIdleri: JSON.parse(JSON.stringify(durum.ozelSeciliSoruIdleri || { dy: [], test: [], klasik: [] })),
       sabitlenenSoruIdleri: (durum.sabitlenenSoruIdleri || []).slice(),
-      sinavGizliAnahtar: mevcut.sinavGizliAnahtar || (typeof C.uretSinavGizliAnahtari === 'function' ? C.uretSinavGizliAnahtari() : '')
+      sinavGizliAnahtar: mevcut.sinavGizliAnahtar || (typeof C.uretSinavGizliAnahtari === 'function' ? uretBenzersizSinavGizliAnahtari() : '')
     };
   }
 
@@ -1905,9 +1905,45 @@
       durum.dersTaslakSinavlari[hedefId] = {};
     }
     if (!durum.dersTaslakSinavlari[hedefId].sinavGizliAnahtar) {
-      durum.dersTaslakSinavlari[hedefId].sinavGizliAnahtar = C.uretSinavGizliAnahtari();
+      durum.dersTaslakSinavlari[hedefId].sinavGizliAnahtar = uretBenzersizSinavGizliAnahtari();
     }
     return durum.dersTaslakSinavlari[hedefId].sinavGizliAnahtar;
+  }
+
+  /* Kağıttaki sınav kimlik kodu (köşe deseni, 12 bit) gizli anahtardan türer. Telefon kağıdın hangi sınava ait olduğunu bu
+     koddan bulur; iki sınav aynı kodu taşırsa kağıt yanlış sınavın anahtarıyla puanlanabilir. Bu yüzden:
+     - yeni gizli anahtar, bu hesaptaki hiçbir sınavın koduyla çakışmayacak biçimde seçilir;
+     - taslaktan basılan sınav, kayıtlı BAŞKA bir sınavla (farklı tür/tarih ya da farklı anahtar) aynı kodu taşıyorsa
+       basımdan önce taslağa yeni (çakışmasız) anahtar verilir. Aynı sınavın sürümleri (aynı tür ve tarih) eskisi gibi kodu paylaşır. */
+  function kullanilanSinavKimlikKodlari() {
+    const set = new Set();
+    const ekle = (g) => { if (g) set.add(C.uretSinavKimlikKodu(g)); };
+    (durum.kayitliSinavlar || []).forEach((k) => { if (k) ekle(k.sinavGizliAnahtar); });
+    Object.values(durum.dersTaslakSinavlari || {}).forEach((t) => { if (t) ekle(t.sinavGizliAnahtar); });
+    return set;
+  }
+  function uretBenzersizSinavGizliAnahtari() {
+    const kullanilan = kullanilanSinavKimlikKodlari();
+    let g = C.uretSinavGizliAnahtari();
+    for (let i = 0; i < 500 && kullanilan.has(C.uretSinavKimlikKodu(g)); i += 1) g = C.uretSinavGizliAnahtari();
+    return g;
+  }
+  function taslakKimlikCakisiyorMu(yapi) {
+    if (!yapi || durum.aktifKayitliSinavId || !yapi.sinavGizliAnahtar) return false;
+    const kod = C.uretSinavKimlikKodu(yapi.sinavGizliAnahtar);
+    const imza = sinavIcerikImzasi(yapi);
+    const kimlik = okuSinavKimlikBilgisi(yapi);
+    return (durum.kayitliSinavlar || []).some((k) => k && k.sinavGizliAnahtar
+      && C.uretSinavKimlikKodu(k.sinavGizliAnahtar) === kod
+      && k.icerikImzasi !== imza
+      && (k.sinavGizliAnahtar !== yapi.sinavGizliAnahtar || k.sinavTuru !== kimlik.tur || k.sinavTarihi !== kimlik.tarih));
+  }
+  function taslakKimlikCakismasiniGider(yapi, yenidenOku) {
+    if (!taslakKimlikCakisiyorMu(yapi)) return yapi;
+    const dersId = (yapi.ders && yapi.ders.id) || durum.aktifDersId || 'genel';
+    if (!durum.dersTaslakSinavlari || typeof durum.dersTaslakSinavlari !== 'object') durum.dersTaslakSinavlari = {};
+    durum.dersTaslakSinavlari[dersId] = Object.assign({}, durum.dersTaslakSinavlari[dersId] || {}, { sinavGizliAnahtar: uretBenzersizSinavGizliAnahtari() });
+    return yenidenOku();
   }
 
   function uygulaBasildiKilidiUI(kilitliMi) {
@@ -2064,7 +2100,7 @@
       : `${onAktifDers.kod}-${yeniId.slice(-4)}-${onDy}-${onTest}-${onKlasik}`;
     const yeniSinavGizliAnahtar = taslakYapi && taslakYapi.sinavGizliAnahtar
       ? taslakYapi.sinavGizliAnahtar
-      : C.uretSinavGizliAnahtari();
+      : uretBenzersizSinavGizliAnahtari();
 
     // Nihai sinavKodu ve 128-bit CSPRNG gizli anahtar ile tek seferde üretip dondur
     // (taslak kimliği korunuyorsa hazır taslak yapısı aynı kod/anahtarla üretilmiştir: yeniden hesaplanmaz)
@@ -11153,8 +11189,10 @@
         if (modal) modal.style.display = 'flex';
         return;
       }
-      const yapi = okuAktifSinavYapisi();
       const sinavKagidiKapsamiMi = ['sinif-aktif', 'sinif-tum-gruplar', 'kagit-ABCD', 'ogrenci-tek', 'ogrenci-tum-sinif'].includes(kapsamSecimi);
+      const yapi = (sinavKagidiKapsamiMi || ['ayri-optik', 'anahtar'].includes(kapsamSecimi))
+        ? taslakKimlikCakismasiniGider(okuAktifSinavYapisi(), () => okuAktifSinavYapisi())
+        : okuAktifSinavYapisi();
 
       // 100 Puan Baskı Öncesi Kontrol Kapısı (90 puanlık sınav kağıdının yanlışlıkla basılmasını önler)
       if (sinavKagidiKapsamiMi && !yapi.tam100Mu) {
@@ -16296,7 +16334,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
     const btnSinavGunuPaketiIndir = document.getElementById('btn-sinav-gunu-paketi-indir');
     if (btnSinavGunuPaketiIndir) {
       btnSinavGunuPaketiIndir.addEventListener('click', () => {
-        const yapi = okuAktifSinavYapisi();
+        const yapi = taslakKimlikCakismasiniGider(okuAktifSinavYapisi(), () => okuAktifSinavYapisi());
         if (!yapi.tam100Mu) {
           guncelleUcusKontrolListesiUI();
           guncelleKayitDurumCubuguUI('hata', `Toplam puan ${yapi.toplamPuan}/100 — önce 100'e tamamlayın`);
@@ -16328,7 +16366,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         if (parcalar.length === 0) return;
 
         // Sınav günü paketi de bir çıktıdır: basılan sınav otomatik dondurulur (aynı içerik tekrar kaydedilmez)
-        const otomatikKayit = basimIcinOtomatikKaydet('sinav-gunu-paketi', 'pdf-indir');
+        const otomatikKayit = basimIcinOtomatikKaydet('sinav-gunu-paketi', 'pdf-indir', yapi);
         if ((document.getElementById('chk-paket-sonrasi-kilitle') || {}).checked) {
           if (!durum.aktifKayitliSinavId && otomatikKayit) {
             yukleKayitliSinavSnapshot(otomatikKayit.id);

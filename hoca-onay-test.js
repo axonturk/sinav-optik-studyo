@@ -330,7 +330,8 @@ function httpIstek(port, yontem, yol, govde = null, basliklar = {}) {
   );
 
   // 4. Yönetici (Admin) Şifresini Unuttuğunda E-Posta + Telefon ile Kurtarma Testi
-  await sayfa.click('#btn-hoca-kilitle');
+  // (Giriş başarılı olunca hoca penceresi kendiliğinden kapanır; kilitle düğmesi DOM üzerinden tetiklenir)
+  await sayfa.evaluate(() => document.getElementById('btn-hoca-kilitle').click());
 
   // Yanlış telefonla kurtarma denemesi -> reddedilmeli
   await sayfa.evaluate(() => {
