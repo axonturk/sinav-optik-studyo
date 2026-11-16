@@ -6543,10 +6543,7 @@
     if (dersHavuzSorulari.length === 0 && Array.isArray(yapi.tumSeciliSorular) && yapi.tumSeciliSorular.length > 0) {
       dersHavuzSorulari = yapi.tumSeciliSorular;
     }
-    if (onl.haftaKapsam === 'vize') {
-      const vizeSorular = dersHavuzSorulari.filter((s) => C.normalizeHaftaNo(s.hafta, 1) <= 7);
-      if (vizeSorular.length >= 2) dersHavuzSorulari = vizeSorular;
-    }
+    dersHavuzSorulari = onlineHaftaFiltresi(dersHavuzSorulari, onl.haftaKapsam);
 
     const dyAdet = onl.dySayisi !== undefined ? Number(onl.dySayisi) : yapi.dySayisi;
     const testAdet = onl.testSayisi !== undefined ? Number(onl.testSayisi) : yapi.testSayisi;
@@ -7829,6 +7826,17 @@
     }
   }
 
+  /* Online sınav hafta kapsamı: Stüdyodaki seçili haftalar / Vize (1–7) / Final (1–14) */
+  function onlineHaftaFiltresi(havuz, kapsam) {
+    let haftalar = null;
+    if (kapsam === 'vize') haftalar = [1, 2, 3, 4, 5, 6, 7];
+    else if (kapsam === 'studyo' && Array.isArray(durum.seciliHaftalar) && durum.seciliHaftalar.length) haftalar = durum.seciliHaftalar.map(Number);
+    if (!haftalar) return havuz;
+    const set = new Set(haftalar);
+    const suzulmus = havuz.filter((s) => s.tur === 'klasik' || set.has(C.normalizeHaftaNo(s.hafta, 1)));
+    return suzulmus.filter((s) => s.tur !== 'klasik').length >= 2 ? suzulmus : havuz;
+  }
+
   async function senkronizeEtOnlineSinavSunucu(sinavTanimi) {
     if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
     try {
@@ -7838,10 +7846,7 @@
       if (dersSorulari.length === 0 && yapi && Array.isArray(yapi.tumSeciliSorular) && yapi.tumSeciliSorular.length > 0) {
         dersSorulari = yapi.tumSeciliSorular;
       }
-      if (sinavTanimi.haftaKapsam === 'vize') {
-        const vizeSorular = dersSorulari.filter((s) => C.normalizeHaftaNo(s.hafta, 1) <= 7);
-        if (vizeSorular.length >= 2) dersSorulari = vizeSorular;
-      }
+      dersSorulari = onlineHaftaFiltresi(dersSorulari, sinavTanimi.haftaKapsam);
       const dyAdet = sinavTanimi.dySayisi !== undefined ? Number(sinavTanimi.dySayisi) : (yapi ? yapi.dySayisi : 10);
       const testAdet = sinavTanimi.testSayisi !== undefined ? Number(sinavTanimi.testSayisi) : (yapi ? yapi.testSayisi : 10);
       const klasikAdet = sinavTanimi.klasikSayisi !== undefined ? Number(sinavTanimi.klasikSayisi) : 0;
@@ -7850,7 +7855,8 @@
         gosterOnlineSoruYokUyarisi();
         return false;
       }
-      const havuzSorulari = dersSorulari;
+      const ortakSet = C.uretKisiyeOzelOnlineSinav(dersSorulari, dyAdet, testAdet, 'SABIT', sinavTanimi.sinavId || 'SINAV-2026-VIZE');
+      const havuzSorulari = [...ortakSet, ...dersSorulari.filter((s) => s.tur === 'klasik')];
       const seciliSorular = C.uretKisiyeOzelOnlineSinav(
         havuzSorulari,
         dyAdet,
