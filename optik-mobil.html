@@ -4259,6 +4259,13 @@
         // Kağıdın şeklini kağıt söyler: kare desen (ya da şifreli kağıt QR'ı) okunamadıysa şekil doğrulanamaz → puanlanmaz
         if (!standart && sonuc.geometriKaynagi === 'yok') {
           const neden = 'kağıdın üst ortasındaki küçük kare desen okunamadı; kağıdın şekli doğrulanamadığı için puanlanmadı. Optik kutuyu çerçeveye yaklaştırıp düz ve gölgesiz tekrar çekin.';
+          // Karede kurulum / liste karekodu varsa (öğretmen "Oku" ile karekod okuttu): kağıt hatası yerine karekod uygulanır
+          if (tespitSozu) {
+            tespitSozu.then((kodlar) => {
+              const qr = (kodlar || []).map((k) => String((k && k.rawValue) || '')).find((m) => /setup=|#ogr=|OGR-QR/.test(m));
+              if (qr) { kapatMobilDogrulama(); uygulaPwaQrMetni(qr, 'Kamera QR'); }
+            });
+          }
           if (!seri) {
             mobilUyariGoster('⚠️ ' + neden.charAt(0).toUpperCase() + neden.slice(1));
             bipCal(false);
