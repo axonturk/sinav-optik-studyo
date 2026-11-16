@@ -1237,10 +1237,13 @@
     if (typeof kuralMetni !== 'string' || !kuralMetni.trim()) return kurallar;
     const parcalar = kuralMetni.toUpperCase().split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
     for (const p of parcalar) {
-      const es = p.match(/^(TEST-\d+|DY-\d+)\s*[:=]\s*([A-EDY\|\/\+]+)$/);
+      const es = p.match(/^(TEST-\d+|DY-\d+)\s*[:=]\s*([A-EDY\|\/\+\*]+)$/);
       if (es) {
         const soruKod = es[1];
-        const kabulSiklar = es[2].split(/[\|\/\+]+/).map((x) => x.trim()).filter(Boolean);
+        // "*" = işaretleyen doğru sayılır (şık metni bozuk / birbirine girmiş soru); boş bırakan doğru sayılmaz
+        const kabulSiklar = es[2].includes('*')
+          ? (soruKod.startsWith('DY') ? ['D', 'Y'] : ['A', 'B', 'C', 'D', 'E'])
+          : es[2].split(/[\|\/\+]+/).map((x) => x.trim()).filter(Boolean);
         if (kabulSiklar.length > 0) {
           kurallar[soruKod] = kabulSiklar;
         }
@@ -3647,6 +3650,25 @@
     const ciftler = [];
     if (!Array.isArray(okumaSonuclari) || okumaSonuclari.length < 2) return ciftler;
 
+    // "Popüler yanlış": sınıfın büyük kısmının aynı yanlış şıkkı seçtiği madde (yanıltıcı soru) kopya kanıtı sayılmaz.
+    // (Gerçek vize, 15 kağıt: D/Y'de herkesin aynı yanlışı yaptığı maddeler yüzünden 26 sahte "kopya çifti" çıkıyordu.)
+    const sinifSayisi = {};
+    const secimSayisi = {};
+    okumaSonuclari.forEach((o) => {
+      if (!o) return;
+      const g = o.grup || 'A';
+      sinifSayisi[g] = (sinifSayisi[g] || 0) + 1;
+      [['T', o.testDetay], ['DY', o.dyDetay]].forEach(([on, liste]) => (liste || []).forEach((x, q) => {
+        if (!x || !x.verilen || x.sonuc !== 'YANLIS') return;
+        const k = `${g}|${on}${q + 1}|${x.verilen}`;
+        secimSayisi[k] = (secimSayisi[k] || 0) + 1;
+      }));
+    });
+    const populerMi = (g, kod, harf) => {
+      const n = sinifSayisi[g] || 0;
+      return n >= 6 && (secimSayisi[`${g}|${kod}|${harf}`] || 0) / n >= 0.5;
+    };
+
     for (let i = 0; i < okumaSonuclari.length; i++) {
       for (let j = i + 1; j < okumaSonuclari.length; j++) {
         const a = okumaSonuclari[i];
@@ -3656,6 +3678,7 @@
         let ortakYanlisSayisi = 0;
         let ortakDogruSayisi = 0;
         let farkliCevapSayisi = 0;
+        let populerOrtakYanlis = 0;
         const ortakYanlisMaddeler = [];
 
         const aTest = a.testDetay || [];
@@ -3667,7 +3690,9 @@
           const qb = bTest[q];
           if (!qa || !qb || !qa.verilen || !qb.verilen) continue;
           if (qa.verilen === qb.verilen) {
-            if (qa.sonuc === 'YANLIS') {
+            if (qa.sonuc === 'YANLIS' && populerMi(a.grup || 'A', `T${q + 1}`, qa.verilen)) {
+              populerOrtakYanlis++;
+            } else if (qa.sonuc === 'YANLIS') {
               ortakYanlisSayisi++;
               ortakYanlisMaddeler.push(`T${q + 1}(${qa.verilen})`);
             } else if (qa.sonuc === 'DOGRU') {
@@ -3686,7 +3711,9 @@
           const qb = bDy[q];
           if (!qa || !qb || !qa.verilen || !qb.verilen) continue;
           if (qa.verilen === qb.verilen) {
-            if (qa.sonuc === 'YANLIS') {
+            if (qa.sonuc === 'YANLIS' && populerMi(a.grup || 'A', `DY${q + 1}`, qa.verilen)) {
+              populerOrtakYanlis++;
+            } else if (qa.sonuc === 'YANLIS') {
               ortakYanlisSayisi++;
               ortakYanlisMaddeler.push(`DY${q + 1}(${qa.verilen})`);
             } else if (qa.sonuc === 'DOGRU') {
@@ -3697,13 +3724,14 @@
           }
         }
 
-        const toplamKarsilastirilan = ortakYanlisSayisi + ortakDogruSayisi + farkliCevapSayisi;
+        const toplamKarsilastirilan = ortakYanlisSayisi + populerOrtakYanlis + ortakDogruSayisi + farkliCevapSayisi;
         if (toplamKarsilastirilan === 0) continue;
 
-        const benzerlikYuzde = Math.round(((ortakYanlisSayisi + ortakDogruSayisi) / toplamKarsilastirilan) * 100);
+        const benzerlikYuzde = Math.round(((ortakYanlisSayisi + populerOrtakYanlis + ortakDogruSayisi) / toplamKarsilastirilan) * 100);
         const harppHoganIndeks = Number((ortakYanlisSayisi / Math.max(1, farkliCevapSayisi)).toFixed(2));
 
-        if (ortakYanlisSayisi >= 2 && (harppHoganIndeks >= 0.60 || benzerlikYuzde >= 75)) {
+        // Eşik: en az 3 nadir ortak yanlış ve (ortak yanlış / farklı cevap ≥ 0,6 ya da benzerlik ≥ %90)
+        if (ortakYanlisSayisi >= 3 && (harppHoganIndeks >= 0.60 || benzerlikYuzde >= 90)) {
           ciftler.push({
             ogrenci1No: a.ogrNo,
             ogrenci1Ad: a.adSoyad,
@@ -3716,7 +3744,8 @@
             benzerlikYuzde,
             harppHoganIndeks,
             ortakYanlisMaddeler,
-            riskSeviyesi: (ortakYanlisSayisi >= 4 || harppHoganIndeks >= 1.2) ? 'YUKSEK' : 'ORTA'
+            populerOrtakYanlis,
+            riskSeviyesi: (ortakYanlisSayisi >= 5 || harppHoganIndeks >= 1.5) ? 'YUKSEK' : 'ORTA'
           });
         }
       }
@@ -10399,7 +10428,8 @@
   /* Soru İptali / Esnek Anahtar / Öğrenciye Özel Anahtar / 100 Puan Değişikliği Sonrası Anlık Yeniden Puanlayıcı */
   function yenidenPuanlaOkumaSonuclari(okumaSonuclari = [], sinavYapisi = {}) {
     const iptalSet = new Set(Array.isArray(sinavYapisi.iptalEdilenSorular) ? sinavYapisi.iptalEdilenSorular : []);
-    const esnekKurallar = cozEsnekAnahtarKurallari(sinavYapisi.esnekAnahtarMetni || '');
+    // Arayüz bu metni "ciftSikDogruMetni" adıyla verir (eskiden yalnız esnekAnahtarMetni okunuyor, "Çift Şık Doğru" yeniden puanlamaya uygulanmıyordu)
+    const esnekKurallar = cozEsnekAnahtarKurallari(sinavYapisi.esnekAnahtarMetni || sinavYapisi.ciftSikDogruMetni || sinavYapisi.ciftSikMetin || '');
     const ilkKayit = (Array.isArray(okumaSonuclari) && okumaSonuclari.find((x) => x && typeof x === 'object')) || {};
     const tahminiDySayi = Number(sinavYapisi.dySayisi !== undefined ? sinavYapisi.dySayisi : (Array.isArray(ilkKayit.dyDetay) ? ilkKayit.dyDetay.length : 0));
     const tahminiTestSayi = Number(sinavYapisi.testSayisi !== undefined ? sinavYapisi.testSayisi : (Array.isArray(ilkKayit.testDetay) ? ilkKayit.testDetay.length : 0));
@@ -11155,6 +11185,7 @@
       };
     } else if (tur === 'OKUDU_SIL') {
       veri = {
+        id: String(veriHam.id || veriHam.okumaId || '').trim().slice(0, 80),
         ogrNo: String(veriHam.ogrNo || veriHam.ogrenciNo || '').trim().slice(0, 40),
         okumaId: String(veriHam.okumaId || '').trim().slice(0, 80)
       };

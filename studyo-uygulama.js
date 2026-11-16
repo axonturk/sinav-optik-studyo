@@ -431,6 +431,32 @@
     };
   }
 
+  /* Telefondan "Kaydet" ile derse alınmış sınav (kayıtlı sınav, kaynak: telefon) */
+  function aktifTelefonKayitliSinavi() {
+    if (!durum.aktifKayitliSinavId) return null;
+    const k = (durum.kayitliSinavlar || []).find((x) => x && x.id === durum.aktifKayitliSinavId);
+    return k && k.kaynak === 'telefon' ? k : null;
+  }
+  function okumaKovaAnahtari(dersId = durum.aktifDersId) {
+    const anahtar = dersId || 'genel';
+    const tel = aktifTelefonKayitliSinavi();
+    return tel && (tel.dersId === anahtar || anahtar === 'genel') ? `${anahtar}::${tel.id}` : anahtar;
+  }
+  // Telefon sınavının cevap anahtarı "harici anahtar" olarak uygulanır; çıkınca önceki harici anahtar geri gelir
+  function uygulaTelefonSinaviAnahtari(k) {
+    if (!k || !k.telefonAnahtar) return;
+    if (!durum.hariciOmrAnahtar || !durum.hariciOmrAnahtar.telefonSinavId) {
+      k.oncekiHariciAnahtar = durum.hariciOmrAnahtar ? JSON.parse(JSON.stringify(durum.hariciOmrAnahtar)) : null;
+    }
+    durum.hariciOmrAnahtar = Object.assign({}, k.telefonAnahtar, { aktif: true, telefonSinavId: k.id });
+  }
+  function birakTelefonSinaviAnahtari() {
+    const h = durum.hariciOmrAnahtar;
+    if (!h || !h.telefonSinavId) return;
+    const k = (durum.kayitliSinavlar || []).find((x) => x && x.id === h.telefonSinavId);
+    durum.hariciOmrAnahtar = k && k.oncekiHariciAnahtar ? JSON.parse(JSON.stringify(k.oncekiHariciAnahtar)) : null;
+  }
+
   function kaydetAktifDersIzoleDurumu(dersId = durum.aktifDersId) {
     const anahtar = dersId || 'genel';
     if (!durum.dersTaslakSinavlari || typeof durum.dersTaslakSinavlari !== 'object') durum.dersTaslakSinavlari = {};
@@ -440,11 +466,12 @@
       durum.dersTaslakSinavlari[anahtar] = okuStüdyoTaslakFormDurumu(anahtar);
     }
     durum.salonlarHaritasi[anahtar] = JSON.parse(JSON.stringify(durum.salonlar || [{ id: 'salon-1', ad: 'Salon 1', kontenjan: 40, gozetmenler: [] }]));
-    durum.okumaSonuclariHaritasi[anahtar] = (durum.okumaSonuclari || []).map(okumaSonucunuHafifletir);
+    durum.okumaSonuclariHaritasi[okumaKovaAnahtari(anahtar)] = (durum.okumaSonuclari || []).map(okumaSonucunuHafifletir);
   }
 
   function yukleAktifDersIzoleDurumu(yeniDersId) {
     const anahtar = yeniDersId || 'genel';
+    birakTelefonSinaviAnahtari();
     durum.aktifKayitliSinavId = '';
     if (durum.salonlarHaritasi && Array.isArray(durum.salonlarHaritasi[anahtar]) && durum.salonlarHaritasi[anahtar].length > 0) {
       durum.salonlar = JSON.parse(JSON.stringify(durum.salonlarHaritasi[anahtar]));
@@ -725,7 +752,7 @@
       try { localStorage.setItem(SINAV_ARSIV_DEPO, JSON.stringify(yerelArsiv)); } catch (_) {}
     }
     if (Array.isArray(durum.okumaSonuclari) && durum.okumaSonuclari.length > 0) {
-      const aktifKey = durum.aktifDersId || 'genel';
+      const aktifKey = okumaKovaAnahtari(durum.aktifDersId || 'genel');
       if (!durum.okumaSonuclariHaritasi || typeof durum.okumaSonuclariHaritasi !== 'object') durum.okumaSonuclariHaritasi = {};
       durum.okumaSonuclariHaritasi[aktifKey] = durum.okumaSonuclari.map(okumaSonucunuHafifletir);
     }
@@ -2126,6 +2153,12 @@
 
   function yukleKayitliSinavSnapshot(sinavId) {
     const temizId = String(sinavId || '').trim();
+    const oncekiTelefon = aktifTelefonKayitliSinavi();
+    if (oncekiTelefon && oncekiTelefon.id !== temizId) {
+      // Telefon sınavından çıkış: okumaları kendi kovasına yazılır, ders okumaları geri gelir
+      kaydetAktifDersIzoleDurumu(durum.aktifDersId);
+      birakTelefonSinaviAnahtari();
+    }
     if (!temizId) {
       durum.aktifKayitliSinavId = '';
       yukleAktifDersIzoleDurumu(durum.aktifDersId);
@@ -2168,6 +2201,14 @@
     yazInput('baski-ogrenci-soru-modu', ay.ogrenciSoruModu);
     if (Array.isArray(ay.klasikSoruPuanlari) && ay.klasikSoruPuanlari.length > 0) {
       durum.klasikTekTekPuanlar = ay.klasikSoruPuanlari.slice();
+    }
+    if (hedef.kaynak === 'telefon') {
+      const kova = (durum.okumaSonuclariHaritasi || {})[`${hedef.dersId || durum.aktifDersId || 'genel'}::${hedef.id}`];
+      durum.okumaSonuclari = Array.isArray(kova) ? kova.slice() : [];
+      uygulaTelefonSinaviAnahtari(hedef);
+    } else if (oncekiTelefon) {
+      const kova = (durum.okumaSonuclariHaritasi || {})[durum.aktifDersId || 'genel'];
+      durum.okumaSonuclari = Array.isArray(kova) ? kova.slice() : [];
     }
     verileriKaydet();
     guncelleKayitliSinavlarCubuguUI();
@@ -4557,6 +4598,11 @@
     if (!olay || olay.kaynakCihaz === 'masaustu') return false;
     const kova = telefonSinavKovasi(olay.sinavKodu);
     const zaman = Number(olay.zamanMs) || Date.now();
+    if (olay.tur === 'OKUDU_SIL' && olay.veri && typeof olay.veri === 'object') {
+      const silId = String(olay.veri.id || olay.veri.okumaId || '');
+      if (silId && kova.okumalar[silId]) { delete kova.okumalar[silId]; kova.sonMs = Math.max(kova.sonMs, zaman); return true; }
+      return false;
+    }
     if (olay.tur === 'OKUDU_GUNCELLE' && olay.veri && typeof olay.veri === 'object') {
       const k = olay.veri;
       const id = String(k.id || `${k.ogrNo || ''}-${k.grup || ''}`);
@@ -4573,12 +4619,25 @@
           || (String(k.okunanNoKod || '').includes('?') && !k.kimlikOgretmenSecti && !k.kagitQrIleOkunduMu && !k.ozelKagitQrCozuldu),
         _zamanMs: zaman
       };
+      // Aynı kağıdın önce eşleşmeden (ya da bekleyen olarak) gelen eski okuması, öğrenciye yerleşen yenisi gelince düşer
+      const yeni = kova.okumalar[id];
+      if (!yeni.bekliyor) {
+        const imza = (o) => `${o.grup}|${(o.dyDetay || []).map((x) => x.verilen || '_').join('')}|${(o.testDetay || []).map((x) => x.verilen || '_').join('')}`;
+        const yImza = imza(yeni);
+        const eslesmemis = (o) => o.bekliyor || /^Kodlanan No/i.test(String(o.adSoyad || '')) || String(o.ogrNo || '') === String(o.okunanNoKod || '');
+        Object.keys(kova.okumalar).forEach((digerId) => {
+          const o = kova.okumalar[digerId];
+          if (digerId !== id && o && eslesmemis(o) && imza(o) === yImza) delete kova.okumalar[digerId];
+        });
+      }
       kova.sonMs = Math.max(kova.sonMs, zaman);
       return true;
     }
     if (olay.tur === 'SINAV_TANIMI' && olay.veri && typeof olay.veri === 'object') {
       const v = olay.veri;
       kova.ad = String(v.ad || v.kayitAdi || v.sinavAdi || v.dersAd || kova.ad || '').slice(0, 120);
+      if (v.dersId) kova.dersId = String(v.dersId).slice(0, 80);
+      if (v.dersAd) kova.dersAd = String(v.dersAd).slice(0, 120);
       kova.yapi = {
         dySayisi: Number(v.dySayisi) || 0, testSayisi: Number(v.testSayisi) || 0, klasikSayisi: Number(v.klasikSayisi) || 0,
         dyToplamPuan: Number(v.dyToplamPuan) || 0, testToplamPuan: Number(v.testToplamPuan) || 0, klasikToplamPuan: Number(v.klasikToplamPuan) || 0,
@@ -4669,6 +4728,76 @@
     return (o && o.adSoyad) || yedek || '';
   };
   /* Telefondan gelen bir sınavı kalıcı arşive al (tanım + okumalar; bulut yedeğine de girer) */
+  /* Telefon sınavını derse al: kayıtlı sınav olarak eklenir, okumalar o sınavın kovasına yazılır, Değerlendirme açılır */
+  function telefonSinavininDersiniBul(kova, kod) {
+    const dersler = durum.dersler || [];
+    if (kova.dersId && dersler.some((d) => d.id === kova.dersId)) return kova.dersId;
+    const adNorm = (x) => String(x || '').toLocaleUpperCase('tr-TR').replace(/[^A-ZÇĞİÖŞÜ]/g, '');
+    const metin = String(kova.dersAd || kova.ad || kod || '');
+    const kodu = (metin.match(/\b(\d{6,9})\b/) || String(kod).match(/^(\d{6,9})/) || [])[1] || '';
+    const adi = adNorm(metin.replace(/^\s*\d{6,9}\s*[-—–]?\s*/, '').split(/\s+[-—–·]\s+/)[0]);
+    const kodEsit = dersler.find((d) => kodu && String(d.kod || '').trim() === kodu);
+    if (kodEsit) return kodEsit.id;
+    const adEsit = dersler.find((d) => adi.length >= 4 && (adNorm(d.ad) === adi || adNorm(d.ad).endsWith(adi) || adi.endsWith(adNorm(d.ad))));
+    return adEsit ? adEsit.id : '';
+  }
+  function telefonSinaviniDerseKaydet(kod, secenek = {}) {
+    const kova = telefonSinavlariniYukle()[kod];
+    if (!kova) return { basarili: false, mesaj: 'Sınav bulunamadı.' };
+    let dersId = telefonSinavininDersiniBul(kova, kod);
+    if (!dersId) {
+      const aktif = (durum.dersler || []).find((d) => d.id === durum.aktifDersId);
+      if (!aktif) return { basarili: false, mesaj: 'Önce bir ders oluşturun.' };
+      if (!secenek.sorma && !window.confirm(`"${kova.ad || kod}" için eşleşen ders bulunamadı.\n\nAçık ders "${aktif.kod || ''} ${aktif.ad || ''}" içine kaydedilsin mi?`)) return { basarili: false, mesaj: 'Vazgeçildi.' };
+      dersId = aktif.id;
+    }
+    const y = kova.yapi || {};
+    const an = (y.cevapAnahtarlari && typeof y.cevapAnahtarlari === 'object') ? y.cevapAnahtarlari : {};
+    const metinle = (x) => (Array.isArray(x) ? x.join('') : String(x || ''));
+    const telefonAnahtar = {
+      dySayisi: Number(y.dySayisi) || 0, testSayisi: Number(y.testSayisi) || 0, klasikSayisi: Number(y.klasikSayisi) || 0, sikSayisi: 5,
+      anahtarlar: ['A', 'B', 'C', 'D'].reduce((o, g) => { o[g] = { dy: metinle(an[g] && an[g].dy), test: metinle(an[g] && an[g].test) }; return o; }, {})
+    };
+    const id = `TEL-${String(kod).replace(/[^0-9A-Za-z_-]/g, '_')}`;
+    const ad = String(kova.ad || kod).slice(0, 120);
+    const kayit = {
+      id, ad, sinavKodu: kod, dersId, kaynak: 'telefon',
+      olusturmaMs: Date.now(), guncellemeMs: Date.now(),
+      ayarlar: {
+        sinavAd: ad,
+        dySayisi: telefonAnahtar.dySayisi, testSayisi: telefonAnahtar.testSayisi, klasikSayisi: telefonAnahtar.klasikSayisi,
+        dyToplamPuan: y.dyToplamPuan, testToplamPuan: y.testToplamPuan, klasikToplamPuan: y.klasikToplamPuan,
+        sikSayisi: 5, kimlikModu: y.kimlikModu || 'son2'
+      },
+      telefonAnahtar
+    };
+    if (!Array.isArray(durum.kayitliSinavlar)) durum.kayitliSinavlar = [];
+    const i = durum.kayitliSinavlar.findIndex((x) => x && x.id === id);
+    if (i >= 0) {
+      kayit.oncekiHariciAnahtar = durum.kayitliSinavlar[i].oncekiHariciAnahtar;
+      durum.kayitliSinavlar[i] = Object.assign({}, durum.kayitliSinavlar[i], kayit);
+    } else durum.kayitliSinavlar.push(kayit);
+    if (!durum.okumaSonuclariHaritasi || typeof durum.okumaSonuclariHaritasi !== 'object') durum.okumaSonuclariHaritasi = {};
+    durum.okumaSonuclariHaritasi[`${dersId}::${id}`] = telefonSinavOkumalari(kod).map((o) => Object.assign({}, o, {
+      adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad),
+      dyDetay: (o.dyDetay || []).map((x) => Object.assign({}, x)),
+      testDetay: (o.testDetay || []).map((x) => Object.assign({}, x)),
+      hamCevaplar: { dy: (o.dyDetay || []).map((x) => x.verilen || '-'), test: (o.testDetay || []).map((x) => x.verilen || '-') },
+      numaraEslesmediMi: Boolean(o.bekliyor)
+    }));
+    kova.derseKaydedildi = { dersId, id, ms: Date.now() };
+    telefonSinavlariniKaydet();
+    if (durum.aktifDersId !== dersId) {
+      degistirAktifDersGuvenli(dersId);
+      const sec = document.getElementById('aktif-ders-sec');
+      if (sec) sec.value = dersId;
+    }
+    yukleKayitliSinavSnapshot(id);
+    verileriKaydet();
+    if (typeof yenileTumSekmePanelleriUI === 'function') yenileTumSekmePanelleriUI();
+    return { basarili: true, dersId, id };
+  }
+
   function telefonSinaviniArsiveKaydet(kod) {
     const kova = telefonSinavlariniYukle()[kod];
     if (!kova) return false;
@@ -4692,7 +4821,7 @@
     Object.keys(tum).forEach((k) => {
       if (!Object.keys(tum[k].okumalar || {}).length) return;
       if (sonuc.some((x) => x.sinavKodu === k)) return;
-      sonuc.push({ anahtar: `TEL-${k}`, ad: tum[k].ad || k, sinavKodu: k, kaynak: 'Telefon (arşive alınmadı)', tarihMs: tum[k].sonMs, okumalar: telefonSinavOkumalari(k).map((o) => Object.assign({}, o, { adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad) })), arsivde: false });
+      sonuc.push({ anahtar: `TEL-${k}`, derste: Boolean(tum[k].derseKaydedildi), ad: tum[k].ad || k, sinavKodu: k, kaynak: tum[k].derseKaydedildi ? 'Telefon (derse kaydedildi)' : 'Telefon (arşive alınmadı)', tarihMs: tum[k].sonMs, okumalar: telefonSinavOkumalari(k).map((o) => Object.assign({}, o, { adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad) })), arsivde: false });
     });
     (durum.kayitliSinavlar || []).forEach((k) => {
       sonuc.push({ anahtar: `KS-${k.id}`, ad: k.ad || k.sinavKodu || 'Kayıtlı sınav', sinavKodu: k.sinavKodu || '', kaynak: 'Stüdyo (basılan / kaydedilen)', tarihMs: Number(k.guncellemeMs || k.olusturmaMs) || 0, okumalar: [], arsivde: true, studyo: true, basimSayisi: (k.basimGecmisi || []).length });
@@ -4717,9 +4846,17 @@
           <td>${s.studyo ? '—' : s.okumalar.length}</td>
           <td>${s.studyo ? '—' : (ciftler.length ? `<span class="rozet rozet-kirmizi">${ciftler.length} çift</span>` : '<span class="rozet rozet-yesil">yok</span>')}</td>
           <td style="white-space:nowrap;">${s.studyo ? '' : `<button type="button" class="btn btn-kucuk" data-arsiv-ac="${C.kacisHTML(s.anahtar)}">Aç</button>`}
-            ${!s.arsivde && s.anahtar.startsWith('TEL-') ? `<button type="button" class="btn btn-basari btn-kucuk" data-arsive-kaydet="${C.kacisHTML(s.sinavKodu)}">Arşive kaydet</button>` : ''}</td>
+            ${s.anahtar.startsWith('TEL-') || s.kaynak === 'Telefon (arşivde)' ? `<button type="button" class="btn btn-birincil btn-kucuk" data-derse-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Sınavı ilgili derse kaydet; Değerlendirme'de notlar, soru analizi ve kopya raporu açılır">${s.derste ? 'Derste aç' : 'Kaydet'}</button>` : ''}
+            ${!s.arsivde && s.anahtar.startsWith('TEL-') ? `<button type="button" class="btn btn-hayalet btn-kucuk" data-arsive-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Kalıcı arşive al (isteğe bağlı)">Arşive al</button>` : ''}</td>
         </tr>`;
       }).join('')}</tbody></table>` : '<div style="color:var(--metin-ikincil);">Henüz arşivde sınav yok. Basılan sınavlar ve telefondan gelen okumalar burada görünür.</div>';
+    kutu.querySelectorAll('[data-derse-kaydet]').forEach((b) => b.addEventListener('click', () => {
+      const r = telefonSinaviniDerseKaydet(b.getAttribute('data-derse-kaydet'));
+      if (r.basarili) {
+        const btn = document.querySelector('.sekme-btn[data-sekme="sekme-analiz"]');
+        if (btn) btn.click();
+      }
+    }));
     kutu.querySelectorAll('[data-arsive-kaydet]').forEach((b) => b.addEventListener('click', () => {
       telefonSinaviniArsiveKaydet(b.getAttribute('data-arsive-kaydet'));
       cizSinavArsivi();
@@ -5536,7 +5673,23 @@
   /* ------------------------------------------------------------------------
      SEKME 4: MADDE ANALİZİ (pj Güçlük, rjx Ayırt Edicilik), PÇ, KÜMÜLATİF ÖÇ & PUKÖ
      ------------------------------------------------------------------------ */
+  /* Değerlendirme üstü bandı: açık sınav telefondan alındıysa söyler, isteğe bağlı arşiv düğmesi */
+  function guncelleTelefonSinaviBandi() {
+    const bant = document.getElementById('bant-telefon-sinavi');
+    if (!bant) return;
+    const tel = aktifTelefonKayitliSinavi();
+    bant.hidden = !tel;
+    bant.style.display = tel ? 'flex' : 'none';
+    if (!tel) return;
+    const metin = document.getElementById('bant-telefon-sinavi-metin');
+    const arsivde = sinavArsivi().some((a) => a && a.sinavKodu === tel.sinavKodu);
+    if (metin) metin.textContent = `📱 ${tel.ad} — telefondan alındı · ${durum.okumaSonuclari.length} kağıt${arsivde ? ' · arşivde' : ''}`;
+    const btn = document.getElementById('btn-telefon-sinavi-arsive-kaydet');
+    if (btn) { btn.disabled = arsivde; btn.textContent = arsivde ? '🗄️ Arşivde' : '🗄️ Arşive kaydet'; }
+  }
+
   function guncelleMaddeAnaliziSekmesi() {
+    try { guncelleTelefonSinaviBandi(); } catch (_) {}
     const yapi = okuEtkinOmrSinavYapisi();
     const analiz = C.hesaplaSinifVeMaddeAnalizi(durum.okumaSonuclari, yapi);
 
@@ -12590,6 +12743,12 @@ Yine de çıktı alınsın mı?`)) {
     const btnAktifDersiSil = document.getElementById('btn-aktif-dersi-sil');
     if (btnAktifDersiSil) {
       btnAktifDersiSil.addEventListener('click', () => {
+        // Yanlışlıkla basmaya karşı açık onay (dar ekranda düğmeler yakın durabiliyor)
+        const ders = (durum.dersler || []).find((x) => x.id === durum.aktifDersId);
+        const ad = ders ? `${ders.kod || ''} ${ders.ad || ''}`.trim() : 'Seçili ders';
+        if (!window.confirm(`"${ad}" dersi silinsin mi?
+
+Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getirebilirsiniz.`)) return;
         silDersiVeArsivle(durum.aktifDersId);
       });
     }
@@ -14395,6 +14554,69 @@ Yine de çıktı alınsın mı?`)) {
       });
     }
 
+    // B1: telefondan derse alınan sınavı isteğe bağlı kalıcı arşive al
+    const btnTelArsiv = document.getElementById('btn-telefon-sinavi-arsive-kaydet');
+    if (btnTelArsiv) {
+      btnTelArsiv.addEventListener('click', () => {
+        const tel = aktifTelefonKayitliSinavi();
+        if (!tel) return;
+        telefonSinaviniArsiveKaydet(tel.sinavKodu);
+        guncelleTelefonSinaviBandi();
+        if (typeof cizSinavArsivi === 'function') cizSinavArsivi();
+      });
+    }
+
+    // B5: telefonla okunamayan kağıdı elle gir
+    const detayElle = document.getElementById('detay-elle-kagit');
+    const elleListeDoldur = () => {
+      const sec = document.getElementById('elle-ogrenci');
+      if (!sec) return;
+      const okunan = new Set((durum.okumaSonuclari || []).map((o) => String(o.ogrNo)));
+      sec.innerHTML = (durum.ogrenciler || []).slice().sort((x, y) => String(x.ogrNo).localeCompare(String(y.ogrNo), 'tr', { numeric: true }))
+        .map((o) => `<option value="${C.kacisHTML(o.ogrNo)}">${C.kacisHTML(o.ogrNo)} — ${C.kacisHTML(o.adSoyad)}${okunan.has(String(o.ogrNo)) ? ' (okundu)' : ''}</option>`).join('');
+    };
+    if (detayElle) detayElle.addEventListener('toggle', () => { if (detayElle.open) elleListeDoldur(); });
+    const btnElleEkle = document.getElementById('btn-elle-kagit-ekle');
+    if (btnElleEkle) {
+      btnElleEkle.addEventListener('click', () => {
+        const mesaj = document.getElementById('etiket-elle-kagit');
+        const yaz = (m, iyi) => { if (mesaj) { mesaj.textContent = m; mesaj.style.color = iyi ? 'var(--basari)' : 'var(--tehlike)'; } };
+        const ogrNo = (document.getElementById('elle-ogrenci') || {}).value || '';
+        const ogr = (durum.ogrenciler || []).find((o) => String(o.ogrNo) === String(ogrNo));
+        if (!ogr) { yaz('Önce bir öğrenci seçin (sınıf listesi boşsa önce Sınıf ve Salonlar ekranından yükleyin).'); return; }
+        const yapi = okuEtkinOmrSinavYapisi();
+        const grup = (document.getElementById('elle-grup') || {}).value || 'A';
+        const temiz = (v, izin, n) => String(v || '').toUpperCase().replace(/\s/g, '-').replace(new RegExp(`[^${izin}-]`, 'g'), '').slice(0, n).padEnd(n, '-').split('');
+        const dyHam = temiz((document.getElementById('elle-dy') || {}).value, 'DY', Number(yapi.dySayisi) || 0);
+        const testHam = temiz((document.getElementById('elle-test') || {}).value, 'ABCDE', Number(yapi.testSayisi) || 0);
+        const puanGirdi = String((document.getElementById('elle-puan') || {}).value || '').trim();
+        const cevapVar = [...dyHam, ...testHam].some((x) => x !== '-');
+        if (!cevapVar && !puanGirdi) { yaz('Cevapları ya da puanı yazın.'); return; }
+        let kayit = {
+          id: `ELLE-${Date.now().toString(36)}-${ogrNo}`, ogrNo: String(ogr.ogrNo), adSoyad: ogr.adSoyad, okunanNoKod: String(ogr.ogrNo).slice(-2), grup,
+          elleGirildi: true, kimlikOgretmenSecti: true, numaraEslesmediMi: false,
+          dyDetay: dyHam.map((v, i) => ({ soruNo: i + 1, verilen: v === '-' ? '' : v })),
+          testDetay: testHam.map((v, i) => ({ soruNo: i + 1, verilen: v === '-' ? '' : v })),
+          hamCevaplar: { dy: dyHam, test: testHam }, klasikDetay: [], klasikToplamPuan: 0, incelemeKuyrugu: []
+        };
+        if (cevapVar && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
+          kayit = Object.assign(kayit, C.yenidenPuanlaOkumaSonuclari([kayit], yapi)[0] || {});
+        } else {
+          kayit.toplamPuan = Math.max(0, Math.min(100, Number(puanGirdi) || 0));
+          kayit.yalnizPuan = true;
+        }
+        const varIdx = (durum.okumaSonuclari || []).findIndex((o) => String(o.ogrNo) === String(ogr.ogrNo));
+        if (varIdx >= 0 && !window.confirm(`${ogr.adSoyad} için zaten bir kağıt var (${durum.okumaSonuclari[varIdx].toplamPuan} puan). Elle girilenle değiştirilsin mi?`)) return;
+        if (varIdx >= 0) durum.okumaSonuclari[varIdx] = kayit; else durum.okumaSonuclari.push(kayit);
+        verileriKaydet();
+        guncelleOmrTabloVeKuyruk();
+        guncelleMaddeAnaliziSekmesi();
+        elleListeDoldur();
+        ['elle-dy', 'elle-test', 'elle-puan'].forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
+        yaz(`✅ ${ogr.adSoyad}: ${kayit.toplamPuan} puan eklendi (elle girildi).`, true);
+      });
+    }
+
     const btnPjRjxBanka = document.getElementById('btn-pj-rjx-bankaya-isle');
     if (btnPjRjxBanka) {
       btnPjRjxBanka.addEventListener('click', () => {
@@ -16131,6 +16353,15 @@ Yine de çıktı alınsın mı?`)) {
               if (i < 0) durum.yoklamalar.push(yeni);
               else if ((durum.yoklamalar[i].seqNo || 0) <= yeni.seqNo) durum.yoklamalar[i] = yeni;
             });
+            return;
+          }
+          if (olay.tur === 'OKUDU_SIL' && olay.kaynakCihaz !== 'masaustu' && olay.veri) {
+            // Telefonda silinen okuma: telefon sınavları kovasından ve (aynı sınav açıksa) okumalardan da düşer
+            if (isleTelefonSinavOlayi(olay)) telefonKovasiDegisti = true;
+            const silId = String(olay.veri.id || olay.veri.okumaId || '');
+            const onceSay = durum.okumaSonuclari.length;
+            if (silId) durum.okumaSonuclari = durum.okumaSonuclari.filter((x) => String(x.id) !== silId);
+            if (durum.okumaSonuclari.length !== onceSay) birlesenSayi++;
             return;
           }
           const kodUygun = !olay.sinavKodu || olay.sinavKodu === 'GENEL' || !aktifKod || aktifKod === 'GENEL' || olay.sinavKodu === aktifKod;

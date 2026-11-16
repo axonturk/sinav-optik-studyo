@@ -379,7 +379,9 @@ async function main() {
 
     // ---- Ders Silme -> Soru Arşivi Koruma -> Yeni Derse Arşiv Dahil Etme ----
     const silinecekDersSoruSayisi = await sayfa.$eval('#rozet-banka-toplam', (e) => Number(e.textContent));
+    await sayfa.evaluate(() => { window.__eskiConfirm = window.confirm; window.confirm = () => true; });
     await sayfa.click('#btn-aktif-dersi-sil');
+    await sayfa.evaluate(() => { window.confirm = window.__eskiConfirm; });
     await bekle(300);
     await sekmeAc(sayfa, 'sekme-banka');
     const arsivCubukGorunur = await sayfa.$eval('#kutu-banka-arsiv-cubuk', (e) => e.style.display !== 'none' && e.textContent.includes('Soru Arşivi'));

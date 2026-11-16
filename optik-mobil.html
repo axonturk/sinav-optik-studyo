@@ -2295,6 +2295,7 @@
 
       /* Test/teşhis için salt-okunur öğrenci ve durum erişimi */
       window.__mobilOgrenciler = () => mobilDurum.ogrenciler.slice();
+      window.__mobilListeYenile = () => guncelleMobilSonucListesi();
       window.__mobilDurumOku = () => ({
         depoAnahtari: MOBIL_DEPO_ANAHTAR,
         sinavYapisi: JSON.parse(JSON.stringify(mobilDurum.sinavYapisi)),
@@ -2377,7 +2378,14 @@
       function bagsizKurulumIcinDersSec(setup) {
         const setupKod = (String((setup && setup.dersAd) || '').split(/\s+[-—]\s+/)[0] || String((setup && setup.sinavKodu) || '').split('-')[0] || '').trim();
         if (!setupKod) return;
-        const kodUyar = (p) => Boolean(p && (String(p.kod || '').trim() === setupKod || String(p.ad || '').trim().startsWith(setupKod)));
+        const adNorm = (x) => String(x || '').toLocaleUpperCase('tr-TR').replace(/[^A-ZÇĞİÖŞÜ]/g, '');
+        const setupAd = adNorm(String((setup && setup.dersAd) || '').split(/\s+[-—]\s+/).slice(1).join(' '));
+        const kodUyar = (p) => Boolean(p && (
+          String(p.kod || '').trim() === setupKod ||
+          String(p.kod || '').trim().startsWith(`${setupKod}-`) ||
+          String(p.ad || '').trim().startsWith(setupKod) ||
+          (setupAd.length >= 4 && (adNorm(p.ad) === setupAd || adNorm(p.ad).endsWith(setupAd)))
+        ));
         if (kodUyar(mobilDurum.dersPaketleriHaritasi[mobilDurum.dersId]) || String(mobilDurum.dersKod || '').trim() === setupKod) return;
         guncelleMobilDersPaketKaydi();
         const hedefPaket = Object.values(mobilDurum.dersPaketleriHaritasi || {}).find((p) => p && p.id !== mobilDurum.dersId && kodUyar(p));
@@ -3881,6 +3889,28 @@
         }
         if (!sonuc.id) sonuc.id = 'MOB-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
 
+        if (Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1 && !sonuc.kimlikOgretmenSecti) {
+          const buImza = imzaHesaplaMobilKagit(sonuc);
+          const yerlesikler = (mobilDurum.okumaSonuclari || []).filter((x) => x && x.id !== sonuc.id && !kagitKimlikBelirsizMi(x));
+          const adayNolari = new Set(sonuc.cakisanAdaylar.map((o) => String(o.ogrNo)));
+          // Aynı kağıt yeniden okutulduysa (birebir aynı cevaplar) önceki öğrencisine gider
+          const ayniKagit = yerlesikler.find((x) => adayNolari.has(String(x.ogrNo)) && (x.cevapImza || imzaHesaplaMobilKagit(x)) === buImza);
+          const dolu = new Set(yerlesikler.map((x) => String(x.ogrNo)));
+          const kalan = ayniKagit
+            ? sonuc.cakisanAdaylar.filter((o) => String(o.ogrNo) === String(ayniKagit.ogrNo))
+            : sonuc.cakisanAdaylar.filter((o) => !dolu.has(String(o.ogrNo)));
+          if (kalan.length === 1) {
+            sonuc.cakisanAdaylar = kalan;
+            sonuc.ogrNo = String(kalan[0].ogrNo);
+            sonuc.adSoyad = String(kalan[0].adSoyad || sonuc.adSoyad);
+            sonuc.kimlikEslesmeBekliyor = false;
+            sonuc.numaraEslesmediMi = false;
+            sonuc.kimlikOtomatikAtandi = !ayniKagit;
+          } else if (kalan.length > 1 && kalan.length < sonuc.cakisanAdaylar.length) {
+            sonuc.cakisanAdaylar = kalan;
+          }
+        }
+
         const cakismaVar = Array.isArray(sonuc.cakisanAdaylar) && sonuc.cakisanAdaylar.length > 1;
         // Veri koruma: Son 2/3 hanesi birden fazla öğrenciye uyan kağıt, öğretmen seçene kadar HİÇBİR öğrenciye yazılmaz.
         // (Eskiden ilk aday geçici olarak seçiliyor ve o öğrencinin önceki kaydının üzerine yazılıyordu.)
@@ -4426,6 +4456,29 @@
           return true;
         }
 
+        {
+          const onGrupSec = document.getElementById('m-ayar-grup-sec');
+          const onGrup = (okuma.grup && ['A', 'B', 'C', 'D'].includes(okuma.grup)) ? okuma.grup : ((onGrupSec && onGrupSec.value) || 'A');
+          const mevcut = ((mobilDurum.sinavYapisi && mobilDurum.sinavYapisi.cevapAnahtarlari) || {})[onGrup] || {};
+          const mevcutDy = (Array.isArray(mevcut.dy) ? mevcut.dy : []).join('');
+          const mevcutTest = (Array.isArray(mevcut.test) ? mevcut.test : []).join('');
+          const yeniDy = (okuma.dyDetay || []).map((x) => x.verilen || 'D').join('');
+          const yeniTest = (okuma.testDetay || []).map((x) => x.verilen || 'A').join('');
+          const mevcutDolu = (mevcutDy + mevcutTest).length > 0 && !mobilDurum.sinavYapisi.kurulumBekliyor;
+          const farkli = mevcutDolu && (mevcutDy !== yeniDy || mevcutTest !== yeniTest);
+          const noKod = String(okuma.okunanNoKod || '').replace(/[^0-9]/g, '');
+          const ogrenci = noKod ? (mobilDurum.ogrenciler || []).find((o) => String(o.ogrNo).endsWith(noKod)) : null;
+          if (farkli || noKod) {
+            const satirlar = ['Bu kağıt CEVAP ANAHTARI olarak kaydedilecek.'];
+            if (noKod) satirlar.push(`Dikkat: kağıtta öğrenci numarası kodlu (${noKod}${ogrenci ? ` — ${ogrenci.adSoyad}` : ''}). Öğrenci kağıdı olabilir.`);
+            if (farkli) satirlar.push(`${onGrup} kitapçığının mevcut anahtarı DEĞİŞECEK.`);
+            satirlar.push('', 'Devam edilsin mi?');
+            if (!window.confirm(satirlar.join('\n'))) {
+              mobilUyariGoster('ℹ️ Cevap anahtarı değiştirilmedi.', 'basari');
+              return false;
+            }
+          }
+        }
         if (okuma.algilananYapi && okuma.algilananYapi.otomatikAlgilandiMi) {
           mobilDurum.sinavYapisi.dySayisi = okuma.algilananYapi.dySayisi;
           mobilDurum.sinavYapisi.testSayisi = okuma.algilananYapi.testSayisi;
@@ -4622,6 +4675,40 @@
         document.getElementById('mobil-dokunmatik-anahtar-alani').innerHTML = html;
       }
 
+      /* Soluk iz (kurşun kalem) kayıtları: inceleme kuyruğundaki "Soluk iz (X)" satırları */
+      function solukIzleri(s) {
+        return (Array.isArray(s && s.incelemeKuyrugu) ? s.incelemeKuyrugu : [])
+          .map((k) => {
+            const a = String((k && k.alan) || '').match(/^(D\/Y|Test) Soru (\d+)$/);
+            const h = String((k && k.detay) || '').match(/^Soluk iz \(([A-EDY])\)/);
+            return a && h ? { bolum: a[1] === 'Test' ? 'test' : 'dy', no: Number(a[2]), harf: h[1], k } : null;
+          })
+          .filter(Boolean);
+      }
+      function solukSay(s) { return solukIzleri(s).length; }
+      function solukIzleriniIsaretliSay(kayitId) {
+        const kayit = mobilDurum.okumaSonuclari.find((x) => x.id === kayitId);
+        if (!kayit) return false;
+        const izler = solukIzleri(kayit);
+        if (!izler.length) return false;
+        izler.forEach((iz) => {
+          const liste = iz.bolum === 'test' ? kayit.testDetay : kayit.dyDetay;
+          const satir = Array.isArray(liste) ? liste[iz.no - 1] : null;
+          if (satir) { satir.verilen = iz.harf; satir.supheli = false; }
+          const ham = kayit.hamCevaplar && Array.isArray(kayit.hamCevaplar[iz.bolum]) ? kayit.hamCevaplar[iz.bolum] : null;
+          if (ham && ham.length >= iz.no) ham[iz.no - 1] = iz.harf;
+        });
+        kayit.incelemeKuyrugu = (kayit.incelemeKuyrugu || []).filter((k) => !izler.some((iz) => iz.k === k));
+        if (typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
+          const yeni = C.yenidenPuanlaOkumaSonuclari([kayit], mobilDurum.sinavYapisi)[0];
+          if (yeni) Object.assign(kayit, yeni);
+        }
+        kayit.solukIsaretliSayildi = true;
+        isleMobilOkumaSonucu(kayit, { modalAcma: true });
+        mobilUyariGoster(`✅ ${izler.length} soluk iz cevap sayıldı; yeni puan ${kayit.toplamPuan}.`, 'basari');
+        return true;
+      }
+
       /* Mod 3: Okunan Kağıtlar Listesi (Sabit Öğrenci Sütunu + Anında Puan + Eşleştir/Sil) ve İstatistik */
       function guncelleMobilSonucListesi() {
         guncelleMobilSenkronRozetUI(false);
@@ -4658,6 +4745,7 @@
                 </td>
                 <td><strong style="font-size:0.98rem; color:var(--basari);">${s.toplamPuan}</strong></td>
                 <td style="white-space:nowrap;">
+                  ${solukSay(s) ? `<button type="button" class="btn btn-kucuk" data-soluk-say="${C.kacisHTML(s.id)}" title="Soluk (kurşun kalem) izleri cevap say ve yeniden puanla" style="padding:0.25rem 0.45rem; background:#fef3c7; border-color:#f59e0b;">⚠️ ${solukSay(s)} soluk</button>` : ''}
                   <button type="button" class="btn ${belirsiz ? 'btn-birincil' : ''} btn-kucuk" data-tablo-eslestir="${C.kacisHTML(s.id)}" title="Öğrenci Ata / Değiştir" style="padding:0.25rem 0.45rem;">${belirsiz ? '👤 Seç' : '✏️'}</button>
                   <button type="button" class="btn btn-tehlike btn-kucuk" data-tablo-sil="${C.kacisHTML(s.id)}" title="Bu okumayı sil" style="padding:0.25rem 0.45rem;">🗑️</button>
                 </td>
@@ -5501,10 +5589,19 @@
             acOgrenciEslestirModal(btnEs.getAttribute('data-tablo-eslestir'));
             return;
           }
+          const btnSoluk = e.target.closest('[data-soluk-say]');
+          if (btnSoluk) {
+            solukIzleriniIsaretliSay(btnSoluk.getAttribute('data-soluk-say'));
+            return;
+          }
           const btnSil = e.target.closest('[data-tablo-sil]');
           if (btnSil) {
             const silId = btnSil.getAttribute('data-tablo-sil');
             if (silId) silinenMobilKayitIdleri.add(String(silId));
+            const silinen = mobilDurum.okumaSonuclari.find((s) => s.id === silId);
+            if (silinen) {
+              try { kuyrugaAlMobilSenkronOlayi('OKUDU_SIL', { id: String(silId), ogrNo: String(silinen.ogrNo || ''), okumaId: String(silinen.okumaId || silId) }); } catch (_) {}
+            }
             kaydetMobilSilmeYedegi('Tekil Satır Silme');
             mobilDurum.okumaSonuclari = mobilDurum.okumaSonuclari.filter((s) => s.id !== silId);
             kaydetYerelDepoya();

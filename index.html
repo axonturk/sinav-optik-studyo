@@ -1579,6 +1579,27 @@
           </div>
           </details>
 
+          <!-- Telefonla okunamayan kağıdı elle girme -->
+          <details class="gelismis-akordeon" id="detay-elle-kagit">
+            <summary>✍️ Kağıdı elle gir (telefonla okunamayan kağıt)</summary>
+            <div style="padding:0.5rem 0.2rem; font-size:0.82rem;">
+              <p style="margin:0 0 0.45rem; color:var(--metin-ikincil);">Öğrenciyi seçin, cevapları sırayla yazın (D/Y için D ve Y, test için A–E; boş için - ya da boşluk). Puan, sınavın cevap anahtarıyla hesaplanır. İsterseniz yalnız puan yazabilirsiniz.</p>
+              <div class="form-satir">
+                <div><label class="etiket" for="elle-ogrenci">Öğrenci</label><select id="elle-ogrenci"></select></div>
+                <div><label class="etiket" for="elle-grup">Kitapçık</label><select id="elle-grup"><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+              </div>
+              <div class="form-satir">
+                <div><label class="etiket" for="elle-dy">D/Y cevapları</label><input type="text" id="elle-dy" class="mono" placeholder="Örn: DDYDY..." autocomplete="off" /></div>
+                <div><label class="etiket" for="elle-test">Test cevapları</label><input type="text" id="elle-test" class="mono" placeholder="Örn: ABCDE..." autocomplete="off" /></div>
+              </div>
+              <div class="form-satir">
+                <div><label class="etiket" for="elle-puan">Yalnız puan (isteğe bağlı)</label><input type="number" id="elle-puan" min="0" max="100" step="0.5" placeholder="Cevap yazmadıysanız" /></div>
+                <div style="display:flex; align-items:flex-end;"><button type="button" class="btn btn-birincil btn-kucuk" id="btn-elle-kagit-ekle">Kağıdı ekle</button></div>
+              </div>
+              <div id="etiket-elle-kagit" role="status" style="font-size:0.8rem; min-height:1.1em;"></div>
+            </div>
+          </details>
+
           <!-- Öğretmen İnceleme Kuyruğu (Düşük Güvenilirlik / Silinti) -->
           <div class="kart">
             <div class="kart-baslik">
@@ -1678,7 +1699,7 @@
     <section class="sekme-panel" id="sekme-arsiv">
       <div class="kart" style="margin-bottom:0.9rem;">
         <div class="kart-baslik"><span>📚 Sınav Arşivi</span></div>
-        <p style="font-size:0.82rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">Basılan / kaydedilen sınavlar, telefonla okunan sınavlar ve kopya şüpheleri. Telefondan gelen bir sınavı kalıcı kayda almak için "Arşive kaydet"e basın.</p>
+        <p style="font-size:0.82rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">Basılan / kaydedilen sınavlar, telefonla okunan sınavlar ve kopya şüpheleri. Telefondan gelen bir sınavı derse almak için "Kaydet"e basın: sınav ilgili derse kaydedilir, Değerlendirme'de notlar, soru analizi ve kopya raporu açılır. Kalıcı arşive almak isteğe bağlıdır.</p>
         <div id="arsiv-liste" class="tablo-sarmal"></div>
       </div>
       <div class="kart" id="arsiv-detay"></div>
@@ -1710,6 +1731,12 @@
     </section>
 
     <section class="sekme-panel" id="sekme-analiz" data-alt-sekme="tumu">
+      <div id="bant-telefon-sinavi" class="yazdir-gizle" hidden style="display:none; padding:0.55rem 0.8rem; margin-bottom:0.6rem; border:1px solid #93c5fd; background:#eff6ff; border-radius:8px; font-size:0.84rem; align-items:center; justify-content:space-between; gap:0.5rem; flex-wrap:wrap;">
+        <span id="bant-telefon-sinavi-metin">📱 Telefondan gelen sınav</span>
+        <span style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+          <button type="button" class="btn btn-kucuk" id="btn-telefon-sinavi-arsive-kaydet" title="Sınav bitince kalıcı arşive alın (isteğe bağlı)">🗄️ Arşive kaydet</button>
+        </span>
+      </div>
       <!-- 4 SADE KPI KARTI + AKADEMİK EK METRİK ŞERİDİ -->
       <div class="kpi-izgara-4 yazdir-gizle">
         <div class="kpi-kart">
@@ -1802,7 +1829,7 @@
           <div>
             <label class="etiket" for="kural-cift-sik-dogru">Çift Şık Doğru / Anahtar Değiştir (A Grubu)</label>
             <div style="display:flex; gap:6px;">
-              <input type="text" id="kural-cift-sik-dogru" placeholder="Örn: TEST-3:B|D" />
+              <input type="text" id="kural-cift-sik-dogru" placeholder="Örn: TEST-3:B|D · İşaretleyen doğru: TEST-4:*" title="Bir soruda birden çok şık doğruysa: TEST-3:B|D. Şıkları bozuk basılan soruda işaretleyen herkes doğru sayılsın: TEST-4:* (boş bırakan sayılmaz). Birden çok kural virgülle: TEST-4:*, TEST-5:*" />
               <button type="button" class="btn btn-birincil btn-kucuk" id="btn-yeniden-puanla">Hesapla</button>
             </div>
           </div>
