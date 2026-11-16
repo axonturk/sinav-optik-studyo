@@ -227,11 +227,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v33), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v34), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v33, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v33'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v34, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v34'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
@@ -1088,6 +1088,8 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
     const pwaTestSayfa = await tarayici.newPage();
     const pwaTestHatalar = [];
     pwaTestSayfa.on('pageerror', (e) => pwaTestHatalar.push(e.message));
+    // Kağıttan anahtar okunurken (kağıtta numara kodlu / mevcut anahtar değişiyor) onay sorulur: öğretmen onaylıyor
+    pwaTestSayfa.on('dialog', async (d) => { await d.accept(); });
     await pwaTestSayfa.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
     await pwaTestSayfa.evaluateOnNewDocument(() => {
       window.__mobilGercekKullaniciZorla = true;

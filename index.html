@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261115f" />
+  <link rel="stylesheet" href="ortak.css?v=20261116a" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -191,12 +191,14 @@
 
     <!-- SAĞ ÇALIŞMA ALANI: 48px BAĞLAM ÇUBUĞU + ANA İÇERİK -->
     <div class="kabuk-sag-alan">
+      <div id="bant-arsiv-donem" class="yazdir-gizle" hidden style="display:none; padding:6px 14px; background:#fef3c7; border-bottom:1px solid #f59e0b; font-size:0.82rem; color:#78350f;">🗄️ <strong id="bant-arsiv-donem-ad">Arşiv dönemi</strong> açık — eski dönem kayıtlarını görüntülüyorsunuz. Yeni sınav için üstteki seçiciden aktif döneme dönün.</div>
       <div id="sabit-kayit-onay-cubuk" class="yazdir-gizle" role="status" aria-live="polite">
         <div class="sabit-kayit-ic">
           <div class="baglam-sol">
             <button type="button" class="btn btn-hayalet btn-kucuk mobil-yan-menu-btn" id="btn-mobil-yan-menu-ac" title="Menüyü aç" aria-label="Menüyü aç">
               <svg class="ui-ikon"><use href="#i-panel-left"></use></svg>
             </button>
+            <select id="aktif-donem-sec" class="baglam-secici" aria-label="Eğitim-öğretim dönemi" title="Eğitim-öğretim yılı ve dönemi: yalnız bu dönemin dersleri görünür"></select>
             <select id="aktif-ders-sec" class="baglam-secici" aria-label="Aktif Ders"></select>
             <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-yeni-ders-modal" title="Yeni Ders Ekle veya Düzenle">
               <svg class="ui-ikon"><use href="#i-plus"></use></svg>
@@ -216,7 +218,7 @@
               <svg class="ui-ikon"><use href="#i-undo"></use></svg>
               <span>Geri Al</span>
             </button>
-            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-gorunum-modu" aria-pressed="false" title="Basit: yalnız temel adımlar görünür. Uzman: tüm gelişmiş ayarlar açılır. Hiçbir özellik silinmez.">🧭 Basit görünüm</button>
+            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-gorunum-modu" aria-pressed="false" title="Basit: yalnız temel adımlar görünür. Uzman: tüm gelişmiş ayarlar açılır. Hiçbir özellik silinmez.">🧭 Basit</button>
             <button type="button" class="btn btn-hayalet btn-kucuk btn-kaydet-onayla-ana" id="btn-genel-kaydet-uygula" title="Değişiklikleri kaydet ve uygula (Ctrl+S)">
               Kaydet
             </button>
@@ -1579,6 +1581,27 @@
           </div>
           </details>
 
+          <!-- Telefonla okunamayan kağıdı elle girme -->
+          <details class="gelismis-akordeon" id="detay-elle-kagit">
+            <summary>✍️ Kağıdı elle gir (telefonla okunamayan kağıt)</summary>
+            <div style="padding:0.5rem 0.2rem; font-size:0.82rem;">
+              <p style="margin:0 0 0.45rem; color:var(--metin-ikincil);">Öğrenciyi seçin, cevapları sırayla yazın (D/Y için D ve Y, test için A–E; boş için - ya da boşluk). Puan, sınavın cevap anahtarıyla hesaplanır. İsterseniz yalnız puan yazabilirsiniz.</p>
+              <div class="form-satir">
+                <div><label class="etiket" for="elle-ogrenci">Öğrenci</label><select id="elle-ogrenci"></select></div>
+                <div><label class="etiket" for="elle-grup">Kitapçık</label><select id="elle-grup"><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+              </div>
+              <div class="form-satir">
+                <div><label class="etiket" for="elle-dy">D/Y cevapları</label><input type="text" id="elle-dy" class="mono" placeholder="Örn: DDYDY..." autocomplete="off" /></div>
+                <div><label class="etiket" for="elle-test">Test cevapları</label><input type="text" id="elle-test" class="mono" placeholder="Örn: ABCDE..." autocomplete="off" /></div>
+              </div>
+              <div class="form-satir">
+                <div><label class="etiket" for="elle-puan">Yalnız puan (isteğe bağlı)</label><input type="number" id="elle-puan" min="0" max="100" step="0.5" placeholder="Cevap yazmadıysanız" /></div>
+                <div style="display:flex; align-items:flex-end;"><button type="button" class="btn btn-birincil btn-kucuk" id="btn-elle-kagit-ekle">Kağıdı ekle</button></div>
+              </div>
+              <div id="etiket-elle-kagit" role="status" style="font-size:0.8rem; min-height:1.1em;"></div>
+            </div>
+          </details>
+
           <!-- Öğretmen İnceleme Kuyruğu (Düşük Güvenilirlik / Silinti) -->
           <div class="kart">
             <div class="kart-baslik">
@@ -1678,7 +1701,7 @@
     <section class="sekme-panel" id="sekme-arsiv">
       <div class="kart" style="margin-bottom:0.9rem;">
         <div class="kart-baslik"><span>📚 Sınav Arşivi</span></div>
-        <p style="font-size:0.82rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">Basılan / kaydedilen sınavlar, telefonla okunan sınavlar ve kopya şüpheleri. Telefondan gelen bir sınavı kalıcı kayda almak için "Arşive kaydet"e basın.</p>
+        <p style="font-size:0.82rem; color:var(--metin-ikincil); margin:0 0 0.5rem;">Basılan / kaydedilen sınavlar, telefonla okunan sınavlar ve kopya şüpheleri. Telefondan gelen bir sınavı derse almak için "Kaydet"e basın: sınav ilgili derse kaydedilir, Değerlendirme'de notlar, soru analizi ve kopya raporu açılır. Kalıcı arşive almak isteğe bağlıdır.</p>
         <div id="arsiv-liste" class="tablo-sarmal"></div>
       </div>
       <div class="kart" id="arsiv-detay"></div>
@@ -1710,6 +1733,12 @@
     </section>
 
     <section class="sekme-panel" id="sekme-analiz" data-alt-sekme="tumu">
+      <div id="bant-telefon-sinavi" class="yazdir-gizle" hidden style="display:none; padding:0.55rem 0.8rem; margin-bottom:0.6rem; border:1px solid #93c5fd; background:#eff6ff; border-radius:8px; font-size:0.84rem; align-items:center; justify-content:space-between; gap:0.5rem; flex-wrap:wrap;">
+        <span id="bant-telefon-sinavi-metin">📱 Telefondan gelen sınav</span>
+        <span style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+          <button type="button" class="btn btn-kucuk" id="btn-telefon-sinavi-arsive-kaydet" title="Sınav bitince kalıcı arşive alın (isteğe bağlı)">🗄️ Arşive kaydet</button>
+        </span>
+      </div>
       <!-- 4 SADE KPI KARTI + AKADEMİK EK METRİK ŞERİDİ -->
       <div class="kpi-izgara-4 yazdir-gizle">
         <div class="kpi-kart">
@@ -1802,7 +1831,7 @@
           <div>
             <label class="etiket" for="kural-cift-sik-dogru">Çift Şık Doğru / Anahtar Değiştir (A Grubu)</label>
             <div style="display:flex; gap:6px;">
-              <input type="text" id="kural-cift-sik-dogru" placeholder="Örn: TEST-3:B|D" />
+              <input type="text" id="kural-cift-sik-dogru" placeholder="Örn: TEST-3:B|D · İşaretleyen doğru: TEST-4:*" title="Bir soruda birden çok şık doğruysa: TEST-3:B|D. Şıkları bozuk basılan soruda işaretleyen herkes doğru sayılsın: TEST-4:* (boş bırakan sayılmaz). Birden çok kural virgülle: TEST-4:*, TEST-5:*" />
               <button type="button" class="btn btn-birincil btn-kucuk" id="btn-yeniden-puanla">Hesapla</button>
             </div>
           </div>
@@ -2587,6 +2616,30 @@
              SEKME 8: AYARLAR (YEDEKLEME, BULUT KASA, YETKİLER VE TANILAMA)
              ==================================================================== -->
         <section class="sekme-panel" id="sekme-ayarlar">
+          <div class="kart" id="kart-donem-yonetimi">
+            <div class="kart-baslik">
+              <span>📅 Eğitim-öğretim yılı ve dönem</span>
+              <span class="rozet rozet-mavi" id="rozet-aktif-donem">—</span>
+            </div>
+            <p style="font-size:var(--yazi-sm); color:var(--metin-ikincil); margin:0 0 0.5rem;">Dersler, sınıf listeleri, sınavlar ve okumalar döneme bağlıdır. Menüde yalnız <strong>aktif dönem</strong> görünür. Eski dönemler silinmez; arşivlenir ve üstteki dönem seçicinin "Arşiv" bölümünden açılıp raporu alınabilir.</p>
+            <div id="liste-donemler" style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.6rem;"></div>
+            <div class="form-satir">
+              <div>
+                <label class="etiket" for="yeni-donem-yil">Yeni dönem: eğitim-öğretim yılı</label>
+                <select id="yeni-donem-yil"></select>
+              </div>
+              <div>
+                <label class="etiket" for="yeni-donem-yariyil">Yarıyıl</label>
+                <select id="yeni-donem-yariyil"><option value="GUZ">Güz</option><option value="BAHAR">Bahar</option><option value="YAZ">Yaz</option></select>
+              </div>
+            </div>
+            <label style="display:flex; gap:0.35rem; align-items:center; font-size:var(--yazi-sm); margin:0.2rem 0 0.5rem;"><input type="checkbox" id="yeni-donem-ders-kopyala" checked /> Dersleri yeni döneme taşı (ders bilgisi, ÖÇ ve soru bankası gelir; sınıf listesi ve sınavlar eski dönemde kalır)</label>
+            <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-yeni-donem-baslat">Yeni dönemi başlat</button>
+              <button type="button" class="btn btn-kucuk" id="btn-donem-arsivle">Açık dönemi arşivle</button>
+            </div>
+            <div id="etiket-donem-mesaj" role="status" style="font-size:var(--yazi-sm); margin-top:0.4rem; min-height:1.1em;"></div>
+          </div>
           <div class="iki-sutun-duzen">
             <div class="kart">
               <div class="kart-baslik">
@@ -3585,7 +3638,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261115f"></script>
-  <script src="studyo-uygulama.js?v=20261115f"></script>
+  <script src="guvenlik-ve-veri.js?v=20261116a"></script>
+  <script src="studyo-uygulama.js?v=20261116a"></script>
 </body>
 </html>

@@ -29,7 +29,9 @@ const LISTE = [
   { ogrNo: '2023105011', adSoyad: 'Ayşe Kaya' },
   { ogrNo: '2023104022', adSoyad: 'Mehmet Demir' },
   { ogrNo: '2023104033', adSoyad: 'Zeynep Ak' },
-  { ogrNo: '2023104044', adSoyad: 'Can Öz' }
+  { ogrNo: '2023104044', adSoyad: 'Can Öz' },
+  { ogrNo: '2023104077', adSoyad: 'Kerem Ak' },
+  { ogrNo: '2023105077', adSoyad: 'Leyla Su' }
 ];
 const YAPI = {
   dersId: 'BIL101', dersAd: 'BIL101 - Ağ Temelleri', sinavKodu: 'BIL101-VIZE',
@@ -178,6 +180,64 @@ const YAPI = {
     const okuSonra = await sayfa.evaluate(() => ({ sekme: document.body.getAttribute('data-aktif-msekme'), uyari: document.getElementById('m-uyari').textContent }));
     kontrol('Liste ekranında "Oku" önce kamerayı açar, görmeden okuma yapmaz', okuSonra.sekme === 'm-panel-tara' && /Kamera açıldı/.test(okuSonra.uyari) && (await okumalar()).length === okumaSayisiOnce, JSON.stringify(okuSonra));
 
+    // A2) Son haneleri aynı iki öğrenciden biri seçilince, ikinci kağıtta o öğrenci elenir ve kağıt kalan tek adaya gider
+    await kagitOkut('77', ['A', 'B', 'C', 'D', 'E']); // Kerem'in kağıdı
+    let r77 = await okumalar();
+    const kerem1 = r77.find((k) => k.bekliyor && /BEKLEYEN-77/.test(k.ogrNo));
+    kontrol('A2) İlk "77" kağıdı iki aday olduğu için seçim bekler', Boolean(kerem1), JSON.stringify(r77.slice(0, 3)));
+    await ata(kerem1 ? kerem1.id : '', '2023104077');
+    await kagitOkut('77', ['B', 'B', 'B', 'B', 'B']); // Leyla'nın kağıdı (farklı cevaplar)
+    r77 = await okumalar();
+    const leyla = r77.find((k) => k.ogrNo === '2023105077');
+    kontrol('A2) İkinci "77" kağıdı seçilmiş öğrenci elendiği için kendiliğinden kalan adaya (Leyla) gider', Boolean(leyla) && !leyla.bekliyor && r77.filter((k) => k.ogrNo === '2023104077').length === 1, JSON.stringify(r77.filter((k) => /77/.test(k.ogrNo))));
+    const say77 = r77.length;
+    await kagitOkut('77', ['A', 'B', 'C', 'D', 'E']); // Kerem'in kağıdı yeniden okutuldu
+    r77 = await okumalar();
+    kontrol('A2) Aynı kağıt yeniden okutulursa yine kendi öğrencisine gider, yeni kayıt açılmaz', r77.length === say77 && r77.filter((k) => k.ogrNo === '2023104077').length === 1, `${say77} -> ${r77.length}`);
+
+    // A4) Soluk iz: "işaretli say" düğmesi cevabı sayar ve yeniden puanlar
+    const solukHazir = await sayfa.evaluate(() => {
+      const d = window.__mobilDurumOku();
+      const k = d.okumaSonuclari.find((x) => x.ogrNo === '2023105077');
+      if (!k) return null;
+      k.testDetay[0].verilen = ''; k.testDetay[0].sonuc = 'BOS';
+      k.incelemeKuyrugu = [{ alan: 'Test Soru 1', detay: 'Soluk iz (A) — boş sayıldı, kağıdı kontrol edin' }];
+      return { id: k.id, puan: k.toplamPuan };
+    });
+    await sayfa.evaluate(() => { document.querySelector('.mobil-sekme-btn[data-msekme="m-panel-liste"]').click(); window.__mobilListeYenile(); });
+    await bekle(300);
+    const solukDugme = await sayfa.evaluate((id) => Boolean(document.querySelector(`[data-soluk-say="${id}"]`)), solukHazir ? solukHazir.id : '');
+    if (solukDugme) await sayfa.evaluate((id) => document.querySelector(`[data-soluk-say="${id}"]`).click(), solukHazir.id);
+    await bekle(400);
+    const solukSonra = await sayfa.evaluate((id) => { const k = window.__mobilDurumOku().okumaSonuclari.find((x) => x.id === id); return k ? { v: k.testDetay[0].verilen, puan: k.toplamPuan, ik: (k.incelemeKuyrugu || []).length } : null; }, solukHazir ? solukHazir.id : '');
+    kontrol('A4) Listede "soluk" düğmesi çıkar; basınca iz cevap sayılır, kontrol kalkar ve puan yeniden hesaplanır', solukDugme && solukSonra && solukSonra.v === 'A' && solukSonra.ik === 0 && solukSonra.puan > solukHazir.puan, JSON.stringify({ solukDugme, solukHazir, solukSonra }));
+
+    // A5) Telefonda silinen okuma sunucuya "silindi" olayı olarak kuyruğa girer
+    const silOlay = await sayfa.evaluate((id) => {
+      const once = JSON.parse(localStorage.getItem('MOBIL_V2_OUTBOX_V2') || '[]').length;
+      const b = document.querySelector(`[data-tablo-sil="${id}"]`); if (b) b.click();
+      const kuyruk = JSON.parse(localStorage.getItem('MOBIL_V2_OUTBOX_V2') || '[]');
+      return { once, son: kuyruk.length, tur: (kuyruk[kuyruk.length - 1] || {}).tur, veriId: ((kuyruk[kuyruk.length - 1] || {}).veri || {}).id };
+    }, solukHazir ? solukHazir.id : '');
+    kontrol('A5) Telefonda silinen okuma bilgisayara gitmek üzere OKUDU_SIL olayı olarak kuyruğa girer', silOlay.tur === 'OKUDU_SIL' && silOlay.veriId === (solukHazir && solukHazir.id), JSON.stringify(silOlay));
+
+    // A1) Öğrenci numaralı kağıt "kağıttan anahtar" ile okunursa onay sorulur; hayır denirse anahtar değişmez
+    const anahtarOnce = await sayfa.evaluate(() => JSON.stringify(window.__mobilDurumOku().sinavYapisi.cevapAnahtarlari.A));
+    await sayfa.evaluate(() => { window.__sonConfirm = ''; window.__eskiConfirm2 = window.confirm; window.confirm = (m) => { window.__sonConfirm = m; return false; }; });
+    {
+      const url = await sayfa.evaluate(() => {
+        const C = window.SinavOptikCekirdek; const d = window.__mobilDurumOku(); const cv = document.createElement('canvas');
+        C.cizSentetikOptikFormCanvas(cv, d.sinavYapisi, { grup: 'A', ogrNoKod: '22', dyCevaplar: ['Y', 'Y', 'Y', 'Y', 'Y'], testCevaplar: ['E', 'E', 'E', 'E', 'E'], klasikPuanlar: [] });
+        return cv.toDataURL('image/png');
+      });
+      fs.writeFileSync(girdiYolu, Buffer.from(url.split(',')[1], 'base64'));
+      await (await sayfa.$('#input-mobil-master-foto')).uploadFile(girdiYolu);
+      await bekle(1500);
+    }
+    const anahtarOnay = await sayfa.evaluate(() => ({ m: window.__sonConfirm, a: JSON.stringify(window.__mobilDurumOku().sinavYapisi.cevapAnahtarlari.A) }));
+    await sayfa.evaluate(() => { window.confirm = window.__eskiConfirm2; });
+    kontrol('A1) Kağıttan anahtar okunurken öğrenci numarası/anahtar değişimi için onay sorulur; "hayır" ile anahtar aynı kalır', /CEVAP ANAHTARI/.test(anahtarOnay.m) && /öğrenci numarası/.test(anahtarOnay.m) && /DEĞİŞECEK/.test(anahtarOnay.m) && anahtarOnay.a === anahtarOnce, `${anahtarOnay.m} · ${anahtarOnay.a === anahtarOnce}`);
+
     // 7) Ders bağlantısız kurulum QR'ı başka dersin listesini taşımaz; ders kodu eşleşen dersin listesine geçer
     const LISTE3 = [{ ogrNo: '2024300001', adSoyad: 'Deniz Su' }, { ogrNo: '2024300002', adSoyad: 'Ece Gül' }];
     const ogr3 = await sayfa.evaluate((l) => window.SinavOptikCekirdek.uretOgrenciQrPaketi(l, { tabanAdres: location.origin, dersId: 'BIL303', dersKod: 'BIL303', dersAd: 'BIL303 — Veri Yapıları' }), LISTE3);
@@ -197,6 +257,12 @@ const YAPI = {
     await sayfa.goto(await bagsizUrl('BIL999 - Bilinmeyen Ders'), { waitUntil: 'networkidle0' });
     await bekle(700);
     const d999 = await sayfa.evaluate(() => { const d = window.__mobilDurumOku(); return { id: d.dersId, ogr: d.ogrenciler.length, p101: ((d.dersPaketleriHaritasi || {}).BIL101 || {}).ogrenciler }; });
+    await sayfa.goto(await bagsizUrl('BIL777 - Veri Yapıları'), { waitUntil: 'networkidle0' });
+    await bekle(700);
+    const dAd = await sayfa.evaluate(() => { const d = window.__mobilDurumOku(); return { id: d.dersId, ogr: d.ogrenciler.map((o) => o.ogrNo) }; });
+    kontrol('A3) Ders kodu farklı ama ders ADI aynıysa doğru dersin listesine geçer', dAd.id === 'BIL303' && dAd.ogr.includes('2024300001'), JSON.stringify(dAd));
+    await sayfa.goto(await bagsizUrl('BIL999 - Bilinmeyen Ders'), { waitUntil: 'networkidle0' });
+    await bekle(700);
     kontrol('Eşleşen ders yoksa başka dersin listesi taşınmaz; önceki dersin listesi korunur', d999.ogr === 0 && Array.isArray(d999.p101) && d999.p101.length === LISTE.length, JSON.stringify({ ...d999, p101: (d999.p101 || []).length }));
 
     kontrol('JS hatası / uyarı penceresi yok', hatalar.length === 0, hatalar.join(' | '));
