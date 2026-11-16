@@ -160,12 +160,18 @@ const KASA = {
     await kagitOkut(GIZLI_VIZE, ['A', 'B', 'C', 'D', 'E'], '053');
     d = await durumOku();
     kontrol('Vize kağıdı Vize anahtarıyla 100 puan', d.aktifSinavId === 'S-VIZE' && d.okumalar.length === 1 && d.okumalar[0].no === '247419053' && Number(d.okumalar[0].puan) === 100, JSON.stringify(d));
+    const ses1 = await tel.evaluate(() => window.__sonSesliOnay || '');
+    kontrol('Sesli onay: okunan kağıdın adı ve puanı söylenir ("Deneme Bir, 100")', ses1 === 'Deneme Bir, 100', ses1);
+    await tel.click('#btn-mobil-ses');
 
     // Vize açıkken FINAL kağıdı → telefon Final'e kendisi geçer, Final anahtarıyla puanlar, Vize sonuçları korunur
     await kagitOkut(GIZLI_FINAL, ['E', 'E', 'E', 'E', 'E'], '205');
     d = await durumOku();
     const uyari = await tel.$eval('#m-uyari', (e) => e.textContent);
     kontrol('Final kağıdı okununca telefon Final sınavına kendisi geçti', d.aktifSinavId === 'S-FINAL', `${JSON.stringify(d)} · ${uyari}`);
+    const ses2 = await tel.evaluate(() => window.__sonSesliOnay || '');
+    await tel.click('#btn-mobil-ses');
+    kontrol('Sesli onay "Ses" düğmesiyle kapanır (sessizken okunan kağıt söylenmez)', ses2 === 'Deneme Bir, 100', ses2);
     kontrol('Final kağıdı Final anahtarıyla 100 puan; Final listesinde yalnız bu kağıt var', d.okumalar.length === 1 && d.okumalar[0].no === '257419205' && Number(d.okumalar[0].puan) === 100, JSON.stringify(d.okumalar));
     await tel.click('#btn-mobil-ders-degistir');
     await tel.click('#mobil-sinav-secici-liste [data-sinav-id="S-VIZE"]');

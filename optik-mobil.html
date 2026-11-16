@@ -3330,6 +3330,21 @@
         }
       }
 
+      /* Kağıt okununca adı ve puanı sesli söyler: öğretmen ekrana bakmadan yanlış eşleşmeyi duyar. "Ses" düğmesiyle kapanır. */
+      function sesliOnayOku(sonuc) {
+        try {
+          if (!sesAcik || !sonuc || typeof window.speechSynthesis === 'undefined' || typeof window.SpeechSynthesisUtterance !== 'function') return '';
+          const ad = String(sonuc.adSoyad || '').replace(/^Kodlanan No:.*$/i, '').trim();
+          const metin = `${ad || 'Numara ' + String(sonuc.okunanNoKod || sonuc.ogrNo || '').replace(/\?/g, ' ')}, ${Math.round(Number(sonuc.toplamPuan) || 0)}`;
+          const s = new window.SpeechSynthesisUtterance(metin);
+          s.lang = 'tr-TR';
+          s.rate = 1.05;
+          window.speechSynthesis.cancel();
+          window.speechSynthesis.speak(s);
+          window.__sonSesliOnay = metin;
+          return metin;
+        } catch (_) { return ''; }
+      }
       function bipCal(basarili = true) {
         if (!sesAcik) return;
         try {
@@ -3754,6 +3769,7 @@
         if (!hud || !sonuc) return;
         clearTimeout(hudSolmaZamanlayici);
         const belirsiz = kagitKimlikBelirsizMi(sonuc);
+        if (!belirsiz) sesliOnayOku(sonuc);
         hud.hidden = false;
         hud.style.opacity = '1';
         hud.className = `vizor-canli-hud ${belirsiz ? 'hud-uyari' : 'hud-basarili'}`;

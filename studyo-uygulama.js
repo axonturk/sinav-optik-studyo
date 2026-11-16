@@ -5267,7 +5267,8 @@
         const b = okumalar.find((o) => String(o.ogrNo) === String(c.ogrenci2No));
         const satir = C.karsilastirIkiOkuma(a, b);
         return `<h3 style="font-size:11.5pt;margin:12px 0 2px">${i + 1}. ${k(ogrAdiBul(c.ogrenci1No, c.ogrenci1Ad))} (${k(c.ogrenci1No)}) — ${k(ogrAdiBul(c.ogrenci2No, c.ogrenci2Ad))} (${k(c.ogrenci2No)}) · Kitapçık ${k(c.grup)} · Risk: ${c.riskSeviyesi === 'YUKSEK' ? 'YÜKSEK' : 'ORTA'}</h3>
-          <div>Ortak yanlış: <strong>${c.ortakYanlisSayisi}</strong> · Ortak doğru: ${c.ortakDogruSayisi} · Farklı: ${c.farkliCevapSayisi} · Benzerlik: %${c.benzerlikYuzde} · Ortak yanlış maddeler: ${k((c.ortakYanlisMaddeler || []).join(', '))}</div>
+          <div>Nadir ortak yanlış (şüpheye sayılan): <strong>${c.ortakYanlisSayisi}</strong> — ${k((c.ortakYanlisMaddeler || []).join(', '))} · Ortak doğru: ${c.ortakDogruSayisi} · Farklı: ${c.farkliCevapSayisi} · Benzerlik: %${c.benzerlikYuzde}</div>
+          ${(c.populerOrtakYanlisMaddeler || []).length ? `<div>Sınıfın çoğunun yaptığı ortak yanlışlar (şüpheye sayılmadı): ${k(c.populerOrtakYanlisMaddeler.join(', '))}</div>` : ''}
           <table><tr><th>Soru</th>${satir.map((r) => `<th>${r.soru}</th>`).join('')}</tr>
           <tr><td>${k(c.ogrenci1No)}</td>${satir.map((r) => `<td class="${r.ortakYanlis ? 'ky' : ''}">${k(r.cevap1 || '-')}</td>`).join('')}</tr>
           <tr><td>${k(c.ogrenci2No)}</td>${satir.map((r) => `<td class="${r.ortakYanlis ? 'ky' : ''}">${k(r.cevap2 || '-')}</td>`).join('')}</tr></table>`;
@@ -6399,8 +6400,9 @@
               <tr>
                 <td><strong>${C.kacisHTML(c.ogrenci1Ad)}</strong> &amp; <strong>${C.kacisHTML(c.ogrenci2Ad)}</strong></td>
                 <td><span class="rozet rozet-mavi">${C.kacisHTML(c.grup)}</span></td>
-                <td class="mono" style="color:var(--tehlike); font-weight:700;" title="${C.kacisHTML(maddeler.join(', '))}">
-                  ${c.ortakYanlisSayisi} Ortak Yanlış (${C.kacisHTML(maddeler.slice(0, 3).join(', '))})
+                <td class="mono" title="${C.kacisHTML(maddeler.join(', '))}">
+                  <div style="color:var(--tehlike); font-weight:700;">${c.ortakYanlisSayisi} nadir ortak yanlış (${C.kacisHTML(maddeler.slice(0, 3).join(', '))}${maddeler.length > 3 ? '…' : ''})</div>
+                  ${(c.populerOrtakYanlisMaddeler || []).length ? `<div data-populer-yanlis style="font-weight:400; color:var(--metin-ikincil); font-size:var(--yazi-xs);">Herkesin yaptığı (sayılmadı): ${C.kacisHTML(c.populerOrtakYanlisMaddeler.join(', '))}</div>` : ''}
                 </td>
                 <td class="mono">${c.ortakDogruSayisi}</td>
                 <td class="mono"><strong>%${c.benzerlikYuzde}</strong> (HH:${c.harppHoganIndeks})</td>

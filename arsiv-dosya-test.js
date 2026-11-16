@@ -111,7 +111,7 @@ const OLAYLAR = [
     await pc.click('#arsiv-detay [data-kopya-tutanak]');
     await bekle(300);
     const tutanak = await pc.evaluate(() => window.__sonKopyaTutanakHTML || '');
-    kontrol('Kopya şüphe tutanağı (yazdırılabilir): yöntem açıklaması, cevap tablosu ve imza alanları', /Tutanak Eki/.test(tutanak) && /Ortak yanlış: <strong>13/.test(tutanak) && /Gözetmen \(Ad Soyad \/ İmza\)/.test(tutanak) && /tek başına hüküm değildir/.test(tutanak));
+    kontrol('Kopya şüphe tutanağı (yazdırılabilir): yöntem açıklaması, cevap tablosu ve imza alanları', /Tutanak Eki/.test(tutanak) && /Nadir ortak yanlış \(şüpheye sayılan\): <strong>13/.test(tutanak) && /Gözetmen \(Ad Soyad \/ İmza\)/.test(tutanak) && /tek başına hüküm değildir/.test(tutanak));
     // Arşive kaydet ve yeniden açınca kalıcı
     await pc.click('#arsiv-liste [data-arsive-kaydet]');
     await bekle(300);

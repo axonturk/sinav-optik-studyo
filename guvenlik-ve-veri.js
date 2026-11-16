@@ -3680,6 +3680,7 @@
         let farkliCevapSayisi = 0;
         let populerOrtakYanlis = 0;
         const ortakYanlisMaddeler = [];
+        const populerOrtakYanlisMaddeler = [];
 
         const aTest = a.testDetay || [];
         const bTest = b.testDetay || [];
@@ -3692,6 +3693,7 @@
           if (qa.verilen === qb.verilen) {
             if (qa.sonuc === 'YANLIS' && populerMi(a.grup || 'A', `T${q + 1}`, qa.verilen)) {
               populerOrtakYanlis++;
+              populerOrtakYanlisMaddeler.push(`T${q + 1}(${qa.verilen})`);
             } else if (qa.sonuc === 'YANLIS') {
               ortakYanlisSayisi++;
               ortakYanlisMaddeler.push(`T${q + 1}(${qa.verilen})`);
@@ -3713,6 +3715,7 @@
           if (qa.verilen === qb.verilen) {
             if (qa.sonuc === 'YANLIS' && populerMi(a.grup || 'A', `DY${q + 1}`, qa.verilen)) {
               populerOrtakYanlis++;
+              populerOrtakYanlisMaddeler.push(`DY${q + 1}(${qa.verilen})`);
             } else if (qa.sonuc === 'YANLIS') {
               ortakYanlisSayisi++;
               ortakYanlisMaddeler.push(`DY${q + 1}(${qa.verilen})`);
@@ -3745,6 +3748,7 @@
             harppHoganIndeks,
             ortakYanlisMaddeler,
             populerOrtakYanlis,
+            populerOrtakYanlisMaddeler,
             riskSeviyesi: (ortakYanlisSayisi >= 5 || harppHoganIndeks >= 1.5) ? 'YUKSEK' : 'ORTA'
           });
         }

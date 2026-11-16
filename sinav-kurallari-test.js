@@ -90,6 +90,19 @@ try {
   kontrol('5) K3: sorusu olmayan seçili hafta bulunur', ku.bosHaftalar.join() === '3', JSON.stringify(ku.bosHaftalar));
   kontrol('5) K3: seçili haftalarda yetersiz soru türü bulunur (D/Y 2 gerekli, 1 var)', ku.yetersizTurler.length === 1 && ku.yetersizTurler[0].tur === 'dy' && ku.yetersizTurler[0].var === 1, JSON.stringify(ku.yetersizTurler));
   kontrol('5) Ö6: A kitapçığı test dizisi tahmin edilebilir bulunur', ku.tahminEdilebilir.length === 1 && ku.tahminEdilebilir[0].grup === 'A' && ku.tahminEdilebilir[0].bolum === 'test', JSON.stringify(ku.tahminEdilebilir));
+  // 6) Ö8: kopya raporunda herkesin yaptığı yanlışlar ayrı listelenir ve şüpheye sayılmaz
+  {
+    const det = (s, a) => s.split('').map((v, i) => ({ verilen: v, sonuc: v === a[i] ? 'DOGRU' : 'YANLIS' }));
+    const ANA = 'ABCDEABCDE';
+    const sinif = [];
+    for (let i = 0; i < 6; i++) sinif.push({ ogrNo: `S${i}`, adSoyad: `Öğr ${i}`, grup: 'A', testDetay: det(`${'E'}BCDEABCD${i % 2 ? 'A' : 'E'}`, ANA), dyDetay: [] });
+    sinif.push({ ogrNo: 'K1', adSoyad: 'Kopya Bir', grup: 'A', testDetay: det('EDDDDABCDE', ANA), dyDetay: [] });
+    sinif.push({ ogrNo: 'K2', adSoyad: 'Kopya İki', grup: 'A', testDetay: det('EDDDDABCDE', ANA), dyDetay: [] });
+    const ciftler = C.tespitEtKopyaBenzerlikCiftleri(sinif);
+    const k = ciftler.find((c) => [c.ogrenci1No, c.ogrenci2No].sort().join() === 'K1,K2');
+    kontrol('6) Ö8: nadir ortak yanlışlar şüpheye sayılır, herkesin yaptığı (T1=E) ayrı listelenir ve sayılmaz',
+      k && k.ortakYanlisSayisi === 3 && (k.populerOrtakYanlisMaddeler || []).join() === 'T1(E)' && !k.ortakYanlisMaddeler.includes('T1(E)'), JSON.stringify(k));
+  }
 } catch (e) {
   hata++;
   console.log('  ✗ HATA beklenmeyen:', e.stack || e.message);
