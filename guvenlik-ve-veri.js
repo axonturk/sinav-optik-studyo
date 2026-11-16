@@ -3633,7 +3633,7 @@
     const atamalar = (Array.isArray(kaynak.atamalar) ? kaynak.atamalar : []).filter((a) => String(a.yeniNo) === no || String(a.eskiNo) === no);
     const yoklama = (Array.isArray(kaynak.yoklamalar) ? kaynak.yoklamalar : []).filter((y) => String(y.ogrNo) === no);
     // Yoklamada imzası yok (gelmedi) ama aynı sınavın kağıdı okunmuş: kağıdı başkası doldurmuş olabilir
-    yoklama.filter((y) => y.durum === 'gelmedi').forEach((y) => {
+    yoklama.filter((y) => y.durum === 'gelmedi' && !y.gr).forEach((y) => {
       const s = sinavlar.find((x) => x.sinavKodu && String(x.sinavKodu) === String(y.sinavKodu || ''));
       if (s) supheler.push({ tur: 'YOKLAMA_UYUMSUZ', sinavAd: s.sinavAd, digerNo: '', digerAd: '', risk: 'YUKSEK' });
     });

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Cep Optik Okuyucu (Mobil OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261116e" />
+  <link rel="stylesheet" href="ortak.css?v=20261116f" />
   <style>
     html, body {
       margin: 0;
@@ -1024,7 +1024,7 @@
   </nav>
 
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261116e"></script>
+  <script src="guvenlik-ve-veri.js?v=20261116f"></script>
   <script>
     (function () {
       'use strict';
@@ -4827,8 +4827,13 @@
         if (!ogrenciler.length) { mobilUyariGoster('⚠️ Bu derste öğrenci listesi yok; önce listeyi yükleyin.'); return false; }
         const okunan = new Set((mobilDurum.okumaSonuclari || []).filter((x) => x && x.ogrNo && !kagitKimlikBelirsizMi(x)).map((x) => String(x.ogrNo).trim()));
         const bekleyen = (mobilDurum.okumaSonuclari || []).filter((x) => kagitKimlikBelirsizMi(x)).length;
-        const girmeyen = ogrenciler.filter((o) => !okunan.has(String(o.ogrNo || '').trim()));
-        if (!girmeyen.length) { mobilUyariGoster('✅ Bütün öğrencilerin kağıdı okundu; girmeyen yok.', 'basari'); return false; }
+        const onceki = mobilDurum.sinavYapisi.girmeyenler;
+        const oncedenGonderilen = new Set(onceki && onceki.kod === String(mobilDurum.sinavYapisi.sinavKodu || '') && Array.isArray(onceki.nolar) ? onceki.nolar : []);
+        const okunmayanlar = ogrenciler.filter((o) => !okunan.has(String(o.ogrNo || '').trim()));
+        if (!okunmayanlar.length) { mobilUyariGoster('✅ Bütün öğrencilerin kağıdı okundu; girmeyen yok.', 'basari'); return false; }
+        // Daha önce GR gönderilenler tekrar gönderilmez (aynı olaylar sunucuda çoğalmasın)
+        const girmeyen = okunmayanlar.filter((o) => !oncedenGonderilen.has(String(o.ogrNo || '').trim()));
+        if (!girmeyen.length) { mobilUyariGoster(`ℹ️ Okunmayan ${okunmayanlar.length} öğrenci zaten "girmedi (GR)" olarak gönderildi.`, 'basari'); return false; }
         const ornek = girmeyen.slice(0, 8).map((o) => `• ${o.ogrNo} ${o.adSoyad || ''}`).join('\n');
         const mesaj = `Kağıdı okunmayan ${girmeyen.length} öğrenci "sınava girmedi (GR)" olarak bilgisayara gönderilsin mi?\n\n${ornek}${girmeyen.length > 8 ? `\n… ve ${girmeyen.length - 8} kişi daha` : ''}`
           + (bekleyen ? `\n\nDikkat: ${bekleyen} kağıt hâlâ öğrenci seçimi bekliyor; önce onları eşleştirin, yoksa o öğrenciler de GR sayılır.` : '');
@@ -4840,7 +4845,7 @@
             satirlar: nolar.slice(i, i + 40).map((no) => ({ ogrNo: no, durum: 'gelmedi', gr: true }))
           });
         }
-        mobilDurum.sinavYapisi.girmeyenler = { kod: String(mobilDurum.sinavYapisi.sinavKodu || ''), nolar };
+        mobilDurum.sinavYapisi.girmeyenler = { kod: String(mobilDurum.sinavYapisi.sinavKodu || ''), nolar: okunmayanlar.map((o) => String(o.ogrNo).trim()) };
         guncelleMobilDersPaketKaydi();
         kaydetYerelDepoya();
         guncelleMobilSonucListesi();
