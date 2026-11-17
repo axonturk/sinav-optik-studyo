@@ -2616,16 +2616,40 @@ html { scroll-padding-top: 104px; }
 @media (max-width: 640px) { .adim-cubugu { padding:6px 8px; gap:6px; } .adim-dugme { padding:3px 8px 3px 3px; } .adim-liste li + li::before { width:10px; } }
 
 /* ── Masam: Bugün yapılacaklar ── */
-.masam-yapilacaklar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 12px; }
+.masam-yapilacaklar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 14px; padding:14px 16px; border-radius:14px; background:#111827; color:#f8fafc; }
 .masam-yapilacaklar:empty { display:none; }
-.yapilacak-baslik { font-size:var(--yazi-sm); font-weight:700; margin-right:2px; }
-.yapilacak-cip { display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:var(--yazi-sm); padding:5px 12px; border-radius:999px; cursor:pointer; border:1px solid rgba(234,179,8,0.55); background:rgba(234,179,8,0.12); color:var(--metin); }
-.yapilacak-cip strong { font-variant-numeric:tabular-nums; }
-.yapilacak-cip.cip-kirmizi { border-color:rgba(220,38,38,0.45); background:rgba(220,38,38,0.08); }
-.yapilacak-cip.cip-mavi { border-color:rgba(47,91,234,0.4); background:rgba(47,91,234,0.08); }
-.yapilacak-cip:hover { filter:brightness(0.97); }
-.yapilacak-cip:focus-visible { outline:2px solid var(--birincil); outline-offset:2px; }
-.yapilacak-tamam { font-size:var(--yazi-sm); color:var(--basari, #15803d); padding:5px 12px; border-radius:999px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.3); }
+.yapilacak-baslik { display:flex; flex-direction:column; margin-right:8px; line-height:1.2; }
+.yapilacak-baslik strong { font-size:var(--yazi-md, 15px); }
+.yapilacak-baslik small { font-size:var(--yazi-xs); color:#cbd5e1; margin-top:2px; }
+.yapilacak-cip { display:inline-flex; align-items:center; gap:8px; font:inherit; font-size:var(--yazi-sm); padding:6px 12px 6px 6px; border-radius:10px; cursor:pointer; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:#f8fafc; }
+.yapilacak-cip .cip-sayi { display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:26px; padding:0 6px; border-radius:7px; background:#f59e0b; color:#111827; font-weight:800; font-variant-numeric:tabular-nums; }
+.yapilacak-cip.cip-kirmizi .cip-sayi { background:#f87171; }
+.yapilacak-cip.cip-mavi .cip-sayi { background:#93c5fd; }
+.yapilacak-cip:hover { background:rgba(255,255,255,0.12); }
+.yapilacak-cip:focus-visible { outline:2px solid #93c5fd; outline-offset:2px; }
+.yapilacak-tamam { font-size:var(--yazi-sm); color:#86efac; padding:6px 12px; border-radius:10px; background:rgba(134,239,172,0.1); border:1px solid rgba(134,239,172,0.3); }
+
+/* ── Masam kartı: renkli durum başlığı + büyük sayılar ── */
+#masam-kartlar .kart.masam-kart { margin:0; padding:0 14px 12px; display:flex; flex-direction:column; gap:6px; overflow:hidden; border-radius:12px; }
+#masam-kartlar .masam-kart > div:first-child { order:0; padding-top:10px; }
+.masam-durum { order:-1; display:flex; justify-content:space-between; align-items:center; gap:8px; margin:0 -14px; padding:7px 14px; font-size:var(--yazi-sm); font-weight:700; border-bottom:1px solid var(--kenar); }
+.masam-durum-sag { font-weight:600; font-size:var(--yazi-xs); opacity:.9; }
+.masam-durum.durum-yesil { background:rgba(21,128,61,0.1); color:#15803d; }
+.masam-durum.durum-sari { background:rgba(234,179,8,0.14); color:#a16207; }
+.masam-durum.durum-kirmizi { background:rgba(220,38,38,0.1); color:#b91c1c; }
+.masam-durum.durum-mavi { background:rgba(47,91,234,0.09); color:#1d4ed8; }
+.masam-durum.durum-gri { background:var(--bg-ikincil); color:var(--metin-ikincil); }
+[data-tema="koyu"] .masam-durum.durum-yesil { color:#4ade80; }
+[data-tema="koyu"] .masam-durum.durum-sari { color:#facc15; }
+[data-tema="koyu"] .masam-durum.durum-kirmizi { color:#f87171; }
+[data-tema="koyu"] .masam-durum.durum-mavi { color:#93c5fd; }
+.masam-sayilar { display:grid; grid-template-columns:repeat(3, 1fr); border:1px solid var(--kenar); border-radius:10px; overflow:hidden; font-variant-numeric:tabular-nums; }
+.masam-sayilar > div { display:flex; flex-direction:column; align-items:center; padding:8px 4px; }
+.masam-sayilar > div + div { border-left:1px solid var(--kenar); }
+.masam-sayilar strong { font-size:1.3rem; line-height:1.1; }
+.masam-sayilar span { font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--metin-ikincil); }
+.masam-sayilar .sayi-kirmizi strong { color:var(--tehlike, #b91c1c); }
+.masam-alt { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; font-size:var(--yazi-sm); margin-top:2px; }
 #masam-kartlar .kart.masam-vurgu { box-shadow:0 0 0 3px rgba(47,91,234,0.45); transition:box-shadow .2s; }
 
 /* ── Öğrenci: Sonuçlarım ── */

@@ -86,6 +86,12 @@ function kontrol(ad, kosul, detay = '') {
     kontrol('Derse eşleşmeyen telefon sınavı Masam\'da uyarı olarak görünür; menüde rozet', uyari.gorunur && /1 telefon sınavı hiçbir derse eşleşmedi/.test(uyari.metin) && /Bilinmeyen Quiz/.test(uyari.metin) && rozet.gorunur && rozet.sayi === '1', `${JSON.stringify(uyari)} · ${JSON.stringify(rozet)}`);
     let k1 = await kart(kablolamaId);
     const yapilacak = await pc.evaluate(() => { const y = document.getElementById('masam-yapilacaklar'); return { metin: y.textContent.replace(/\s+/g, ' '), cip: y.querySelectorAll('[data-masam-git]').length, adimGizli: document.getElementById('adim-cubugu').hidden }; });
+    const a1 = await pc.evaluate(() => {
+      const kart = document.querySelector('#masam-kartlar .masam-kart');
+      const ser = kart && kart.querySelector('[data-masam-durum]');
+      return { serit: ser ? ser.getAttribute('data-masam-durum') : '', ustte: ser ? getComputedStyle(ser).order === '-1' : false, bagla: document.querySelectorAll('#masam-uyari [data-masam-bagla]').length, secenek: document.querySelectorAll('#masam-uyari [data-masam-bagla-ders] option').length, bant: /iş seni bekliyor/.test(document.getElementById('masam-yapilacaklar').textContent) };
+    });
+    kontrol('A1: kartta renkli durum başlığı (üstte); eşleşmeyen sınav için ders listesi + "Derse bağla"; bantta "N iş seni bekliyor"', a1.serit === 'Telefondan kağıt geldi' && a1.ustte && a1.bagla === 1 && a1.secenek >= 1 && a1.bant, JSON.stringify(a1));
     kontrol('Masam\'da "Bugün yapılacaklar": derse bağlanacak ve kaydedilecek telefon sınavı; Masam\'da adım çubuğu yok', /Bugün yapılacaklar/.test(yapilacak.metin) && /1 telefon sınavı derse bağlanacak/.test(yapilacak.metin) && /1 telefon sınavı derse kaydedilecek/.test(yapilacak.metin) && yapilacak.cip === 2 && yapilacak.adimGizli, JSON.stringify(yapilacak));
     await pc.evaluate(() => document.querySelector('#masam-yapilacaklar [data-masam-git^="kart:"]').click());
     const vurgu = await pc.evaluate(() => Boolean(document.querySelector('#masam-kartlar .kart.masam-vurgu')));
@@ -123,6 +129,8 @@ function kontrol(ad, kosul, detay = '') {
 
     await masamAc();
     k1 = await kart(kablolamaId);
+    const serit2 = await pc.evaluate((id) => { const x = document.querySelector(`#masam-kartlar [data-masam-ders="${id}"] [data-masam-durum]`); return x ? x.getAttribute('data-masam-durum') : ''; }, kablolamaId);
+    kontrol('A1: okunan kağıdı olan kartın durumu "Notlar hazır"', serit2 === 'Notlar hazır', serit2);
     kontrol('Kart: "1 okundu", kısa "telefonla eşit ✓"; alt satır sınav türünü gösterir, ders adını tekrar etmez; kartta tek düğme', k1 && /1 okundu/.test(k1.metin) && k1.esit === '1' && /telefonla eşit ✓/.test(k1.metin) && k1.sinavSatir === 'Vize' && k1.dugme === 1, JSON.stringify(k1));
 
     // Sınav açık DEĞİLKEN telefondan yeni kağıt gelir → kırmızı + Eşitle → yalnız yeni kağıt eklenir
@@ -134,6 +142,8 @@ function kontrol(ad, kosul, detay = '') {
     k1 = await kart(kablolamaId);
     const yapE = await pc.evaluate(() => document.getElementById('masam-yapilacaklar').textContent.replace(/\s+/g, ' '));
     kontrol('Yapılacaklarda "1 ders telefonla eşitlenecek" görünür', /1 ders telefonla eşitlenecek/.test(yapE), yapE);
+    const serit3 = await pc.evaluate((id) => { const x = document.querySelector(`#masam-kartlar [data-masam-ders="${id}"] [data-masam-durum]`); return x ? x.getAttribute('data-masam-durum') : ''; }, kablolamaId);
+    kontrol('A1: telefonda yeni kağıt varken kartın durumu "Telefonla eşit değil"', serit3 === 'Telefonla eşit değil', serit3);
     kontrol('Telefondan yeni kağıt gelince kart sayı farkını gösterir ve "Eşitle" sunar', k1 && k1.esit === '0' && k1.esitle && /Telefondan 2 · Derste 1/.test(k1.metin), JSON.stringify(k1));
     await pc.evaluate(() => document.querySelector('#masam-kartlar [data-masam-esitle]').click());
     await bekle(300);
@@ -353,6 +363,13 @@ function kontrol(ad, kosul, detay = '') {
     await bekle(300);
     const anahtarli = await pc.evaluate(() => ({ ort: document.getElementById('ist-ortalama').textContent.trim(), makbuz: document.getElementById('bant-telefon-sinavi-metin').textContent }));
     kontrol('Telefondan anahtar gelince derse kayıtlı sınav tamamlanır ve doğru puanlanır (hepsi doğru: 100)', anahtarli.ort === '100' && /cevap anahtarı telefondan geri yüklendi/.test(anahtarli.makbuz), JSON.stringify(anahtarli));
+
+    await masamAc();
+    const baglaOnce = await pc.evaluate(() => Boolean(document.querySelector('#masam-uyari [data-masam-bagla="ZZQUIZ-1"]')));
+    await pc.evaluate((id) => { const s2 = document.querySelector('#masam-uyari [data-masam-bagla-ders="ZZQUIZ-1"]'); s2.value = id; document.querySelector('#masam-uyari [data-masam-bagla="ZZQUIZ-1"]').click(); }, kablolamaId);
+    await bekle(500);
+    const baglaSonra = await pc.evaluate(() => ({ panel: (document.querySelector('.sekme-panel.aktif') || {}).id, ders: document.getElementById('aktif-ders-sec').value, sinav: document.getElementById('sec-kayitli-sinav-ust').value }));
+    kontrol('A1: eşleşmeyen telefon sınavı seçilen derse "Derse bağla" ile kaydedilir ve notları açılır', baglaOnce && baglaSonra.panel === 'sekme-analiz' && baglaSonra.ders === kablolamaId && /ZZQUIZ-1/.test(baglaSonra.sinav), JSON.stringify(baglaSonra));
 
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
