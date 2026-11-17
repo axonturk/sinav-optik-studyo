@@ -337,6 +337,23 @@ function kontrol(ad, kosul, detay = '') {
     const silSonra = await pc.evaluate(() => ({ var: [...document.querySelectorAll('#arsiv-liste tbody tr')].some((t) => /BOS KAYIT DENEME/.test(t.textContent)), makbuz: document.getElementById('rozet-kayit-durumu').textContent }));
     kontrol('Arşivde boş stüdyo kaydında "Sil" var (telefon sınavlarında yok); onayla silinir, makbuz çıkar', silOnce.var && silOnce.sil && !silOnce.telefonSil && !silSonra.var && /Silindi: BOS KAYIT DENEME/.test(silSonra.makbuz), `${JSON.stringify(silOnce)} · ${JSON.stringify(silSonra)}`);
 
+    // Anahtarsız kaydedilen telefon sınavı: puanlar sıfırlanmaz; anahtar sonradan gelince tamamlanır (Güvenlik Duvarı hatası)
+    const KOD_A = '74118888-ARA-2026'; // Kablolama'nın kodu yukarıdaki "Düzelt" adımında 74118888 oldu
+    const okA = (id, ogrNo, ad, kodN, puan) => Object.assign(ok(id, ogrNo, ad, kodN), { toplamPuan: puan });
+    await gonder(KOD_A, 'OKUDU_GUNCELLE', okA('A1', '247419001', 'AYŞE YILMAZ', '01', 80));
+    await gonder(KOD_A, 'OKUDU_GUNCELLE', okA('A2', '247419002', 'MEHMET KAYA', '02', 60));
+    await senkron();
+    await masamAc();
+    await pc.evaluate((k) => { const b = document.querySelector(`#masam-kartlar [data-masam-telkaydet="${k}"]`); if (b) b.click(); }, KOD_A);
+    await bekle(500);
+    const anahtarsiz = await pc.evaluate(() => ({ okunan: document.getElementById('ist-ogrenci-sayisi').textContent.trim(), ort: document.getElementById('ist-ortalama').textContent.trim(), makbuz: document.getElementById('bant-telefon-sinavi-metin').textContent, madde: document.querySelectorAll('#tablo-madde-analizi tr').length, bos: /önce Okuma/.test(document.getElementById('tablo-madde-analizi').textContent) }));
+    kontrol('Anahtarsız gelen sınav: puanlar sıfırlanmaz (ortalama 70), anahtar kağıtlardan çıkarılır, soru analizi dolar', anahtarsiz.okunan === '2' && anahtarsiz.ort === '70' && !anahtarsiz.bos && /doğru işaretlerden çıkarıldı/.test(anahtarsiz.makbuz), JSON.stringify(anahtarsiz));
+    await gonder(KOD_A, 'SINAV_TANIMI', { ad: '74112317 — Kablolama', dySayisi: 5, testSayisi: 5, dyToplamPuan: 50, testToplamPuan: 50, cevapAnahtarlari: { A: { dy: ['D', 'D', 'D', 'Y', 'D'], test: ['A', 'B', 'C', 'D', 'E'] } } });
+    await senkron();
+    await bekle(300);
+    const anahtarli = await pc.evaluate(() => ({ ort: document.getElementById('ist-ortalama').textContent.trim(), makbuz: document.getElementById('bant-telefon-sinavi-metin').textContent }));
+    kontrol('Telefondan anahtar gelince derse kayıtlı sınav tamamlanır ve doğru puanlanır (hepsi doğru: 100)', anahtarli.ort === '100' && /cevap anahtarı telefondan geri yüklendi/.test(anahtarli.makbuz), JSON.stringify(anahtarli));
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;
