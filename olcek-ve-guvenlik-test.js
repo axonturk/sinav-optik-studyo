@@ -227,11 +227,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v45), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v46), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v45, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v45'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v46, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v46'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
@@ -1407,7 +1407,8 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
         okumaSayisi: window.__mobilDurumOku().okumaSayisi,
         rozetMetin: rozet ? rozet.textContent : '',
         rozetGorunur: Boolean(rozet && !rozet.hidden),
-        tasmaYok: document.documentElement.scrollWidth <= window.innerWidth
+        tasmaYok: document.documentElement.scrollWidth <= window.innerWidth,
+        serit: { okunan: document.getElementById('mds-okunan').textContent, gonderilen: document.getElementById('mds-gonderilen').textContent, bekleyen: document.getElementById('mds-bekleyen').textContent, gorunur: getComputedStyle(document.getElementById('mobil-durum-serit')).display !== 'none' }
       };
     });
     // Şimdi #baglan=1 QR açılınca outbox otomatik gönderilmeli
@@ -1416,8 +1417,13 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
     await bekle(350);
     const baglantiSonrasiOb = await v2MobilSayfa.evaluate(() => ({
       outbox: window.__mobilV2OutboxOku(),
-      rozet: (document.getElementById('rozet-mobil-bekleyen') || {}).textContent || ''
+      rozet: (document.getElementById('rozet-mobil-bekleyen') || {}).textContent || '',
+      serit: { okunan: document.getElementById('mds-okunan').textContent, gonderilen: document.getElementById('mds-gonderilen').textContent, bekleyen: document.getElementById('mds-bekleyen').textContent, baglanti: document.getElementById('mds-baglanti').dataset.durum }
     }));
+    kontrol('[41b] Telefon durum şeridi: gönderilmeyen kağıt "Bekleyen"de görünür; bağlanınca "Gönderilen"e geçer ve "Bilgisayara bağlı" yazar',
+      mobilCevrimdisiDurum.serit.gorunur && Number(mobilCevrimdisiDurum.serit.okunan) === mobilCevrimdisiDurum.okumaSayisi && Number(mobilCevrimdisiDurum.serit.bekleyen) >= 1 &&
+      baglantiSonrasiOb.serit.bekleyen === '0' && baglantiSonrasiOb.serit.gonderilen === baglantiSonrasiOb.serit.okunan && baglantiSonrasiOb.serit.baglanti === 'bagli',
+      JSON.stringify({ once: mobilCevrimdisiDurum.serit, sonra: baglantiSonrasiOb.serit }));
     await v2MobilSayfa.close();
     await v2MobilBaglam.close();
     kontrol(
