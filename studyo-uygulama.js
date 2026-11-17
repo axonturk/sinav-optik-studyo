@@ -5303,7 +5303,7 @@
       const uyari = basildi
         ? 'Bu sınav BASILMIŞ görünüyor ama hiç okuması yok.\nSilerseniz bu sınavın kağıtları ileride okunursa cevap anahtarı bulunamaz.'
         : 'Bu kayıt hiç basılmamış ve okuması yok.';
-      if (!window.confirm(`"${k.ad || k.sinavKodu}" kaydı silinsin mi?\n\n${uyari}\nSilme kalıcıdır, geri alınamaz.`)) return;
+      if (!window.confirm(`"${k.ad || k.sinavKodu}" kaydı silinsin mi?\n\n${uyari}\nSildikten hemen sonra çıkan "Geri Al" ile geri getirebilirsiniz; sonrasında silme kalıcıdır.`)) return;
       kaydetSonGeriAlYedegi(`Boş Kayıt Silindi (${k.ad || k.sinavKodu})`);
       if (k.id === durum.aktifKayitliSinavId) yukleKayitliSinavSnapshot('');
       durum.kayitliSinavlar = (durum.kayitliSinavlar || []).filter((x) => x && x.id !== id);
