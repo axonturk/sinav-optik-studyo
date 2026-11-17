@@ -343,6 +343,9 @@ code, pre, .mono {
 
 /* Ana Kapsayıcı ve Grid */
 .ana-kapsayici {
+  /* Esnek sütun içinde auto kenar boşluğu öğeyi içeriğe göre daraltır; tam genişlik ver (Masam gibi kısa sayfalar daralmasın) */
+  width: 100%;
+  box-sizing: border-box;
   max-width: 1600px;
   margin: 0 auto;
   padding: var(--b-4) var(--b-6) var(--b-12);

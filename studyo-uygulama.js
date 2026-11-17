@@ -15996,6 +15996,25 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       verileriKaydet();
       return yeniler.length;
     };
+    // Masam kartının alt satırı: sınav türü + tarih (başlıktaki ders adını tekrar etmez)
+    const masamSinavEtiketi = (ks, dd) => {
+      const kod = String(ks.sinavKodu || '');
+      let tur = String(ks.sinavTuru || '').split(/[\s(]/)[0];
+      if (!tur) {
+        const m = /(VIZE|FINAL|BUT|BÜT|MAZERET|QUIZ|ARA)/i.exec(kod + ' ' + String(ks.ad || ''));
+        const ad = { VIZE: 'Vize', FINAL: 'Final', BUT: 'Bütünleme', 'BÜT': 'Bütünleme', MAZERET: 'Mazeret', QUIZ: 'Quiz', ARA: 'Ara sınav' };
+        tur = m ? (ad[m[1].toUpperCase()] || m[1]) : '';
+      }
+      let tarih = String(ks.sinavTarihi || '').trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(tarih)) tarih = tarih.split('-').reverse().join('.');
+      if (!tarih) { const ms = kayitliSinavZamaniMs(ks); if (ms) tarih = new Date(ms).toLocaleDateString('tr-TR'); }
+      const parcalar = [tur || (ks.kaynak === 'telefon' ? 'Telefon sınavı' : 'Sınav'), tarih].filter(Boolean);
+      // Sınav adındaki ders kodu dersin koduyla tutmuyorsa göster (yanlış derse kayıt ya da yazım hatası olabilir)
+      const adKodu = (String(ks.ad || '').match(/^\s*(\d{6,9})/) || [])[1] || '';
+      const dersKodu = (String(dd.kod || '').match(/(\d{6,9})/) || [])[1] || '';
+      const farkli = adKodu && dersKodu && adKodu !== dersKodu ? adKodu : '';
+      return { metin: parcalar.join(' · '), farkli };
+    };
     window.__cizMasam = () => {
       const kutu = document.getElementById('masam-kartlar');
       const uyari = document.getElementById('masam-uyari');
@@ -16039,24 +16058,26 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         const supheli = okumalar.filter((r) => r && (/^BEKLEYEN/i.test(String(r.ogrNo || '')) || r.supheliMi || r.durum === 'BEKLEYEN' || r.numaraEslesmediMi)).length;
         const kesin = Boolean((durum.kesinlesmisSinavHaritasi || {})[`${dd.id}::${ks.id}`]);
         let telBilgi = '';
+        let telFark = '';
         if (ks.kaynak === 'telefon') {
           // Açık sınavın kağıtları doğrudan derse işlenir; açık değilken gelenler telefon kovasında bekler
           const dersteNo = new Set(okumalar.map((o) => String(o.ogrNo || '').trim()));
           const eksik = telefonSinavOkumalari(ks.sinavKodu).filter((o) => !dersteNo.has(String(o.ogrNo || '').trim())).length;
           const telToplam = okumalar.length + eksik;
+          // Her şey yolundaysa kısa ✓; uzun satır yalnız sayılar tutmadığında
           telBilgi = eksik === 0
-            ? `<div data-masam-esit="1" style="margin-top:6px; font-size:var(--yazi-sm); color:var(--basari, #15803d);">📱 Telefondan ${telToplam} · Derste ${okumalar.length} ✓</div>`
+            ? `<span data-masam-esit="1" title="Telefondan ${telToplam} kağıt · Derste ${okumalar.length} kağıt" style="color:var(--basari, #15803d);">📱 telefonla eşit ✓</span>`
+            : '';
+          telFark = eksik === 0 ? ''
             : `<div data-masam-esit="0" style="margin-top:6px; font-size:var(--yazi-sm); color:var(--tehlike, #b91c1c); display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span>📱 Telefondan ${telToplam} · Derste ${okumalar.length}</span><button type="button" class="btn btn-kucuk btn-tehlike" data-masam-esitle="${k(ks.id)}">Eşitle</button></div>`;
         }
-        return `<div class="kart" data-masam-ders="${k(dd.id)}" style="margin:0; padding:12px;">${baslik}
-          <div style="font-size:var(--yazi-sm); color:var(--metin-ikincil); margin:2px 0 8px;">${k(ks.ad || ks.sinavKodu || 'Sınav')}${kesin ? ' · <strong>Kesinleşti ✓</strong>' : ''}</div>
-          <div style="display:flex; gap:12px; flex-wrap:wrap; font-variant-numeric:tabular-nums;" data-masam-sayilar>
-            <span><strong>${okumalar.length}</strong> okundu</span><span><strong>${gr}</strong> girmedi</span>${supheli ? `<span style="color:var(--tehlike, #b91c1c);"><strong>${supheli}</strong> şüpheli</span>` : ''}
-          </div>${telBilgi}${telSatir}
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
-            <button type="button" class="btn btn-birincil btn-kucuk" data-masam-notlar="${k(dd.id)}|${k(ks.id)}">Notları aç</button>
-            <button type="button" class="btn btn-kucuk" data-masam-hazirla="${k(dd.id)}">＋ Yeni sınav</button>
-          </div></div>`;
+        const et = masamSinavEtiketi(ks, dd);
+        return `<div class="kart" data-masam-ders="${k(dd.id)}" style="margin:0; padding:10px 12px;">${baslik}
+          <div style="font-size:var(--yazi-sm); color:var(--metin-ikincil); margin:2px 0 6px;" data-masam-sinav>${k(et.metin)}${kesin ? ' · <strong>Kesinleşti ✓</strong>' : ''}${et.farkli ? ` · <span style="color:var(--tehlike, #b91c1c);" title="Sınav adındaki ders kodu bu dersin koduyla aynı değil; yazım hatası ya da yanlış derse kayıt olabilir">⚠ sınavda kod ${k(et.farkli)}</span>` : ''}</div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:var(--yazi-sm); font-variant-numeric:tabular-nums;" data-masam-sayilar>
+            <span><strong>${okumalar.length}</strong> okundu</span><span><strong>${gr}</strong> girmedi</span>${supheli ? `<span style="color:var(--tehlike, #b91c1c);"><strong>${supheli}</strong> şüpheli</span>` : ''}${telBilgi}
+            <button type="button" class="btn btn-birincil btn-kucuk" data-masam-notlar="${k(dd.id)}|${k(ks.id)}" style="margin-left:auto;">Notları aç</button>
+          </div>${telFark}${telSatir}</div>`;
       }).join('');
     };
     const masamTikla = (e) => {

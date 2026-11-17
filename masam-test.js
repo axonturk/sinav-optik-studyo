@@ -70,7 +70,7 @@ function kontrol(ad, kosul, detay = '') {
       const k = document.querySelector(`#masam-kartlar [data-masam-ders="${id}"]`);
       if (!k) return null;
       const esit = k.querySelector('[data-masam-esit]');
-      return { metin: k.textContent.replace(/\s+/g, ' ').trim(), esit: esit ? esit.getAttribute('data-masam-esit') : '', telKaydet: Boolean(k.querySelector('[data-masam-telkaydet]')), esitle: Boolean(k.querySelector('[data-masam-esitle]')) };
+      return { metin: k.textContent.replace(/\s+/g, ' ').trim(), esit: esit ? esit.getAttribute('data-masam-esit') : '', telKaydet: Boolean(k.querySelector('[data-masam-telkaydet]')), esitle: Boolean(k.querySelector('[data-masam-esitle]')), sinavSatir: ((k.querySelector('[data-masam-sinav]') || {}).textContent || '').split(' · ')[0], dugme: k.querySelectorAll('button').length };
     }, dersId);
 
     const KOD = '74112317-VIZE-2026';
@@ -106,7 +106,7 @@ function kontrol(ad, kosul, detay = '') {
 
     await masamAc();
     k1 = await kart(kablolamaId);
-    kontrol('Kart: "1 okundu" ve "Telefondan 1 · Derste 1 ✓"', k1 && /1 okundu/.test(k1.metin) && k1.esit === '1' && /Telefondan 1 · Derste 1 ✓/.test(k1.metin), JSON.stringify(k1));
+    kontrol('Kart: "1 okundu", kısa "telefonla eşit ✓"; alt satır sınav türünü gösterir, ders adını tekrar etmez; kartta tek düğme', k1 && /1 okundu/.test(k1.metin) && k1.esit === '1' && /telefonla eşit ✓/.test(k1.metin) && k1.sinavSatir === 'Vize' && k1.dugme === 1, JSON.stringify(k1));
 
     // Sınav açık DEĞİLKEN telefondan yeni kağıt gelir → kırmızı + Eşitle → yalnız yeni kağıt eklenir
     await pc.evaluate(() => { const s = document.getElementById('sec-kayitli-sinav-ust'); s.value = ''; s.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -120,7 +120,7 @@ function kontrol(ad, kosul, detay = '') {
     await bekle(300);
     k1 = await kart(kablolamaId);
     const makbuzE = await pc.evaluate(() => document.getElementById('rozet-kayit-durumu').textContent);
-    kontrol('Eşitle yeni kağıdı derse ekler: "2 okundu", "Telefondan 2 · Derste 2 ✓"', k1 && k1.esit === '1' && /2 okundu/.test(k1.metin) && /1 yeni kağıt derse eklendi/.test(makbuzE), `${JSON.stringify(k1)} · ${makbuzE}`);
+    kontrol('Eşitle yeni kağıdı derse ekler: "2 okundu", yeniden "telefonla eşit ✓"', k1 && k1.esit === '1' && /2 okundu/.test(k1.metin) && /1 yeni kağıt derse eklendi/.test(makbuzE), `${JSON.stringify(k1)} · ${makbuzE}`);
 
     // GR: telefondan "girmedi" gelen öğrenci sayılır
     await gonder(KOD, 'YOKLAMA', { sayfa: 1, toplamSayfa: 1, kaynak: 'okuma-bitir', satirlar: [{ ogrNo: '247419099', durum: 'gelmedi', gr: true }] });
