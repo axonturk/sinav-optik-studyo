@@ -5089,6 +5089,15 @@
     sinavArsiviniKaydet();
     return true;
   }
+  /* Boş stüdyo kaydı: hiç basılmamış, okuması yok, kesinleşmemiş, telefondan gelmemiş — güvenle silinebilir */
+  function bosStudyoKaydiMi(k) {
+    if (!k || k.kaynak === 'telefon' || k.basildiKilidi || (k.basimGecmisi || []).length) return false;
+    if (Object.keys(durum.kesinlesmisSinavHaritasi || {}).some((a) => a.endsWith(`::${k.id}`))) return false;
+    const kova = (durum.okumaSonuclariHaritasi || {})[`${k.dersId || 'genel'}::${k.id}`];
+    if (Array.isArray(kova) && kova.length) return false;
+    if (k.id === durum.aktifKayitliSinavId && (durum.okumaSonuclari || []).length) return false;
+    return true;
+  }
   /* Arşiv sayfasındaki tüm sınavlar (tek liste) */
   function tumArsivSinavlari() {
     const sonuc = [];
@@ -5117,7 +5126,7 @@
     (durum.kayitliSinavlar || []).forEach((k) => {
       // Telefondan derse alınan sınav kendi telefon/arşiv satırında gösterilir (çift satır olmasın)
       if (k && k.kaynak === 'telefon' && sonuc.some((x) => x.sinavKodu === k.sinavKodu)) return;
-      sonuc.push({ anahtar: `KS-${k.id}`, ad: k.ad || k.sinavKodu || 'Kayıtlı sınav', sinavKodu: k.sinavKodu || '', kaynak: 'Stüdyo (basılan / kaydedilen)', tarihMs: Number(k.guncellemeMs || k.olusturmaMs) || 0, okumalar: [], arsivde: true, studyo: true, basimSayisi: (k.basimGecmisi || []).length });
+      sonuc.push({ anahtar: `KS-${k.id}`, ad: k.ad || k.sinavKodu || 'Kayıtlı sınav', sinavKodu: k.sinavKodu || '', kaynak: 'Stüdyo (basılan / kaydedilen)', tarihMs: Number(k.guncellemeMs || k.olusturmaMs) || 0, okumalar: [], arsivde: true, studyo: true, basimSayisi: (k.basimGecmisi || []).length, ksId: k.id, silinebilir: bosStudyoKaydiMi(k) });
     });
     if ((durum.okumaSonuclari || []).length) {
       sonuc.push({ anahtar: 'AKTIF', ad: 'Stüdyodaki açık sınavın okumaları', sinavKodu: '', kaynak: 'Okuma sekmesi', tarihMs: Date.now(), okumalar: durum.okumaSonuclari.map((o) => Object.assign({}, o, { adSoyad: ogrAdiBul(o.ogrNo, o.adSoyad) })), arsivde: false });
@@ -5138,7 +5147,7 @@
           <td>${tarihMetni(s.tarihMs)}</td>
           <td>${s.studyo ? '—' : s.okumalar.length}</td>
           <td>${s.studyo ? '—' : (ciftler.length ? `<span class="rozet rozet-kirmizi">${ciftler.length} çift</span>` : '<span class="rozet rozet-yesil">yok</span>')}</td>
-          <td style="white-space:nowrap;">${s.studyo ? '' : `<button type="button" class="btn btn-kucuk" data-arsiv-ac="${C.kacisHTML(s.anahtar)}">Aç</button>`}
+          <td style="white-space:nowrap;">${s.studyo ? (s.silinebilir ? `<button type="button" class="btn btn-kucuk btn-tehlike" data-arsiv-sil="${C.kacisHTML(s.ksId)}" title="Basılmamış ve okuması olmayan boş kaydı sil">Sil</button>` : '') : `<button type="button" class="btn btn-kucuk" data-arsiv-ac="${C.kacisHTML(s.anahtar)}">Aç</button>`}
             ${s.anahtar.startsWith('TEL-') || /^Telefon \(arşivde\)|^Derste kayıtlı/.test(s.kaynak) ? `<button type="button" class="btn btn-birincil btn-kucuk" data-derse-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Sınavı ilgili derse kaydet; Değerlendirme'de notlar, soru analizi ve kopya raporu açılır">${s.derste ? 'Derste aç' : 'Kaydet'}</button>` : ''}
             ${!s.arsivde && s.anahtar.startsWith('TEL-') ? `<button type="button" class="btn btn-hayalet btn-kucuk" data-arsive-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Kalıcı arşive al (isteğe bağlı)">Arşive al</button>` : ''}</td>
         </tr>`;
@@ -5155,6 +5164,21 @@
       cizSinavArsivi();
     }));
     kutu.querySelectorAll('[data-arsiv-ac]').forEach((b) => b.addEventListener('click', () => cizArsivDetay(b.getAttribute('data-arsiv-ac'))));
+    kutu.querySelectorAll('[data-arsiv-sil]').forEach((b) => b.addEventListener('click', () => {
+      const id = b.getAttribute('data-arsiv-sil');
+      const k = (durum.kayitliSinavlar || []).find((x) => x && x.id === id);
+      if (!k) return;
+      if (arsivDonemiAcikMi()) { guncelleKayitDurumCubuguUI('hata', '🗄️ Arşiv dönemi salt okunurdur. Değişiklik için dönemi aktif yapın.'); return; }
+      if (!bosStudyoKaydiMi(k)) { guncelleKayitDurumCubuguUI('hata', '⚠️ Bu kayıt basılmış ya da okuması var; silinmedi.'); cizSinavArsivi(); return; }
+      if (!window.confirm(`"${k.ad || k.sinavKodu}" kaydı silinsin mi?\n\nBu kayıt hiç basılmamış ve okuması yok. Silme kalıcıdır, geri alınamaz.`)) return;
+      kaydetSonGeriAlYedegi(`Boş Kayıt Silindi (${k.ad || k.sinavKodu})`);
+      if (k.id === durum.aktifKayitliSinavId) yukleKayitliSinavSnapshot('');
+      durum.kayitliSinavlar = (durum.kayitliSinavlar || []).filter((x) => x && x.id !== id);
+      verileriKaydet({ zorlaEz: true, silmeOnayi: true });
+      guncelleKayitliSinavlarCubuguUI();
+      cizSinavArsivi();
+      guncelleKayitDurumCubuguUI('kaydedildi', `🗑️ Silindi: ${k.ad || k.sinavKodu}`);
+    }));
   }
   function cizArsivDetay(anahtar) {
     const s = tumArsivSinavlari().find((x) => x.anahtar === anahtar);
