@@ -128,12 +128,29 @@ async function girisYap(pc) {
           const eskiClick = HTMLAnchorElement.prototype.click; const eskiUrl = URL.createObjectURL;
           URL.createObjectURL = (b) => { blob = b; return 'blob:test'; };
           HTMLAnchorElement.prototype.click = function () { ad = this.download; };
+          try { localStorage.removeItem('SINAV_INDIR_BICIM_V1'); } catch (_) {}
           document.getElementById('btn-telefon-sinavi-csv').click();
+          const pencereAcildi = Boolean(document.getElementById('indir-bicim-pencere')) && !ad;
+          const varsayilanExcel = document.activeElement && document.activeElement.id === 'indir-bicim-xlsx';
+          document.getElementById('indir-bicim-csv').click();
+          const pencereKapandi = !document.getElementById('indir-bicim-pencere');
+          const makbuz = document.getElementById('rozet-kayit-durumu').textContent;
+          const csvAd = ad;
+          const csvBlob = blob;
+          ad = '';
+          document.getElementById('btn-telefon-sinavi-csv').click();
+          const hatirlandi = document.activeElement && document.activeElement.id === 'indir-bicim-csv';
+          document.getElementById('indir-bicim-xlsx').click();
+          const xlsxAd = ad;
+          ad = csvAd;
+          blob = csvBlob;
           HTMLAnchorElement.prototype.click = eskiClick; URL.createObjectURL = eskiUrl;
           const secenek = (Array.from(sec.options).find((o) => o.value === '74191113-VIZE-2026') || {}).textContent || '';
           const uyari = document.getElementById('telefon-sinavlari-kutu').textContent;
-          return { ad, metin: blob ? (await blob.text()).slice(0, 200) : '', secenek, uyari: /telefondaki ders kodu/.test(uyari) };
+          return { ad, metin: blob ? (await blob.text()).slice(0, 200) : '', secenek, uyari: /telefondaki ders kodu/.test(uyari), pencereAcildi, varsayilanExcel, pencereKapandi, makbuz, hatirlandi, xlsxAd };
         });
+        kontrol('İndirme sürprizsiz: önce biçim sorulur (Excel varsayılan), seçince indirilir, makbuz gösterilir, son seçim hatırlanır',
+          csv.pencereAcildi && csv.varsayilanExcel && csv.pencereKapandi && /İndirildi: .*\.csv/.test(csv.makbuz) && csv.hatirlandi && /^Ağ_Teknolojilerine_Giriş_74191113-VIZE-2026\.xlsx$/.test(csv.xlsxAd), JSON.stringify(csv));
         kontrol('Excel: dosya adı sınav adı + kodu; ilk satırlarda "Sınav" ve "Sınav kodu"; seçicide kağıt kodu; kod farkı uyarısı', /^Ağ_Teknolojilerine_Giriş_74191113-VIZE-2026\.csv$/.test(csv.ad) && /"Sınav";"74191113 — Ağ Teknolojilerine Giriş"/.test(csv.metin) && /"Sınav kodu";"74191113-VIZE-2026"/.test(csv.metin) && /^74191113 — Ağ Teknolojilerine Giriş/.test(csv.secenek) && csv.uyari, JSON.stringify(csv));
       }
       // GR: telefonda "Okumayı bitir" → girmeyen öğrenci arşiv detayında GR satırı olur
@@ -319,7 +336,7 @@ async function girisYap(pc) {
         kap.remove();
         return sonuc;
       });
-      kontrol('D1) Satır kaydıran uzun şıklar tek sütuna geçer, şıklar üst üste binmez; kısa şıklar iki sütunda kalır', d1.uzun === 'siklar-alt-alta' && d1.kisa === 'siklar-iki-sutun' && d1.ust === 0, JSON.stringify(d1));
+      kontrol('D1) Satır kaydıran uzun şıklar tek sütuna geçer (ve ekranda işaretlenir), şıklar üst üste binmez; kısa şıklar iki sütunda kalır', d1.uzun.split(' ').includes('siklar-alt-alta') && d1.uzun.split(' ').includes('siklar-uzun-isaret') && d1.kisa === 'siklar-iki-sutun' && d1.ust === 0, JSON.stringify(d1));
     }
 
     // ---------------- C: eğitim-öğretim yılı / dönem ----------------
@@ -366,9 +383,14 @@ async function girisYap(pc) {
       await bekle(500);
       const c4 = await dn();
       kontrol('C4) Arşiv dönemi açılıp görüntülenebilir; üstte "arşiv dönemi" bandı çıkar', c4.donem === '2026-2027-GUZ' && c4.bant && c4.telSinav, JSON.stringify(c4));
+      const kilitIdler = ['btn-genel-kaydet-uygula', 'btn-aktif-dersi-sil', 'btn-elle-kagit-ekle', 'input-omr-foto', 'kural-iptal-soru', 'kural-cift-sik-dogru'];
+      const arsivKilit = await pc.evaluate((ids) => ids.map((id) => { const e = document.getElementById(id); return e ? e.disabled : null; }), kilitIdler);
+      kontrol('Ö3) Arşiv dönemi salt okunur: Kaydet, ders silme, elle kağıt, kağıt okuma ve kural alanları kapalı', arsivKilit.every((x) => x === true), JSON.stringify(arsivKilit));
       await pc.evaluate(() => { const s = document.getElementById('aktif-donem-sec'); s.value = '2026-2027-BAHAR'; s.dispatchEvent(new Event('change', { bubbles: true })); });
       await bekle(400);
       await pc.evaluate(() => { window.confirm = window.__eskiConfirmC; });
+      const acikKilit = await pc.evaluate((ids) => ids.map((id) => { const e = document.getElementById(id); return e ? e.disabled : null; }), kilitIdler);
+      kontrol('Ö3) Aktif döneme dönünce bu alanlar yeniden açılır', acikKilit.every((x) => x === false), JSON.stringify(acikKilit));
       await pc.reload({ waitUntil: 'networkidle0' });
       await girisYap(pc);
       await bekle(300);

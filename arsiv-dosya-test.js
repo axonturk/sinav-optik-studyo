@@ -85,8 +85,16 @@ const OLAYLAR = [
     await pc.evaluate(() => { const k = document.getElementById('btn-modal-hoca-kapat'); if (k && document.getElementById('modal-hoca-giris').style.display !== 'none') k.click(); });
     await pc.evaluate(async () => { await window.__masaustuV2SenkronSimdi(); });
     await bekle(500);
-    const rozet = await pc.$eval('#rozet-okunan-kagit', (e) => e.textContent);
-    kontrol('Kenar çubuğundaki Okuma sayacı telefondan gelen kağıtları da sayar (4)', rozet === '4', rozet);
+    // Okuma sayacı yalnız SEÇİLİ dersin kağıtlarını sayar; hiçbir derse eşleşmeyen telefon sınavı sayaca katılmaz,
+    // sayacın açıklamasında ve Masam rozetinde ayrıca gösterilir (kağıtlar kaybolmuş gibi görünmez)
+    const sayac = await pc.evaluate(() => {
+      const e = document.getElementById('rozet-okunan-kagit');
+      const m = document.getElementById('rozet-masam-uyari');
+      const kova = JSON.parse(localStorage.getItem('SINAV_TELEFON_SINAVLARI_V1') || '{}');
+      return { n: e.textContent, t: e.title, masam: m && !m.hidden ? m.textContent : '', kovaSinav: Object.keys(kova).length, kovaKagit: Object.values(kova).reduce((t, k) => t + Object.keys((k && k.okumalar) || {}).length, 0) };
+    });
+    kontrol('Okuma sayacı seçili dersi sayar; derse eşleşmeyen telefon kağıtları (4) açıklamada ve Masam rozetinde gösterilir',
+      sayac.kovaKagit === 4 && sayac.n === '0' && /hiçbir derse eşleşmedi/.test(sayac.t) && Number(sayac.masam) === sayac.kovaSinav, JSON.stringify(sayac));
 
     // Sınav Arşivi
     await pc.click('.sekme-btn[data-sekme="sekme-arsiv"]');
@@ -101,9 +109,13 @@ const OLAYLAR = [
     kontrol('Yan yana cevaplarda ortak yanlış 13 soru kırmızı işaretli', kirmizi === 13, String(kirmizi));
     await pc.evaluate(() => { window.open = () => ({ document: { open() {}, write() {}, close() {} }, focus() {}, print() {} }); });
     await pc.click('#arsiv-detay [data-kopya-tutanak]');
-    await bekle(300);
+    await bekle(200);
+    const raporSecim = await pc.evaluate(() => Boolean(document.getElementById('rapor-bicim-pencere')));
+    await pc.evaluate(() => document.getElementById('rapor-bicim-pdf').click());
+    await bekle(200);
+    kontrol('Kopya tutanağında biçim sorulur (PDF / Word) ve PDF seçilince pencere kapanır', raporSecim && !(await pc.evaluate(() => Boolean(document.getElementById('rapor-bicim-pencere')))));
     const tutanak = await pc.evaluate(() => window.__sonKopyaTutanakHTML || '');
-    kontrol('Kopya şüphe tutanağı (yazdırılabilir): yöntem açıklaması, cevap tablosu ve imza alanları', /Tutanak Eki/.test(tutanak) && /Ortak yanlış: <strong>13/.test(tutanak) && /Gözetmen \(Ad Soyad \/ İmza\)/.test(tutanak) && /tek başına hüküm değildir/.test(tutanak));
+    kontrol('Kopya şüphe tutanağı (yazdırılabilir): yöntem açıklaması, cevap tablosu ve imza alanları', /Tutanak Eki/.test(tutanak) && /Nadir ortak yanlış \(şüpheye sayılan\): <strong>13/.test(tutanak) && /Gözetmen \(Ad Soyad \/ İmza\)/.test(tutanak) && /tek başına hüküm değildir/.test(tutanak));
     // Arşive kaydet ve yeniden açınca kalıcı
     await pc.click('#arsiv-liste [data-arsive-kaydet]');
     await bekle(300);

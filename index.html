@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261116f" />
+  <link rel="stylesheet" href="ortak.css?v=20261117a" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -41,6 +41,10 @@
       });
     });
   </script>
+  <style>
+    #a4-onizleme-sahne .siklar-uzun-isaret { outline: 2px dashed #eab308; outline-offset: 1px; background: rgba(234, 179, 8, 0.10); }
+    @media print { .siklar-uzun-isaret { outline: none !important; background: none !important; } }
+  </style>
 </head>
 <body>
   <!-- ÇEVRİMDIŞI VEKTÖREL İKON SPRITE (16px · stroke 1.5 · currentColor) -->
@@ -96,6 +100,13 @@
       <button type="button" class="btn btn-basari" id="btn-telefon-bagla" title="Telefonu tek karekodla bu hesaba bağla; dersler ve cevap anahtarları telefona iner" style="margin:0.35rem 0.6rem 0.2rem; justify-content:center; gap:0.4rem; font-weight:800;">
         <span aria-hidden="true">📱</span><span data-telefon-bagla-etiket>Telefonu Bağla</span>
       </button>
+      <div class="yan-menu-liste">
+        <button type="button" class="sekme-btn" data-sekme="sekme-masam" title="Masam: sınavlarınız, notlar ve telefon durumu tek yerde">
+          <svg class="ui-ikon"><use href="#i-chart"></use></svg>
+          <span class="yan-menu-metin">Masam</span>
+          <span class="sekme-rozet" id="rozet-masam-uyari" hidden title="Derse eşleşmeyen telefon sınavı">0</span>
+        </button>
+      </div>
       <div class="yan-menu-grup-baslik" title="Ders → sorular → öğrenciler → sınav kağıdı">1 · Hazırla</div>
       <div class="yan-menu-liste">
         <button type="button" class="sekme-btn" data-sekme="sekme-dersler" title="Dersler ve Bologna Öğrenim Çıktıları">
@@ -207,7 +218,7 @@
             <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-aktif-dersi-sil" title="Seçili dersi sil (Sorular arşive aktarılır; geri alınabilir)">Sil</button>
             <span class="baglam-ayrac" aria-hidden="true">›</span>
             <select id="sec-kayitli-sinav-ust" class="baglam-secici" aria-label="Aktif Sınav">
-              <option value="">Taslak (kaydedilmedi)</option>
+              <option value="">＋ Yeni sınav (taslak)</option>
             </select>
             <span class="rozet rozet-mavi" id="rozet-yasam-dongusu" title="Sınav Yaşam Döngüsü Durumu">Taslak</span>
           </div>
@@ -301,6 +312,16 @@
         <!-- ====================================================================
              SEKME 0: DERSLER & BOLOGNA ÖĞRENİM ÇIKTILARI ÖZETİ
              ==================================================================== -->
+        <section class="sekme-panel" id="sekme-masam">
+          <div class="kart">
+            <div class="kart-baslik">
+              <span>Masam</span>
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-masam-yeni-sinav">＋ Yeni sınav</button>
+            </div>
+            <div id="masam-uyari" hidden style="margin-bottom:10px;"></div>
+            <div id="masam-kartlar" style="display:grid; gap:10px; grid-template-columns:repeat(auto-fill, minmax(min(100%, 300px), 1fr));"></div>
+          </div>
+        </section>
         <section class="sekme-panel" id="sekme-dersler">
           <div class="iki-sutun-duzen">
             <div class="kart">
@@ -1865,6 +1886,19 @@
       </div>
 
       <!-- Sınava Girmeyen (GR) Mutabakat ve Kesinleştirme Kartı -->
+      <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="ogrenciler" id="kutu-ogrenci-sonuc-yayin">
+        <div class="kart-baslik">
+          <span>Öğrencilere sonuç</span>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-birincil btn-kucuk" id="btn-sonuc-yayinla">📤 Sonuçları öğrencilere aç</button>
+            <button type="button" class="btn btn-kucuk" id="btn-sonuc-geri-al">Geri al</button>
+            <button type="button" class="btn btn-kucuk" id="btn-itirazlar-yenile">İtirazlar</button>
+          </div>
+        </div>
+        <div style="font-size:var(--yazi-xs); color:var(--metin-ikincil);">Her öğrenci yalnız kendi sonucunu görür (öğrenci hesabıyla giriş yapınca): doğru/yanlış/boş, puan, soru soru kendi cevabı ve doğru cevap. Kopya şüphesi öğrenciye hiçbir zaman gösterilmez. Siz açmadan hiçbir sonuç görünmez.</div>
+        <div id="sonuc-yayin-mesaj" style="margin-top:6px; font-size:var(--yazi-sm);"></div>
+        <div id="liste-itirazlar" style="margin-top:6px;"></div>
+      </div>
       <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="ogrenciler" id="kutu-gr-mutabakat">
         <div class="kart-baslik">
           <span>Sınava girmeyenler (GR) ve yoklama</span>
@@ -1955,7 +1989,7 @@
             <span title="PUKÖ: Planla – Uygula – Kontrol et – Önlem al (sürekli iyileştirme)">Ders iyileştirme raporu (PUKÖ)</span>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button type="button" class="btn btn-kucuk" id="btn-puko-kopyala">Metni Kopyala</button>
-              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-puko-txt-indir">PUKÖ Tutanağı (.txt)</button>
+              <button type="button" class="btn btn-birincil btn-kucuk" id="btn-puko-txt-indir">PUKÖ Tutanağı (PDF / Word)</button>
             </div>
           </div>
           <textarea id="metin-puko-raporu" rows="7" readonly style="font-size:var(--yazi-xs); line-height:1.45; background:var(--bg-ikincil);" placeholder="Optik okuma veya sınav verisi geldiğinde YÖKAK / MEDEK / MÜDEK uyumlu PUKÖ özdeğerlendirme metni otomatik üretilir..."></textarea>
@@ -1966,7 +2000,7 @@
                 <option value="">— Öğrenci Seçin —</option>
               </select>
             </div>
-            <button type="button" class="btn btn-kucuk" id="btn-maddi-hata-kanit-indir">Maddi Hata Kanıt Tutanağı (.txt)</button>
+            <button type="button" class="btn btn-kucuk" id="btn-maddi-hata-kanit-indir">Maddi Hata Kanıt Tutanağı (PDF / Word)</button>
           </div>
         </div>
       </div>
@@ -2722,8 +2756,12 @@
         <div id="kiosk-hesap-adimlari" hidden>
           <div id="kiosk-h-girisli" hidden style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--kenar); border-radius:8px; margin-bottom:12px;">
             <span>Giriş yapıldı: <strong id="kiosk-h-girisli-ad"></strong></span>
-            <button type="button" class="btn btn-kucuk" id="btn-kiosk-h-cikis">Başka öğrenci</button>
+            <span style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-kucuk btn-birincil" id="btn-kiosk-sonuclarim">📄 Sonuçlarım</button>
+              <button type="button" class="btn btn-kucuk" id="btn-kiosk-h-cikis">Başka öğrenci</button>
+            </span>
           </div>
+          <div id="kiosk-sonuclarim" hidden style="margin-bottom:12px;"></div>
           <div id="kiosk-h-adim-numara" class="kiosk-h-adim">
             <label class="etiket" for="kiosk-h-ogr-no">Öğrenci numaran</label>
             <div style="display:flex; gap:8px;">
@@ -3638,7 +3676,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261116f"></script>
-  <script src="studyo-uygulama.js?v=20261116f"></script>
+  <script src="guvenlik-ve-veri.js?v=20261117a"></script>
+  <script src="studyo-uygulama.js?v=20261117a"></script>
 </body>
 </html>

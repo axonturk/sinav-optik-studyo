@@ -56,8 +56,9 @@ function kontrol(ad, kosul, detay = '') {
 
     // 3) Menü sırası
     const menu = await pc.$$eval('#ust-sekme-nav .yan-menu-grup-baslik, #ust-sekme-nav .sekme-btn[data-sekme]', (els) => els.map((e) => e.dataset.sekme || e.textContent.trim()));
-    const beklenen = ['1 · Hazırla', 'sekme-dersler', 'sekme-banka', 'sekme-ogrenciler', 'sekme-stüdyo', '2 · Sınav yap', 'sekme-omr', 'sekme-online', '3 · Sonuçlar', 'sekme-analiz', 'sekme-arsiv', 'sekme-ogrenci-dosyasi', 'sekme-kayitlar', 'sekme-sablonlar', 'sekme-ayarlar'];
-    kontrol('3) Yan menü iş akışı sırasında: Hazırla → Sınav yap → Sonuçlar, en altta Şablon/Ayarlar', JSON.stringify(menu) === JSON.stringify(beklenen), JSON.stringify(menu));
+    // Masam (sınavlar ve notlar) en üstte, iş akışı grupları altında
+    const beklenen = ['sekme-masam', '1 · Hazırla', 'sekme-dersler', 'sekme-banka', 'sekme-ogrenciler', 'sekme-stüdyo', '2 · Sınav yap', 'sekme-omr', 'sekme-online', '3 · Sonuçlar', 'sekme-analiz', 'sekme-arsiv', 'sekme-ogrenci-dosyasi', 'sekme-kayitlar', 'sekme-sablonlar', 'sekme-ayarlar'];
+    kontrol('3) Yan menü: en üstte Masam, sonra iş akışı sırasında: Hazırla → Sınav yap → Sonuçlar, en altta Şablon/Ayarlar', JSON.stringify(menu) === JSON.stringify(beklenen), JSON.stringify(menu));
     const kilavuz = {};
     for (const id of ['sekme-stüdyo', 'sekme-omr', 'sekme-analiz']) {
       await pc.click(`.sekme-btn[data-sekme="${id}"]`);

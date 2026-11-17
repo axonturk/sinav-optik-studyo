@@ -18,6 +18,11 @@ const D1 = {
       all: async () => ({ results: db.prepare(sql).all(...args) })
     });
     return yap([]);
+  },
+  // Gerçek D1 gibi: komutlar sırayla, biri hata verirse hepsi geri alınır
+  async batch(komutlar) {
+    db.exec('BEGIN');
+    try { const sonuc = []; for (const k of komutlar) sonuc.push(await k.run()); db.exec('COMMIT'); return sonuc; } catch (e) { db.exec('ROLLBACK'); throw e; }
   }
 };
 const env = { SINAV_DB: D1, OGRENCI_HESAP_ZORUNLU: '1' };
@@ -83,5 +88,24 @@ const telPaket = await istek(A, '/api/mobil-ders-paketleri', undefined, { author
 kontrol('Telefonun oturumu ders paketlerini çekebilir (kopya A)', telPaket.kod === 200 && telPaket.v.basarili === true, String(telPaket.kod));
 const esTekrar = await istek(A, '/api/telefon-eslestir/tamamla', { kod: es.v.kod });
 kontrol('Kullanılmış kod ikinci kez kullanılamaz', esTekrar.kod === 410);
+
+// Öğrenci sonucu yayını (D1): A kopyasında açılır, B kopyasında öğrenci görür; itiraz; geri al
+const yayin = await istek(A, '/api/sonuc-yayinla', { sinavId: 'KS-D1', sinavAdi: 'D1 Vize', sonuclar: [
+  { ogrNo: '2023104015', puan: 70, dogru: 2, yanlis: 1, bos: 0, sorular: [{ no: '1', verilen: 'A', dogru: 'A', durum: 'dogru' }], benzerlik: 99 },
+  { ogrNo: '2023104024', puan: 50, sorular: [] }
+] }, HB);
+kontrol('D1: öğretmen sonucu açar (2 öğrenci)', yayin.kod === 200 && yayin.v.yayinlanan === 2, JSON.stringify(yayin.v));
+const ogrGiris = await istek(B, '/api/ogrenci-hesap/giris', { ogrNo: '2023104015', sifre });
+const sonucB = await istek(A, '/api/ogrenci/sonuclarim', { ogrNo: '2023104015', girisToken: ogrGiris.v.girisToken });
+const sB = (sonucB.v.sonuclar || [])[0] || {};
+kontrol('D1: öğrenci yalnız kendi sonucunu görür (başka kopyada da); kopya alanı yok', sonucB.kod === 200 && sonucB.v.sonuclar.length === 1 && sB.ogrNo === '2023104015' && sB.puan === 70 && !/benzerlik|kopya/i.test(JSON.stringify(sonucB.v)), `${ogrGiris.kod} ${JSON.stringify(sonucB.v).slice(0, 160)}`);
+const baskasi = await istek(A, '/api/ogrenci/sonuclarim', { ogrNo: '2023104024', girisToken: ogrGiris.v.girisToken });
+kontrol('D1: başkasının numarasıyla sonuç görülemez (401)', baskasi.kod === 401);
+const itz = await istek(B, '/api/ogrenci/itiraz', { ogrNo: '2023104015', girisToken: ogrGiris.v.girisToken, yayinId: sB.yayinId, soruNo: '1', aciklama: 'kontrol eder misiniz' });
+const itzListe = await istek(A, '/api/itirazlar', {}, HB);
+kontrol('D1: itiraz kaydedilir ve öğretmenin listesinde görünür', itz.kod === 200 && (itzListe.v.itirazlar || []).some((x) => x.ogrNo === '2023104015' && x.sinavAdi === 'D1 Vize'), `${itz.kod} ${JSON.stringify(itzListe.v).slice(0, 160)}`);
+const geriD1 = await istek(B, '/api/sonuc-yayinla', { sinavId: 'KS-D1', geriAl: true }, HB);
+const sonraD1 = await istek(A, '/api/ogrenci/sonuclarim', { ogrNo: '2023104015', girisToken: ogrGiris.v.girisToken });
+kontrol('D1: geri alınınca öğrenci sonucu görmez', geriD1.kod === 200 && (sonraD1.v.sonuclar || []).length === 0, JSON.stringify(sonraD1.v));
 console.log(hata === 0 ? '\n=== WORKER + D1: TÜM KONTROLLER GEÇTİ ===' : `\n=== WORKER + D1: ${hata} HATA ===`);
 process.exit(hata ? 1 : 0);

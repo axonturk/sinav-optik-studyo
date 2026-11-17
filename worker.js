@@ -65,6 +65,8 @@ const sunucuDurumu = {
   bulutKasaSoruParcalari: new Map(),
   bulutKasalarBellek: new Map(),
   bulutGecmisBellek: new Map(),
+  ogrenciSonuclari: new Map(), // `${yayinId}|${ogrNo}` -> { baslik, veri, yayinMs } (D1 yoksa)
+  ogrenciItirazlari: [],
   ogrenciHesaplari: {}, // ogrNo -> { durum, eposta, telefon, sifreHash, kodOzeti, kodAmac, kodBitisMs, kodDeneme }
   ogrenciGirisTokenlari: new Map(), // token -> { ogrNo, bitisMs }
   ogrenciBekleyenKodlar: [] // E-posta servisi yokken (geçiş modu) öğretmenin göreceği kodlar
@@ -100,6 +102,70 @@ async function gonderOgrenciEpostasi(env, ep) {
   } catch (_) {
     return { gonderildi: false, hataKodu: 503 };
   }
+}
+
+/* ---- Öğrenci sonuçları: öğretmen yayınlar, öğrenci yalnız kendi satırını görür; kopya şüphesi hiç gönderilmez ---- */
+function sonucYayinKimligi(hoca, sinavId) {
+  return Cekirdek.uretDelilLogHash(`${hoca}|${sinavId}`, 'SONUC-YAYIN').slice(0, 24);
+}
+function temizleSonucKaydi(r) {
+  if (!r || typeof r !== 'object') return null;
+  const ogrNo = String(r.ogrNo || '').trim().slice(0, 40);
+  if (!ogrNo || /^BEKLEYEN/i.test(ogrNo) || ogrNo.includes('?')) return null;
+  const sayi = (x) => Math.max(0, Math.min(1000, Number(x) || 0));
+  const durumlar = ['dogru', 'yanlis', 'bos', 'iptal', 'herkese'];
+  const sorular = (Array.isArray(r.sorular) ? r.sorular : []).slice(0, 150).map((q) => ({
+    no: String((q && q.no) || '').slice(0, 10),
+    verilen: String((q && q.verilen) || '').replace(/[^A-EDY]/gi, '').toUpperCase().slice(0, 3),
+    dogru: String((q && q.dogru) || '').replace(/[^A-EDY|*]/gi, '').toUpperCase().slice(0, 9),
+    durum: durumlar.includes(q && q.durum) ? q.durum : 'bos'
+  }));
+  return { ogrNo, adSoyad: String(r.adSoyad || '').slice(0, 96), puan: Math.round(sayi(r.puan) * 100) / 100, dogru: sayi(r.dogru), yanlis: sayi(r.yanlis), bos: sayi(r.bos), sorular };
+}
+async function yazSonucYayini(env, hoca, yayinId, baslik, sonuclar) {
+  const zaman = Date.now();
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    const komutlar = [env.SINAV_DB.prepare('DELETE FROM ogrenci_sonuclari WHERE yayin_id = ?1').bind(yayinId)];
+    sonuclar.forEach((r) => komutlar.push(env.SINAV_DB.prepare(
+      'INSERT INTO ogrenci_sonuclari (yayin_id, ogr_no, kullanici_adi, baslik_json, veri_json, yayin_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6)'
+    ).bind(yayinId, r.ogrNo, hoca, JSON.stringify(baslik), JSON.stringify(r), zaman)));
+    await env.SINAV_DB.batch(komutlar);
+    return;
+  }
+  for (const k of Array.from(sunucuDurumu.ogrenciSonuclari.keys())) if (k.startsWith(`${yayinId}|`)) sunucuDurumu.ogrenciSonuclari.delete(k);
+  sonuclar.forEach((r) => sunucuDurumu.ogrenciSonuclari.set(`${yayinId}|${r.ogrNo}`, { baslik, veri: r, yayinMs: zaman, hoca }));
+}
+async function okuOgrenciSonuclari(env, ogrNo) {
+  let satirlar = [];
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    const r = await env.SINAV_DB.prepare('SELECT yayin_id, baslik_json, veri_json, yayin_ms FROM ogrenci_sonuclari WHERE ogr_no = ?1 ORDER BY yayin_ms DESC LIMIT 50').bind(ogrNo).all();
+    satirlar = ((r && r.results) || []).map((x) => ({ yayinId: x.yayin_id, baslik: JSON.parse(x.baslik_json || '{}'), veri: JSON.parse(x.veri_json || '{}'), yayinMs: Number(x.yayin_ms) || 0 }));
+  } else {
+    sunucuDurumu.ogrenciSonuclari.forEach((v, k) => { if (k.endsWith(`|${ogrNo}`)) satirlar.push({ yayinId: k.split('|')[0], baslik: v.baslik, veri: v.veri, yayinMs: v.yayinMs }); });
+    satirlar.sort((a, b) => b.yayinMs - a.yayinMs);
+  }
+  return satirlar.map((x) => Object.assign({ yayinId: x.yayinId, yayinMs: x.yayinMs, sinavAdi: x.baslik.sinavAdi || '', dersAdi: x.baslik.dersAdi || '', kurallarNotu: x.baslik.kurallarNotu || '' }, x.veri));
+}
+async function yazItiraz(env, kayit) {
+  const k = Object.assign({}, kayit, { zamanMs: Date.now() });
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    await env.SINAV_DB.prepare('INSERT INTO ogrenci_itirazlari (kullanici_adi, yayin_id, sinav_adi, ogr_no, soru_no, aciklama, zaman_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
+      .bind(k.hoca, k.yayinId, k.sinavAdi, k.ogrNo, k.soruNo, k.aciklama, k.zamanMs).run();
+    return;
+  }
+  sunucuDurumu.ogrenciItirazlari.push(k);
+}
+async function listeleItirazlar(env, hoca) {
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    const r = await env.SINAV_DB.prepare('SELECT yayin_id, sinav_adi, ogr_no, soru_no, aciklama, zaman_ms FROM ogrenci_itirazlari WHERE kullanici_adi = ?1 ORDER BY zaman_ms DESC LIMIT 200').bind(hoca).all();
+    return ((r && r.results) || []).map((x) => ({ yayinId: x.yayin_id, sinavAdi: x.sinav_adi, ogrNo: x.ogr_no, soruNo: x.soru_no, aciklama: x.aciklama, zamanMs: Number(x.zaman_ms) || 0 }));
+  }
+  return sunucuDurumu.ogrenciItirazlari.filter((x) => x.hoca === hoca).slice(-200).reverse()
+    .map((x) => ({ yayinId: x.yayinId, sinavAdi: x.sinavAdi, ogrNo: x.ogrNo, soruNo: x.soruNo, aciklama: x.aciklama, zamanMs: x.zamanMs }));
 }
 
 function ogrenciGirisTokenDogrula(token, ogrNo) {
@@ -682,6 +748,13 @@ async function hazirlaV2D1Tablolar(env) {
       ),
       env.SINAV_DB.prepare(
         'CREATE INDEX IF NOT EXISTS idx_bulut_kasa_parca_kullanici ON bulut_kasa_soru_parcalari (kullanici_adi, guncelleme_ms DESC)'
+      ),
+      env.SINAV_DB.prepare(
+        'CREATE TABLE IF NOT EXISTS ogrenci_sonuclari (yayin_id TEXT NOT NULL, ogr_no TEXT NOT NULL, kullanici_adi TEXT NOT NULL, baslik_json TEXT NOT NULL, veri_json TEXT NOT NULL, yayin_ms INTEGER NOT NULL, PRIMARY KEY (yayin_id, ogr_no))'
+      ),
+      env.SINAV_DB.prepare('CREATE INDEX IF NOT EXISTS idx_ogrenci_sonuclari_ogr ON ogrenci_sonuclari (ogr_no, yayin_ms DESC)'),
+      env.SINAV_DB.prepare(
+        'CREATE TABLE IF NOT EXISTS ogrenci_itirazlari (id INTEGER PRIMARY KEY AUTOINCREMENT, kullanici_adi TEXT NOT NULL, yayin_id TEXT NOT NULL, sinav_adi TEXT NOT NULL, ogr_no TEXT NOT NULL, soru_no TEXT NOT NULL, aciklama TEXT NOT NULL, zaman_ms INTEGER NOT NULL)'
       )
     ]);
     sunucuDurumu.v2TablolarHazir = true;
@@ -1785,6 +1858,63 @@ export default {
         sebZorunlu: Boolean(s.sebZorunlu),
         agKisitli: Boolean(s.izinliAg)
       });
+    }
+
+    // ---- Öğrenci sonuçları: öğretmen yayınlar / geri alır / itirazları okur; öğrenci yalnız kendi sonucunu görür ----
+    if (metot === 'POST' && (yol === '/api/sonuc-yayinla' || yol === '/api/itirazlar')) {
+      try {
+        let govde = {};
+        try { govde = await okuJsonGovde(request); } catch (_) { govde = {}; }
+        const token = cozHocaTokenIstekten(request, govde, urlNesne);
+        if (!token || !sunucuDurumu.aktifHocaTokenlar.has(token)) return gonderJson(401, { hata: 'Öğretmen oturumu gerekli.' });
+        const yetki = await dogrulaOmrVeyaHocaToken(env, token, '');
+        const hoca = String((yetki && ((yetki.oturum && yetki.oturum.kullaniciAdi) || yetki.kullaniciAdi)) || '').trim().toLowerCase();
+        if (!hoca) return gonderJson(401, { hata: 'Öğretmen oturumu gerekli.' });
+        if (yol === '/api/itirazlar') return gonderJson(200, { basarili: true, itirazlar: await listeleItirazlar(env, hoca) });
+        const sinavId = String(govde.sinavId || '').trim().slice(0, 80);
+        if (!sinavId) return gonderJson(400, { hata: 'Sınav belirtilmedi.' });
+        const yayinId = sonucYayinKimligi(hoca, sinavId);
+        if (govde.geriAl) { await yazSonucYayini(env, hoca, yayinId, {}, []); return gonderJson(200, { basarili: true, geriAlindi: true }); }
+        const sonuclar = (Array.isArray(govde.sonuclar) ? govde.sonuclar : []).slice(0, 400).map(temizleSonucKaydi).filter(Boolean);
+        const baslik = { sinavAdi: String(govde.sinavAdi || '').slice(0, 120), dersAdi: String(govde.dersAdi || '').slice(0, 120), kurallarNotu: String(govde.kurallarNotu || '').slice(0, 300) };
+        await yazSonucYayini(env, hoca, yayinId, baslik, sonuclar);
+        return gonderJson(200, { basarili: true, yayinlanan: sonuclar.length, yayinId });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
+    }
+    if (metot === 'POST' && (yol === '/api/ogrenci/sonuclarim' || yol === '/api/ogrenci/itiraz')) {
+      try {
+        let govde = {};
+        try { govde = await okuJsonGovde(request); } catch (_) { govde = {}; }
+        const ogrNo = String(govde.ogrNo || '').trim().slice(0, 40);
+        // Giriş başka bir Worker kopyasında yapıldıysa anahtar D1'den yeniden yüklenir (online sınav oturumundaki gibi)
+        if (ogrNo && env && env.SINAV_DB && !ogrenciGirisTokenDogrula(String(govde.girisToken || ''), ogrNo)) {
+          sistemDurumuOnbellek.delete(env.SINAV_DB);
+          await yukleSistemDurumuD1(env);
+        }
+        if (!ogrNo || !ogrenciGirisTokenDogrula(String(govde.girisToken || ''), ogrNo)) return gonderJson(401, { hata: 'Önce öğrenci hesabınla giriş yap.' });
+        const kayitlar = await okuOgrenciSonuclari(env, ogrNo);
+        if (yol === '/api/ogrenci/sonuclarim') return gonderJson(200, { basarili: true, sonuclar: kayitlar });
+        const hedef = kayitlar.find((k) => k.yayinId === String(govde.yayinId || ''));
+        if (!hedef) return gonderJson(404, { hata: 'Bu sınavın sonucu sana açık değil.' });
+        const soruNo = String(govde.soruNo || '').trim().slice(0, 12);
+        const aciklama = String(govde.aciklama || '').trim().slice(0, 300);
+        if (!soruNo || aciklama.length < 3) return gonderJson(400, { hata: 'Soruyu ve kısa bir açıklama yaz.' });
+        const sinir = await kontrolHizSiniri(env, `itiraz:${ogrNo}`, 10, 24 * 60 * 60 * 1000);
+        if (!sinir.izinli) return gonderJson(429, { hata: 'Bugün çok fazla itiraz gönderdin. Yarın tekrar dene.' });
+        let hoca = '';
+        if (env && env.SINAV_DB) {
+          const sat = await env.SINAV_DB.prepare('SELECT kullanici_adi FROM ogrenci_sonuclari WHERE yayin_id = ?1 AND ogr_no = ?2').bind(hedef.yayinId, ogrNo).first();
+          hoca = sat ? String(sat.kullanici_adi || '') : '';
+        } else {
+          hoca = (Array.from(sunucuDurumu.ogrenciSonuclari.entries()).find(([k]) => k === `${hedef.yayinId}|${ogrNo}`) || [null, {}])[1].hoca || '';
+        }
+        await yazItiraz(env, { hoca, yayinId: hedef.yayinId, sinavAdi: hedef.sinavAdi, ogrNo, soruNo, aciklama });
+        return gonderJson(200, { basarili: true });
+      } catch (err) {
+        return gonderJson(400, { hata: err.message });
+      }
     }
 
     // ---- Öğrenci hesabı: ayar / durum / ilk kayıt + e-posta kodu / giriş / şifre yenileme / öğretmen paneli ----

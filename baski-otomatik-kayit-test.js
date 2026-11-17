@@ -134,6 +134,30 @@ function kontrol(ad, kosul, detay = '') {
     const k1c = (d.kayitliSinavlar || []).find((k) => k.id === k1.id) || {};
     kontrol('İçerik değişince yeni sürüm kaydedilir ("Sürüm 2")', (d.kayitliSinavlar || []).length === onceSayi + 2 && /Sürüm 2/.test(k2.ad || '') && k2.surum === 2, k2.ad);
     kontrol('1. sürüm değişmeden kalır', k1c.icerikImzasi === k1.icerikImzasi && JSON.stringify(k1c.cevapAnahtarlari) === JSON.stringify(k1.cevapAnahtarlari));
+    kontrol('Aynı sınavın sürümleri (aynı tür ve tarih) kağıt kodunu paylaşır', k2.sinavGizliAnahtar === k1.sinavGizliAnahtar);
+
+    // 4c) Aynı taslaktan BAŞKA bir sınav (Final) basılır: vize ile aynı kağıt kodunu taşımamalı (telefon karıştırırdı)
+    await sayfa.evaluate(() => {
+      const t = document.getElementById('tut-sinav-turu');
+      const fin = [...t.options].find((o) => /Final/i.test(o.textContent));
+      if (fin) t.value = fin.value;
+      t.dispatchEvent(new Event('change', { bubbles: true }));
+      const tr = document.getElementById('tut-tarih'); tr.value = '2026-12-20'; tr.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await bekle(300);
+    await ciktiAl('sinif-aktif', 'pdf-indir');
+    d = await depo();
+    const kF = (d.kayitliSinavlar || [])[0] || {};
+    const kodlar = await sayfa.evaluate((gs) => gs.map((g) => window.SinavOptikCekirdek.uretSinavKimlikKodu(g)), (d.kayitliSinavlar || []).map((k) => k.sinavGizliAnahtar));
+    const finalKodu = kodlar[0];
+    kontrol('Final ayrı kayıt olarak kaydedildi', (d.kayitliSinavlar || []).length === onceSayi + 3 && /Final/i.test(kF.ad || ''), kF.ad);
+    kontrol('Final, Vize sürümlerinden FARKLI gizli anahtar ve FARKLI kağıt kodu taşır', kF.sinavGizliAnahtar !== k1.sinavGizliAnahtar && kodlar.slice(1).every((k) => k !== finalKodu), JSON.stringify(kodlar));
+    const taslakF = ((d.dersTaslakSinavlari || {})[ders.id] || {}).sinavGizliAnahtar;
+    kontrol('Final kaydı basılan taslağın anahtarıyla aynı (kağıt ile kayıt tutarlı)', taslakF === kF.sinavGizliAnahtar);
+    await ciktiAl('sinif-aktif', 'pdf-indir');
+    d = await depo();
+    const kF2 = (d.kayitliSinavlar || []).find((k) => k.id === kF.id) || {};
+    kontrol('Final aynen tekrar basılınca yeni kayıt/kod açılmaz, basım geçmişi büyür', (d.kayitliSinavlar || []).length === onceSayi + 3 && (kF2.basimGecmisi || []).length === 2 && kF2.sinavGizliAnahtar === kF.sinavGizliAnahtar);
 
     // 4b) Öğrenciye özel kağıtlar: kişiye özel anahtarlar da dondurulur; aynı liste tekrar basılınca yeni kayıt açılmaz
     const ogrCsv = path.join(INDIR, 'ogrenciler.csv');
@@ -152,12 +176,13 @@ function kontrol(ad, kosul, detay = '') {
     d = await depo();
     kontrol('Aynı öğrenciye özel kağıtlar tekrar basılınca yeni kayıt açılmaz', (d.kayitliSinavlar || []).length === ozelOnce + 1, `${(d.kayitliSinavlar || []).length}`);
 
-    // 5) Elle "Sınavı Kaydet" taslak kimliğini korur
+    // 5) Elle "Sınavı Kaydet" taslak kimliğini korur (taslak 4c'den beri Final'in anahtarını taşır)
+    const taslakSimdi = ((await depo()).dersTaslakSinavlari || {})[ders.id] || {};
     await sayfa.evaluate(() => document.getElementById('btn-sinavi-kaydet-snapshot').click());
     await bekle(500);
     d = await depo();
     const k3 = (d.kayitliSinavlar || [])[0] || {};
-    kontrol('Elle kaydet de taslağın gizli anahtarını korur ("önce bastım sonra kaydettim" güvenli)', k3.sinavGizliAnahtar === taslak.sinavGizliAnahtar && k3.sinavKodu === k2.sinavKodu, `${k3.sinavKodu} / ${k2.sinavKodu}`);
+    kontrol('Elle kaydet de taslağın gizli anahtarını korur ("önce bastım sonra kaydettim" güvenli)', Boolean(taslakSimdi.sinavGizliAnahtar) && k3.sinavGizliAnahtar === taslakSimdi.sinavGizliAnahtar && k3.sinavKodu === k2.sinavKodu, `${k3.sinavKodu} / ${k2.sinavKodu}`);
 
     kontrol('Sayfada JS hatası / uyarı penceresi yok', hatalar.length === 0, hatalar.join(' | '));
   } finally {

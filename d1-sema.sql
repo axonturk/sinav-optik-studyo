@@ -142,3 +142,29 @@ CREATE TABLE IF NOT EXISTS bulut_kasa_soru_parcalari (
 
 CREATE INDEX IF NOT EXISTS idx_bulut_kasa_parca_kullanici
   ON bulut_kasa_soru_parcalari (kullanici_adi, guncelleme_ms DESC);
+
+-- Öğrenci sonuçları: öğretmen açar (yayın), öğrenci yalnız kendi satırını görür. Kopya şüphesi saklanmaz.
+CREATE TABLE IF NOT EXISTS ogrenci_sonuclari (
+  yayin_id TEXT NOT NULL,
+  ogr_no TEXT NOT NULL,
+  kullanici_adi TEXT NOT NULL,
+  baslik_json TEXT NOT NULL,
+  veri_json TEXT NOT NULL,
+  yayin_ms INTEGER NOT NULL,
+  PRIMARY KEY (yayin_id, ogr_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ogrenci_sonuclari_ogr
+  ON ogrenci_sonuclari (ogr_no, yayin_ms DESC);
+
+-- Öğrenci itirazları (soru bazında, günlük sınırlı)
+CREATE TABLE IF NOT EXISTS ogrenci_itirazlari (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kullanici_adi TEXT NOT NULL,
+  yayin_id TEXT NOT NULL,
+  sinav_adi TEXT NOT NULL,
+  ogr_no TEXT NOT NULL,
+  soru_no TEXT NOT NULL,
+  aciklama TEXT NOT NULL,
+  zaman_ms INTEGER NOT NULL
+);

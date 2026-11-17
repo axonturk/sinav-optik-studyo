@@ -3680,6 +3680,7 @@
         let farkliCevapSayisi = 0;
         let populerOrtakYanlis = 0;
         const ortakYanlisMaddeler = [];
+        const populerOrtakYanlisMaddeler = [];
 
         const aTest = a.testDetay || [];
         const bTest = b.testDetay || [];
@@ -3692,6 +3693,7 @@
           if (qa.verilen === qb.verilen) {
             if (qa.sonuc === 'YANLIS' && populerMi(a.grup || 'A', `T${q + 1}`, qa.verilen)) {
               populerOrtakYanlis++;
+              populerOrtakYanlisMaddeler.push(`T${q + 1}(${qa.verilen})`);
             } else if (qa.sonuc === 'YANLIS') {
               ortakYanlisSayisi++;
               ortakYanlisMaddeler.push(`T${q + 1}(${qa.verilen})`);
@@ -3713,6 +3715,7 @@
           if (qa.verilen === qb.verilen) {
             if (qa.sonuc === 'YANLIS' && populerMi(a.grup || 'A', `DY${q + 1}`, qa.verilen)) {
               populerOrtakYanlis++;
+              populerOrtakYanlisMaddeler.push(`DY${q + 1}(${qa.verilen})`);
             } else if (qa.sonuc === 'YANLIS') {
               ortakYanlisSayisi++;
               ortakYanlisMaddeler.push(`DY${q + 1}(${qa.verilen})`);
@@ -3745,6 +3748,7 @@
             harppHoganIndeks,
             ortakYanlisMaddeler,
             populerOrtakYanlis,
+            populerOrtakYanlisMaddeler,
             riskSeviyesi: (ortakYanlisSayisi >= 5 || harppHoganIndeks >= 1.5) ? 'YUKSEK' : 'ORTA'
           });
         }
@@ -7466,12 +7470,22 @@
         anahtarEksikSayisi: sayAnahtarEksikSorular(s.tumSeciliSorular || yapiKaynak.tumSeciliSorular),
         sinavKimlikKodu: uretSinavKimlikKodu(String(yapiKaynak.sinavGizliAnahtar || s.sinavGizliAnahtar || '').trim()),
         kayitAdi: String(s.ad || s.sinavAdi || '').slice(0, 96),
-        guncellemeMs: Number(s.guncellemeMs || s.olusturmaMs || s.zamanMs) || 0
+        guncellemeMs: kayitliSinavZamani(s)
       };
     };
 
+    // Kayıt zamanı: açık alan yoksa "KS-<zaman36><2 harf>" kimliğinden çıkarılır (sıralama ve telefonda en yeni seçimi için)
+    function kayitliSinavZamani(s) {
+      const acik = Number(s && (s.guncellemeMs || s.olusturmaMs || s.zamanMs)) || 0;
+      if (acik) return acik;
+      const m = /^KS-([0-9A-Z]+)$/i.exec(String((s && s.id) || ''));
+      const t = m && m[1].length > 2 ? parseInt(m[1].slice(0, -2), 36) : 0;
+      return Number.isFinite(t) && t > 1e12 && t < 1e13 ? t : 0;
+    }
+    // Telefon yalnız AKTİF dönemin derslerini görür (arşiv dönemi dersleri pakete girmez)
+    const aktifDonemId = String(v.aktifDonemId || '').trim();
     const dersler = hamDersler.length > 0
-      ? hamDersler.filter((d) => d && typeof d === 'object' && d.id).map((d) => ({
+      ? hamDersler.filter((d) => d && typeof d === 'object' && d.id && (!aktifDonemId || !d.donemId || d.donemId === aktifDonemId)).map((d) => ({
           id: String(d.id).trim(),
           kod: String(d.kod || 'DERS').trim().slice(0, 32),
           ad: String(d.ad || 'Ders').trim().slice(0, 96),
@@ -7504,9 +7518,13 @@
         (ks) => ks && typeof ks === 'object' && (ks.dersId === ders.id || (!ks.dersId && ders.id === 'genel'))
       );
       const birlesikKayitli = kayitliKaynaklar.length > 0 ? kayitliKaynaklar : ders.ozelKayitliSinavlar;
+      // En yeni 30 sınav (eskiden dizinin SONUNDAKİ 10 alınıyordu; kayıtlar en yeni başta tutulduğu için yeni sınavlar telefona gitmiyordu)
       const kayitliSinavlar = birlesikKayitli
-        .slice(-10)
-        .map((ks, idx) => normalizeSinav(ks, ders, idx));
+        .map((ks, idx) => ({ ks, idx, t: kayitliSinavZamani(ks) }))
+        .sort((a, b) => (b.t - a.t) || (a.idx - b.idx))
+        .slice(0, 30)
+        .reverse()
+        .map((x, idx) => normalizeSinav(x.ks, ders, idx));
 
       const taslak = hamTaslaklar[ders.id] || ders.ozelSinavYapisi;
       const aktifKaynak = kayitliSinavlar.length > 0
@@ -10366,6 +10384,55 @@
   }
 
   /* Baskı Öncesi ÖÇ Kapsam & Bloom Dengesi Trafik Işığı */
+  /* Doğru şık dizisi tahmin edilebilir mi? (art arda aynı şık, kısa periyotla tekrar, tek şıkkın baskınlığı) */
+  function bulTahminEdilebilirDizi(harfler, tur = 'test') {
+    const L = (Array.isArray(harfler) ? harfler : String(harfler || '').split('')).map((h) => String(h || '').toUpperCase()).filter(Boolean);
+    const n = L.length;
+    if (n < 5) return '';
+    let enUzun = 1; let say = 1;
+    for (let i = 1; i < n; i += 1) { say = L[i] === L[i - 1] ? say + 1 : 1; enUzun = Math.max(enUzun, say); }
+    const seriSiniri = tur === 'dy' ? 5 : 4;
+    if (enUzun >= seriSiniri) return `aynı cevap art arda ${enUzun} kez`;
+    const enBuyukPeriyot = tur === 'dy' ? 2 : 5;
+    for (let p = 2; p <= enBuyukPeriyot; p += 1) {
+      if (n < p * 2 + 1 && !(n >= 6 && n === p * 2)) continue;
+      let tekrar = true;
+      for (let i = p; i < n; i += 1) { if (L[i] !== L[i - p]) { tekrar = false; break; } }
+      if (tekrar && new Set(L.slice(0, p)).size > 1) return `${L.slice(0, p).join('')} kalıbı tekrar ediyor`;
+    }
+    if (tur === 'test' && n >= 8) {
+      const sayac = {};
+      L.forEach((h) => { sayac[h] = (sayac[h] || 0) + 1; });
+      const [harf, adet] = Object.entries(sayac).sort((a, b) => b[1] - a[1])[0];
+      if (adet / n > 0.5) return `cevapların ${adet}/${n}'i "${harf}"`;
+    }
+    return '';
+  }
+  /* Basım öncesi kural uyarıları: havuzda sorusu olmayan ÖÇ, seçili haftalarda yetersiz soru, tahmin edilebilir şık dizisi */
+  function hesaplaBaskiOncesiKuralUyarilari(girdi = {}) {
+    const havuz = Array.isArray(girdi.havuz) ? girdi.havuz : [];
+    const haftalar = (Array.isArray(girdi.seciliHaftalar) ? girdi.seciliHaftalar : []).map((h) => normalizeHaftaNo(h, 1));
+    const ihtiyac = girdi.ihtiyac || {};
+    const ocler = (Array.isArray(girdi.ocler) ? girdi.ocler : []).map((o, i) => normalizeOcKodu(typeof o === 'string' ? o : (o && (o.kod || o.ocKodu)) || `ÖÇ-${i + 1}`)).filter(Boolean);
+    const ocSayac = {};
+    havuz.forEach((q) => { const k = normalizeOcKodu((q && (q.ocKodu || q.kazanim)) || ''); if (k) ocSayac[k] = (ocSayac[k] || 0) + 1; });
+    const sorusuzOcler = ocler.filter((k) => !ocSayac[k]);
+    const haftadaki = havuz.filter((q) => haftalar.includes(normalizeHaftaNo(q && q.hafta, 1)));
+    const bosHaftalar = haftalar.filter((h) => !havuz.some((q) => normalizeHaftaNo(q && q.hafta, 1) === h));
+    const yetersizTurler = ['dy', 'test', 'klasik'].map((tur) => ({ tur, gerek: Math.max(0, Number(ihtiyac[tur]) || 0), var: haftadaki.filter((q) => q && q.tur === tur).length }))
+      .filter((x) => x.gerek > 0 && x.var < x.gerek);
+    const tahminEdilebilir = [];
+    const anahtarlar = girdi.cevapAnahtarlari || {};
+    Object.keys(anahtarlar).forEach((g) => {
+      const a = anahtarlar[g] || {};
+      const t = bulTahminEdilebilirDizi(a.test, 'test');
+      if (t) tahminEdilebilir.push({ grup: g, bolum: 'test', neden: t });
+      const dyN = bulTahminEdilebilirDizi(a.dy, 'dy');
+      if (dyN) tahminEdilebilir.push({ grup: g, bolum: 'D/Y', neden: dyN });
+    });
+    return { sorusuzOcler, bosHaftalar, yetersizTurler, tahminEdilebilir };
+  }
+
   function hesaplaBaskiOncesiOcBloomDengesi(seciliSorular = [], dersOcListesi = []) {
     const toplamSoru = Array.isArray(seciliSorular) ? seciliSorular.length : 0;
     const kanonikOcler = (Array.isArray(dersOcListesi) && dersOcListesi.length > 0)
@@ -11520,6 +11587,8 @@
     normalizeZorlukDerecesi,
     normalizeHaftaNo,
     normalizeOcKodu,
+    bulTahminEdilebilirDizi,
+    hesaplaBaskiOncesiKuralUyarilari,
     ayiklaOcBilesenleri,
     ocKoduSiraNo,
     ayiklaDersOcMaddeleri,
