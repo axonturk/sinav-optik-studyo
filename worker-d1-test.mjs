@@ -103,6 +103,7 @@ const baskasi = await istek(A, '/api/ogrenci/sonuclarim', { ogrNo: '2023104024',
 kontrol('D1: başkasının numarasıyla sonuç görülemez (401)', baskasi.kod === 401);
 const itz = await istek(B, '/api/ogrenci/itiraz', { ogrNo: '2023104015', girisToken: ogrGiris.v.girisToken, yayinId: sB.yayinId, soruNo: '1', aciklama: 'kontrol eder misiniz' });
 const itzListe = await istek(A, '/api/itirazlar', {}, HB);
+kontrol('D1: kalan itiraz hakkı 10 → 9 (başka kopyada da)', sonucB.v.kalanItiraz === 10 && itz.v.kalanItiraz === 9, `${sonucB.v.kalanItiraz} → ${itz.v.kalanItiraz}`);
 kontrol('D1: itiraz kaydedilir ve öğretmenin listesinde görünür', itz.kod === 200 && (itzListe.v.itirazlar || []).some((x) => x.ogrNo === '2023104015' && x.sinavAdi === 'D1 Vize'), `${itz.kod} ${JSON.stringify(itzListe.v).slice(0, 160)}`);
 const geriD1 = await istek(B, '/api/sonuc-yayinla', { sinavId: 'KS-D1', geriAl: true }, HB);
 const sonraD1 = await istek(A, '/api/ogrenci/sonuclarim', { ogrNo: '2023104015', girisToken: ogrGiris.v.girisToken });

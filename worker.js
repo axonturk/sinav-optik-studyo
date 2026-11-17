@@ -158,6 +158,16 @@ async function yazItiraz(env, kayit) {
   }
   sunucuDurumu.ogrenciItirazlari.push(k);
 }
+// Öğrencinin son 24 saatte gönderdiği itiraz sayısı (kalan hakkı göstermek için; sınır 10)
+async function itirazSayisiSon24s(env, ogrNo) {
+  const esik = Date.now() - 24 * 60 * 60 * 1000;
+  if (env && env.SINAV_DB) {
+    await hazirlaV2D1Tablolar(env);
+    const r = await env.SINAV_DB.prepare('SELECT COUNT(*) AS n FROM ogrenci_itirazlari WHERE ogr_no = ?1 AND zaman_ms > ?2').bind(ogrNo, esik).first();
+    return Number(r && r.n) || 0;
+  }
+  return sunucuDurumu.ogrenciItirazlari.filter((x) => x.ogrNo === ogrNo && Number(x.zamanMs) > esik).length;
+}
 async function listeleItirazlar(env, hoca) {
   if (env && env.SINAV_DB) {
     await hazirlaV2D1Tablolar(env);
@@ -1895,7 +1905,7 @@ export default {
         }
         if (!ogrNo || !ogrenciGirisTokenDogrula(String(govde.girisToken || ''), ogrNo)) return gonderJson(401, { hata: 'Önce öğrenci hesabınla giriş yap.' });
         const kayitlar = await okuOgrenciSonuclari(env, ogrNo);
-        if (yol === '/api/ogrenci/sonuclarim') return gonderJson(200, { basarili: true, sonuclar: kayitlar });
+        if (yol === '/api/ogrenci/sonuclarim') return gonderJson(200, { basarili: true, kalanItiraz: Math.max(0, 10 - await itirazSayisiSon24s(env, ogrNo)), sonuclar: kayitlar });
         const hedef = kayitlar.find((k) => k.yayinId === String(govde.yayinId || ''));
         if (!hedef) return gonderJson(404, { hata: 'Bu sınavın sonucu sana açık değil.' });
         const soruNo = String(govde.soruNo || '').trim().slice(0, 12);
@@ -1911,7 +1921,7 @@ export default {
           hoca = (Array.from(sunucuDurumu.ogrenciSonuclari.entries()).find(([k]) => k === `${hedef.yayinId}|${ogrNo}`) || [null, {}])[1].hoca || '';
         }
         await yazItiraz(env, { hoca, yayinId: hedef.yayinId, sinavAdi: hedef.sinavAdi, ogrNo, soruNo, aciklama });
-        return gonderJson(200, { basarili: true });
+        return gonderJson(200, { basarili: true, kalanItiraz: Math.max(0, 10 - await itirazSayisiSon24s(env, ogrNo)) });
       } catch (err) {
         return gonderJson(400, { hata: err.message });
       }
