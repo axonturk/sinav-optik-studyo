@@ -323,6 +323,20 @@ function kontrol(ad, kosul, detay = '') {
     const kayitMetin = await pc.evaluate(() => document.getElementById('sekme-kayitlar').textContent);
     kontrol('Düzeltmeler Kayıtlar sayfasına yazılır', /Kod uyuşmazlığı düzeltildi: sınav adı 74119999 → 74112317/.test(kayitMetin) && /ders kodu 74112317 → 74118888/.test(kayitMetin), kayitMetin.slice(0, 200));
 
+    // Arşiv: basılmamış, okuması olmayan boş stüdyo kaydı "Sil" ile silinir (onay sorulur)
+    await masamAc();
+    await pc.evaluate(() => document.getElementById('btn-masam-yeni-sinav').click());
+    await bekle(300);
+    await pc.evaluate(() => { const a = document.getElementById('antet-sinav-ad'); a.value = 'BOS KAYIT DENEME'; a.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('btn-sinavi-kaydet-snapshot').click(); });
+    await bekle(400);
+    await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-arsiv"]').click());
+    await bekle(400);
+    const silOnce = await pc.evaluate(() => { const satir = [...document.querySelectorAll('#arsiv-liste tbody tr')].find((t) => /BOS KAYIT DENEME/.test(t.textContent)); return { var: Boolean(satir), sil: Boolean(satir && satir.querySelector('[data-arsiv-sil]')), telefonSil: [...document.querySelectorAll('#arsiv-liste tbody tr')].filter((t) => !/Stüdyo/.test(t.textContent)).some((t) => t.querySelector('[data-arsiv-sil]')) }; });
+    await pc.evaluate(() => { const satir = [...document.querySelectorAll('#arsiv-liste tbody tr')].find((t) => /BOS KAYIT DENEME/.test(t.textContent)); if (satir) satir.querySelector('[data-arsiv-sil]').click(); });
+    await bekle(400);
+    const silSonra = await pc.evaluate(() => ({ var: [...document.querySelectorAll('#arsiv-liste tbody tr')].some((t) => /BOS KAYIT DENEME/.test(t.textContent)), makbuz: document.getElementById('rozet-kayit-durumu').textContent }));
+    kontrol('Arşivde boş stüdyo kaydında "Sil" var (telefon sınavlarında yok); onayla silinir, makbuz çıkar', silOnce.var && silOnce.sil && !silOnce.telefonSil && !silSonra.var && /Silindi: BOS KAYIT DENEME/.test(silSonra.makbuz), `${JSON.stringify(silOnce)} · ${JSON.stringify(silSonra)}`);
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;
