@@ -479,6 +479,125 @@
     const k = (durum.kayitliSinavlar || []).find((x) => x && x.id === durum.aktifKayitliSinavId);
     return k && k.kaynak === 'telefon' ? k : null;
   }
+  /* ── Telefon sınavı cevap anahtarı: derse anahtarsız kaydedilen sınavın puanları sıfırlanmasın, anahtar sonradan gelirse tamamlansın ── */
+  function telefonAnahtariGecerliMi(ta) {
+    return Boolean(ta && (Number(ta.dySayisi) || 0) + (Number(ta.testSayisi) || 0) + (Number(ta.klasikSayisi) || 0) > 0);
+  }
+  function telefonYapisindanAnahtar(y) {
+    const an = (y && y.cevapAnahtarlari && typeof y.cevapAnahtarlari === 'object') ? y.cevapAnahtarlari : {};
+    const metinle = (x) => (Array.isArray(x) ? x.join('') : String(x || ''));
+    return {
+      dySayisi: Number(y && y.dySayisi) || 0, testSayisi: Number(y && y.testSayisi) || 0, klasikSayisi: Number(y && y.klasikSayisi) || 0, sikSayisi: 5,
+      anahtarlar: ['A', 'B', 'C', 'D'].reduce((o, g) => { o[g] = { dy: metinle(an[g] && an[g].dy), test: metinle(an[g] && an[g].test) }; return o; }, {})
+    };
+  }
+  // Yapı geçerli sayılır: soru sayısı var VE en az bir kitapçığın anahtarı dolu
+  function telefonYapisiKullanilirMi(y) {
+    if (!y || !telefonAnahtariGecerliMi(y)) return false;
+    const ta = telefonYapisindanAnahtar(y);
+    return Object.values(ta.anahtarlar).some((g) => (g.dy || '').length || (g.test || '').length);
+  }
+  function telefonSinavKaynakYapisi(kod) {
+    const kova = telefonSinavlariniYukle()[kod];
+    if (kova && telefonYapisiKullanilirMi(kova.yapi)) return kova.yapi;
+    const ars = (typeof sinavArsivi === 'function' ? sinavArsivi() : []).find((a) => a && a.sinavKodu === kod);
+    if (ars && telefonYapisiKullanilirMi(ars.yapi)) return ars.yapi;
+    return null;
+  }
+  function telefonSinavKaynakOkumalari(kod) {
+    const tel = telefonSinavOkumalari(kod);
+    if (tel.length) return tel;
+    const ars = (typeof sinavArsivi === 'function' ? sinavArsivi() : []).find((a) => a && a.sinavKodu === kod);
+    return ars && Array.isArray(ars.okumalar) ? ars.okumalar : [];
+  }
+  // Telefonun işaretlediği "doğru" cevaplardan anahtar çıkarır; bir soruda hiç doğru yoksa o soru eksik kalır (tahmin yapılmaz)
+  function okumalardanAnahtarCikar(okumalar) {
+    const liste = (okumalar || []).filter((o) => o && (Array.isArray(o.dyDetay) || Array.isArray(o.testDetay)));
+    const dySayisi = Math.max(0, ...liste.map((o) => (o.dyDetay || []).length));
+    const testSayisi = Math.max(0, ...liste.map((o) => (o.testDetay || []).length));
+    const gruplar = [...new Set(liste.map((o) => String(o.grup || 'A').toUpperCase()).filter((g) => /^[A-D]$/.test(g)))];
+    const anahtarlar = {};
+    const eksik = [];
+    gruplar.forEach((g) => {
+      const grupOk = liste.filter((o) => String(o.grup || 'A').toUpperCase() === g);
+      const cikar = (alan, sayi, on) => {
+        let metin = '';
+        for (let i = 0; i < sayi; i++) {
+          const say = {};
+          grupOk.forEach((o) => { const x = (o[alan] || [])[i]; if (x && x.sonuc === 'DOGRU' && /^[A-EDY]$/.test(String(x.verilen || ''))) say[x.verilen] = (say[x.verilen] || 0) + 1; });
+          const en = Object.keys(say).sort((a, b) => say[b] - say[a])[0];
+          if (en) metin += en; else { eksik.push(`${g} kitapçığı ${on}-${i + 1}`); metin += '?'; }
+        }
+        return metin;
+      };
+      anahtarlar[g] = { dy: cikar('dyDetay', dySayisi, 'DY'), test: cikar('testDetay', testSayisi, 'TEST') };
+    });
+    ['A', 'B', 'C', 'D'].forEach((g) => { if (!anahtarlar[g]) anahtarlar[g] = { dy: '', test: '' }; });
+    return { telefonAnahtar: { dySayisi, testSayisi, klasikSayisi: 0, sikSayisi: 5, anahtarlar, turetildi: true }, eksik, tamam: eksik.length === 0 && dySayisi + testSayisi > 0 && gruplar.length > 0 };
+  }
+  // Dersteki okumalar bozulduysa (soru ayrıntısı yok ya da hepsi 0 puan) telefondaki/arşivdeki asıllarından geri yükler; öğretmenin numara atamaları korunur
+  function telefonOkumalariniKurtar(k) {
+    if (!durum.okumaSonuclariHaritasi || typeof durum.okumaSonuclariHaritasi !== 'object') durum.okumaSonuclariHaritasi = {};
+    const anahtar = `${k.dersId || durum.aktifDersId || 'genel'}::${k.id}`;
+    const aktifMi = k.id === durum.aktifKayitliSinavId && k.dersId === durum.aktifDersId;
+    const mevcut = Array.isArray(durum.okumaSonuclariHaritasi[anahtar]) ? durum.okumaSonuclariHaritasi[anahtar] : [];
+    const kaynak = telefonSinavKaynakOkumalari(k.sinavKodu);
+    if (!kaynak.length) return 0;
+    const ayrintisiz = mevcut.length > 0 && mevcut.every((o) => !(o.dyDetay || []).length && !(o.testDetay || []).length);
+    const hepsiSifir = mevcut.length > 0 && mevcut.every((o) => !Number(o.toplamPuan)) && kaynak.some((o) => Number(o.toplamPuan) > 0);
+    if (mevcut.length && !ayrintisiz && !hepsiSifir) return 0;
+    const mevcutId = new Map(mevcut.map((o) => [String(o.id || ''), o]));
+    const kaynakId = new Set(kaynak.map((o) => String(o.id || '')));
+    const yeni = kaynak.map((o) => {
+      const eski = mevcutId.get(String(o.id || ''));
+      return Object.assign({}, o, {
+        ogrNo: eski && eski.ogrNo ? eski.ogrNo : o.ogrNo,
+        adSoyad: ogrAdiBul(eski && eski.ogrNo ? eski.ogrNo : o.ogrNo, (eski && eski.adSoyad) || o.adSoyad),
+        dyDetay: (o.dyDetay || []).map((x) => Object.assign({}, x)),
+        testDetay: (o.testDetay || []).map((x) => Object.assign({}, x)),
+        hamCevaplar: { dy: (o.dyDetay || []).map((x) => x.verilen || '-'), test: (o.testDetay || []).map((x) => x.verilen || '-') },
+        numaraEslesmediMi: Boolean(o.bekliyor) && !(eski && eski.ogrNo && eski.ogrNo !== o.ogrNo)
+      });
+    }).concat(mevcut.filter((o) => !kaynakId.has(String(o.id || ''))));
+    durum.okumaSonuclariHaritasi[anahtar] = yeni;
+    if (aktifMi) durum.okumaSonuclari = yeni.slice();
+    return kaynak.length;
+  }
+  // Açılışta: eksik/türetilmiş anahtarı gerçek anahtarla tamamlar, yoksa okumalardan çıkarır; bozuk okumaları kurtarır
+  function telefonKaydiniOnar(k) {
+    const sonuc = { anahtar: '', okuma: 0, eksik: [] };
+    if (!k || k.kaynak !== 'telefon') return sonuc;
+    const gercekVar = telefonAnahtariGecerliMi(k.telefonAnahtar) && !k.telefonAnahtar.turetildi;
+    if (!gercekVar) {
+      const y = telefonSinavKaynakYapisi(k.sinavKodu);
+      if (y) {
+        k.telefonAnahtar = telefonYapisindanAnahtar(y);
+        k.ayarlar = Object.assign({}, k.ayarlar || {}, {
+          dySayisi: k.telefonAnahtar.dySayisi, testSayisi: k.telefonAnahtar.testSayisi, klasikSayisi: k.telefonAnahtar.klasikSayisi,
+          dyToplamPuan: y.dyToplamPuan, testToplamPuan: y.testToplamPuan, klasikToplamPuan: y.klasikToplamPuan
+        });
+        sonuc.anahtar = 'gercek';
+      } else if (!telefonAnahtariGecerliMi(k.telefonAnahtar)) {
+        const t = okumalardanAnahtarCikar(telefonSinavKaynakOkumalari(k.sinavKodu));
+        if (t.tamam) {
+          k.telefonAnahtar = t.telefonAnahtar;
+          k.ayarlar = Object.assign({}, k.ayarlar || {}, { dySayisi: t.telefonAnahtar.dySayisi, testSayisi: t.telefonAnahtar.testSayisi, klasikSayisi: 0 });
+          sonuc.anahtar = 'turetildi';
+        } else sonuc.eksik = t.eksik;
+      }
+    }
+    sonuc.okuma = telefonOkumalariniKurtar(k);
+    return sonuc;
+  }
+  // Gerçek anahtarı olmayan telefon sınavı yeniden puanlanmaz: telefonun verdiği puanlar korunur
+  function telefonPuanlamaKilitliMi() {
+    const t = aktifTelefonKayitliSinavi();
+    return Boolean(t && (!telefonAnahtariGecerliMi(t.telefonAnahtar) || t.telefonAnahtar.turetildi));
+  }
+  function yenidenPuanlaGuvenli(liste, yapi) {
+    if (telefonPuanlamaKilitliMi()) return liste;
+    return C.yenidenPuanlaOkumaSonuclari(liste, yapi);
+  }
   function okumaKovaAnahtari(dersId = durum.aktifDersId) {
     const anahtar = dersId || 'genel';
     const tel = aktifTelefonKayitliSinavi();
@@ -2340,7 +2459,9 @@
     if (Array.isArray(ay.klasikSoruPuanlari) && ay.klasikSoruPuanlari.length > 0) {
       durum.klasikTekTekPuanlar = ay.klasikSoruPuanlari.slice();
     }
+    let telOnarim = null;
     if (hedef.kaynak === 'telefon') {
+      telOnarim = telefonKaydiniOnar(hedef);
       const kova = (durum.okumaSonuclariHaritasi || {})[`${hedef.dersId || durum.aktifDersId || 'genel'}::${hedef.id}`];
       durum.okumaSonuclari = Array.isArray(kova) ? kova.slice() : [];
       uygulaTelefonSinaviAnahtari(hedef);
@@ -2352,8 +2473,17 @@
     guncelleKayitliSinavlarCubuguUI();
     guncelleA4Onizleme();
     if (durum.okumaSonuclari.length > 0 && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
-      durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());
+      durum.okumaSonuclari = yenidenPuanlaGuvenli(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());
       verileriKaydet();
+    }
+    if (telOnarim && (telOnarim.anahtar || telOnarim.okuma || telOnarim.eksik.length)) {
+      const parca = [];
+      if (telOnarim.anahtar === 'gercek') parca.push('cevap anahtarı telefondan geri yüklendi');
+      if (telOnarim.anahtar === 'turetildi') parca.push('cevap anahtarı kağıtlardaki doğru işaretlerden çıkarıldı (puanlar telefondaki gibi korunuyor)');
+      if (telOnarim.okuma) parca.push(`${telOnarim.okuma} kağıt asıl haliyle geri yüklendi`);
+      if (telOnarim.eksik.length) parca.push(`cevap anahtarı eksik (${telOnarim.eksik.slice(0, 3).join(', ')}${telOnarim.eksik.length > 3 ? '…' : ''}); puanlar telefondaki gibi korunuyor — tam anahtar için telefonda Senkronize Et'e basın`);
+      durum._telefonOnarimNotu = { id: hedef.id, metin: `🔧 ${parca.join(' · ')}` };
+      guncelleKayitDurumCubuguUI(telOnarim.eksik.length && !telOnarim.anahtar ? 'hata' : 'kaydedildi', `🔧 ${hedef.ad}: ${parca.join(' · ')}`);
     }
     guncelleOmrTabloVeKuyruk();
     guncelleMaddeAnaliziSekmesi();
@@ -5028,12 +5158,7 @@
       dersId = aktif.id;
     }
     const y = kova.yapi || {};
-    const an = (y.cevapAnahtarlari && typeof y.cevapAnahtarlari === 'object') ? y.cevapAnahtarlari : {};
-    const metinle = (x) => (Array.isArray(x) ? x.join('') : String(x || ''));
-    const telefonAnahtar = {
-      dySayisi: Number(y.dySayisi) || 0, testSayisi: Number(y.testSayisi) || 0, klasikSayisi: Number(y.klasikSayisi) || 0, sikSayisi: 5,
-      anahtarlar: ['A', 'B', 'C', 'D'].reduce((o, g) => { o[g] = { dy: metinle(an[g] && an[g].dy), test: metinle(an[g] && an[g].test) }; return o; }, {})
-    };
+    const telefonAnahtar = telefonYapisindanAnahtar(y);
     const id = `TEL-${String(kod).replace(/[^0-9A-Za-z_-]/g, '_')}`;
     const ad = String(kova.ad || kod).slice(0, 120);
     const kayit = {
@@ -5089,9 +5214,9 @@
     sinavArsiviniKaydet();
     return true;
   }
-  /* Boş stüdyo kaydı: hiç basılmamış, okuması yok, kesinleşmemiş, telefondan gelmemiş — güvenle silinebilir */
+  /* Silinebilir stüdyo kaydı: okuması yok, kesinleşmemiş, telefondan gelmemiş (basılmışsa silmeden önce ayrıca uyarılır) */
   function bosStudyoKaydiMi(k) {
-    if (!k || k.kaynak === 'telefon' || k.basildiKilidi || (k.basimGecmisi || []).length) return false;
+    if (!k || k.kaynak === 'telefon') return false;
     if (Object.keys(durum.kesinlesmisSinavHaritasi || {}).some((a) => a.endsWith(`::${k.id}`))) return false;
     const kova = (durum.okumaSonuclariHaritasi || {})[`${k.dersId || 'genel'}::${k.id}`];
     if (Array.isArray(kova) && kova.length) return false;
@@ -5147,7 +5272,7 @@
           <td>${tarihMetni(s.tarihMs)}</td>
           <td>${s.studyo ? '—' : s.okumalar.length}</td>
           <td>${s.studyo ? '—' : (ciftler.length ? `<span class="rozet rozet-kirmizi">${ciftler.length} çift</span>` : '<span class="rozet rozet-yesil">yok</span>')}</td>
-          <td style="white-space:nowrap;">${s.studyo ? (s.silinebilir ? `<button type="button" class="btn btn-kucuk btn-tehlike" data-arsiv-sil="${C.kacisHTML(s.ksId)}" title="Basılmamış ve okuması olmayan boş kaydı sil">Sil</button>` : '') : `<button type="button" class="btn btn-kucuk" data-arsiv-ac="${C.kacisHTML(s.anahtar)}">Aç</button>`}
+          <td style="white-space:nowrap;">${s.studyo ? (s.silinebilir ? `<button type="button" class="btn btn-kucuk btn-tehlike" data-arsiv-sil="${C.kacisHTML(s.ksId)}" title="Okuması olmayan kaydı sil">Sil</button>` : '') : `<button type="button" class="btn btn-kucuk" data-arsiv-ac="${C.kacisHTML(s.anahtar)}">Aç</button>`}
             ${s.anahtar.startsWith('TEL-') || /^Telefon \(arşivde\)|^Derste kayıtlı/.test(s.kaynak) ? `<button type="button" class="btn btn-birincil btn-kucuk" data-derse-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Sınavı ilgili derse kaydet; Değerlendirme'de notlar, soru analizi ve kopya raporu açılır">${s.derste ? 'Derste aç' : 'Kaydet'}</button>` : ''}
             ${!s.arsivde && s.anahtar.startsWith('TEL-') ? `<button type="button" class="btn btn-hayalet btn-kucuk" data-arsive-kaydet="${C.kacisHTML(s.sinavKodu)}" title="Kalıcı arşive al (isteğe bağlı)">Arşive al</button>` : ''}</td>
         </tr>`;
@@ -5169,8 +5294,12 @@
       const k = (durum.kayitliSinavlar || []).find((x) => x && x.id === id);
       if (!k) return;
       if (arsivDonemiAcikMi()) { guncelleKayitDurumCubuguUI('hata', '🗄️ Arşiv dönemi salt okunurdur. Değişiklik için dönemi aktif yapın.'); return; }
-      if (!bosStudyoKaydiMi(k)) { guncelleKayitDurumCubuguUI('hata', '⚠️ Bu kayıt basılmış ya da okuması var; silinmedi.'); cizSinavArsivi(); return; }
-      if (!window.confirm(`"${k.ad || k.sinavKodu}" kaydı silinsin mi?\n\nBu kayıt hiç basılmamış ve okuması yok. Silme kalıcıdır, geri alınamaz.`)) return;
+      if (!bosStudyoKaydiMi(k)) { guncelleKayitDurumCubuguUI('hata', '⚠️ Bu kaydın okuması var ya da kesinleşmiş; silinmedi.'); cizSinavArsivi(); return; }
+      const basildi = Boolean(k.basildiKilidi || (k.basimGecmisi || []).length);
+      const uyari = basildi
+        ? 'Bu sınav BASILMIŞ görünüyor ama hiç okuması yok.\nSilerseniz bu sınavın kağıtları ileride okunursa cevap anahtarı bulunamaz.'
+        : 'Bu kayıt hiç basılmamış ve okuması yok.';
+      if (!window.confirm(`"${k.ad || k.sinavKodu}" kaydı silinsin mi?\n\n${uyari}\nSilme kalıcıdır, geri alınamaz.`)) return;
       kaydetSonGeriAlYedegi(`Boş Kayıt Silindi (${k.ad || k.sinavKodu})`);
       if (k.id === durum.aktifKayitliSinavId) yukleKayitliSinavSnapshot('');
       durum.kayitliSinavlar = (durum.kayitliSinavlar || []).filter((x) => x && x.id !== id);
@@ -6111,7 +6240,9 @@
     if (!tel) return;
     const metin = document.getElementById('bant-telefon-sinavi-metin');
     const arsivde = sinavArsivi().some((a) => a && a.sinavKodu === tel.sinavKodu);
-    if (metin) metin.textContent = `📱 ${tel.ad} — telefondan alındı · ${durum.okumaSonuclari.length} kağıt${arsivde ? ' · arşivde' : ''}`;
+    const onarimNotu = durum._telefonOnarimNotu && durum._telefonOnarimNotu.id === tel.id ? ` · ${durum._telefonOnarimNotu.metin}` : '';
+    const kilitNotu = telefonPuanlamaKilitliMi() && !onarimNotu ? ' · ⚠️ cevap anahtarı yok: puanlar telefondaki gibi' : '';
+    if (metin) metin.textContent = `📱 ${tel.ad} — telefondan alındı · ${durum.okumaSonuclari.length} kağıt${arsivde ? ' · arşivde' : ''}${onarimNotu}${kilitNotu}`;
     const btn = document.getElementById('btn-telefon-sinavi-arsive-kaydet');
     if (btn) { btn.disabled = arsivde; btn.textContent = arsivde ? '🗄️ Arşivde' : '🗄️ Arşive kaydet'; }
   }
@@ -12324,7 +12455,7 @@ Yine de çıktı alınsın mı?`)) {
       if (yenidenPuanla && durum.okumaSonuclari.length > 0) {
         const etkinYapi = okuEtkinOmrSinavYapisi();
         if (typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
-          durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, etkinYapi);
+          durum.okumaSonuclari = yenidenPuanlaGuvenli(durum.okumaSonuclari, etkinYapi);
         }
         verileriKaydet();
         guncelleOmrTabloVeKuyruk();
@@ -12384,7 +12515,7 @@ Yine de çıktı alınsın mı?`)) {
         guncelleHariciOmrAnahtarUI();
         verileriKaydet();
         if (durum.okumaSonuclari.length > 0 && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
-          durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());
+          durum.okumaSonuclari = yenidenPuanlaGuvenli(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());
           verileriKaydet();
           guncelleOmrTabloVeKuyruk();
           guncelleMaddeAnaliziSekmesi();
@@ -12719,7 +12850,7 @@ Yine de çıktı alınsın mı?`)) {
               kayit.ortalamaGuven = 0.99;
             }
             if (typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
-              durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, yapi);
+              durum.okumaSonuclari = yenidenPuanlaGuvenli(durum.okumaSonuclari, yapi);
             }
             verileriKaydet();
             guncelleOmrTabloVeKuyruk();
@@ -12762,7 +12893,7 @@ Yine de çıktı alınsın mı?`)) {
           }
           const yapi = okuEtkinOmrSinavYapisi();
           if (typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
-            durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, yapi);
+            durum.okumaSonuclari = yenidenPuanlaGuvenli(durum.okumaSonuclari, yapi);
           }
           verileriKaydet();
           guncelleOmrTabloVeKuyruk();
@@ -12783,7 +12914,7 @@ Yine de çıktı alınsın mı?`)) {
     const calistirYenidenPuanlamaMotoru = () => {
       const yapi = okuEtkinOmrSinavYapisi();
       if (typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
-        durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, yapi);
+        durum.okumaSonuclari = yenidenPuanlaGuvenli(durum.okumaSonuclari, yapi);
       }
       verileriKaydet();
       guncelleOmrTabloVeKuyruk();
@@ -17510,6 +17641,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         let anahtarDegistiMi = false;
         let maksSeq = sinceSeq;
         let telefonKovasiDegisti = false;
+        const tanimGelenKodlar = new Set();
         // Oturumun ilk çekişinde (sinceSeq = 0) telefon sınavları sunucudan SIFIRDAN kurulur:
         // sunucudan silinen eski olaylar tarayıcıda kalıp görünmeye devam etmez.
         if (sinceSeq === 0) {
@@ -17555,6 +17687,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
           // Açık sınavla aynı kodu taşımayan telefon olayı artık atlanmaz: "Telefondan gelen sınavlar"a konur
           if (!kodUygun || olay.tur === 'SINAV_TANIMI') {
             if (isleTelefonSinavOlayi(olay)) telefonKovasiDegisti = true;
+            if (olay.tur === 'SINAV_TANIMI' && olay.sinavKodu) tanimGelenKodlar.add(olay.sinavKodu);
             return;
           }
 
@@ -17592,9 +17725,31 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
           cizTelefonSinavlariPaneli();
           guncelleOkumaSayaci();
         }
+        // Telefondan cevap anahtarı geldi: derse anahtarsız kaydedilmiş sınav hemen tamamlanır (açıksa yeniden yüklenip puanlanır)
+        if (tanimGelenKodlar.size) {
+          let onarildi = false;
+          (durum.kayitliSinavlar || []).forEach((k) => {
+            if (!k || k.kaynak !== 'telefon' || !tanimGelenKodlar.has(k.sinavKodu)) return;
+            if (telefonAnahtariGecerliMi(k.telefonAnahtar) && !k.telefonAnahtar.turetildi) return;
+            if (!telefonSinavKaynakYapisi(k.sinavKodu)) return;
+            if (k.id === durum.aktifKayitliSinavId) {
+              kaydetAktifDersIzoleDurumu(durum.aktifDersId);
+              const r = telefonKaydiniOnar(k);
+              uygulaTelefonSinaviAnahtari(k);
+              const kova = (durum.okumaSonuclariHaritasi || {})[`${k.dersId || durum.aktifDersId || 'genel'}::${k.id}`];
+              durum.okumaSonuclari = yenidenPuanlaGuvenli(Array.isArray(kova) ? kova.slice() : [], okuEtkinOmrSinavYapisi());
+              if (r.anahtar === 'gercek') {
+                durum._telefonOnarimNotu = { id: k.id, metin: `🔧 cevap anahtarı telefondan geri yüklendi${r.okuma ? ` · ${r.okuma} kağıt asıl haliyle geri yüklendi` : ''}` };
+                guncelleKayitDurumCubuguUI('kaydedildi', `🔧 ${k.ad}: cevap anahtarı telefondan geri yüklendi, kağıtlar yeniden puanlandı`);
+              }
+            } else telefonKaydiniOnar(k);
+            onarildi = true;
+          });
+          if (onarildi) { verileriKaydet(); if (typeof yenileTumSekmePanelleriUI === 'function') yenileTumSekmePanelleriUI(); }
+        }
         if (birlesenSayi > 0 || anahtarDegistiMi) {
           if (durum.okumaSonuclari.length > 0 && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
-            durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());
+            durum.okumaSonuclari = yenidenPuanlaGuvenli(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());
           }
           verileriKaydet();
           guncelleOmrTabloVeKuyruk();
@@ -17673,7 +17828,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
               else durum.okumaSonuclari.push(k);
             });
             if (durum.okumaSonuclari.length > 0 && typeof C.yenidenPuanlaOkumaSonuclari === 'function') {
-              durum.okumaSonuclari = C.yenidenPuanlaOkumaSonuclari(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());
+              durum.okumaSonuclari = yenidenPuanlaGuvenli(durum.okumaSonuclari, okuEtkinOmrSinavYapisi());
             }
             verileriKaydet();
             guncelleOgrenciListesiSekmesi();
