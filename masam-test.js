@@ -253,6 +253,35 @@ function kontrol(ad, kosul, detay = '') {
     });
     kontrol('Rapor indirmede biçim sorulur (PDF varsayılan); Word seçilince .doc iner ve makbuz gösterilir', rapor.pencere && rapor.varsayilanPdf && /_YOKAK_MEDEK_PUKO_Raporu\.doc$/.test(rapor.ad) && rapor.word && /İndirildi: .*\.doc/.test(rapor.makbuz), JSON.stringify(rapor));
 
+    // Kod uyuşmazlığı: sınav adındaki ders kodu dersle tutmazsa kartta uyarı + Düzelt (öğretmen hangi kodun doğru olduğunu seçer)
+    const kodDuzeltDene = async (kod, ad, secim) => {
+      await gonder(kod, 'SINAV_TANIMI', { ad, dySayisi: 5, testSayisi: 5 });
+      await gonder(kod, 'OKUDU_GUNCELLE', ok(`KD-${kod}`, '247419001', 'AYŞE YILMAZ', '01'));
+      await senkron();
+      await masamAc();
+      await pc.evaluate((k) => document.querySelector(`#masam-kartlar [data-masam-telkaydet="${k}"]`).click(), kod);
+      await bekle(300);
+      await masamAc();
+      const once = await kart(kablolamaId);
+      await pc.evaluate(() => document.querySelector('#masam-kartlar [data-masam-koddz]').click());
+      await bekle(150);
+      const pencere = await pc.evaluate(() => ({ var: Boolean(document.getElementById('masam-kod-pencere')), kapali: document.getElementById('masam-kod-uygula').disabled }));
+      await pc.evaluate((sc) => { const r = document.getElementById(sc === 'ders' ? 'masam-kod-ders' : 'masam-kod-sinav'); r.click(); document.getElementById('masam-kod-uygula').click(); }, secim);
+      await bekle(300);
+      const sonra = await kart(kablolamaId);
+      const makbuz = await pc.evaluate(() => document.getElementById('rozet-kayit-durumu').textContent);
+      return { once, pencere, sonra, makbuz, kapandi: !(await pc.evaluate(() => Boolean(document.getElementById('masam-kod-pencere')))) };
+    };
+    const kd1 = await kodDuzeltDene('74119999-FINAL-2026', '74119999 — Kablolama', 'ders');
+    kontrol('Kod uyuşmazlığı kartta uyarı + Düzelt; seçim yapılmadan Düzelt kapalı', /⚠ sınavda kod 74119999/.test(kd1.once.metin) && kd1.pencere.var && kd1.pencere.kapali, JSON.stringify(kd1).slice(0, 300));
+    kontrol('"Dersin kodu doğru" seçilince sınav adı düzelir, uyarı kalkar, makbuz çıkar', kd1.kapandi && !/sınavda kod/.test(kd1.sonra.metin) && /74112317 — Kablolama/.test(kd1.sonra.metin) && /Düzeltildi: Sınavın adı artık 74112317/.test(kd1.makbuz), JSON.stringify(kd1).slice(0, 300));
+    const kd2 = await kodDuzeltDene('74118888-BUT-2026', '74118888 — Kablolama', 'sinav');
+    kontrol('"Sınavdaki kod doğru" seçilince dersin kodu düzelir, okunan kağıt yerinde', /⚠ sınavda kod 74118888/.test(kd2.once.metin) && !/sınavda kod/.test(kd2.sonra.metin) && /^74118888 — Kablolama/.test(kd2.sonra.metin) && /1 okundu/.test(kd2.sonra.metin) && /Düzeltildi: Dersin kodu artık 74118888/.test(kd2.makbuz), JSON.stringify(kd2).slice(0, 300));
+    await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-kayitlar"]').click());
+    await bekle(600);
+    const kayitMetin = await pc.evaluate(() => document.getElementById('sekme-kayitlar').textContent);
+    kontrol('Düzeltmeler Kayıtlar sayfasına yazılır', /Kod uyuşmazlığı düzeltildi: sınav adı 74119999 → 74112317/.test(kayitMetin) && /ders kodu 74112317 → 74118888/.test(kayitMetin), kayitMetin.slice(0, 200));
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;
