@@ -2687,3 +2687,14 @@ html { scroll-padding-top: 104px; }
 .btn-baglanti:focus-visible { outline:2px solid var(--birincil); outline-offset:2px; }
 #tablo-ogrenci-notlari td:nth-child(n+4) { font-variant-numeric:tabular-nums; }
 .sekme-rozet.itiraz-rozet { background:#f59e0b; color:#111827; }
+
+
+/* ── Açılır menü (İçe aktar / İndir) ── */
+.acilir-menu { position:relative; display:inline-block; }
+.acilir-menu > summary { list-style:none; cursor:pointer; }
+.acilir-menu > summary::-webkit-details-marker { display:none; }
+.acilir-menu-liste { position:absolute; right:0; top:calc(100% + 4px); z-index:50; min-width:260px; display:flex; flex-direction:column; padding:6px; background:var(--bg-kart); border:1px solid var(--kenar); border-radius:10px; box-shadow:0 10px 30px rgba(15,23,42,0.15); }
+.acilir-menu-liste button { text-align:left; background:none; border:0; font:inherit; font-size:var(--yazi-sm); color:var(--metin); padding:8px 10px; border-radius:6px; cursor:pointer; }
+.acilir-menu-liste button:hover, .acilir-menu-liste button:focus-visible { background:var(--bg-ikincil); outline:none; }
+#banka-oc-uyari[hidden] { display:none !important; }
+@media (max-width: 640px) { .acilir-menu-liste { right:auto; left:0; min-width:220px; } }

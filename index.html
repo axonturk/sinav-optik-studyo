@@ -1162,8 +1162,28 @@
             <svg class="ui-ikon"><use href="#i-plus"></use></svg>
             <span>Akıllı Yapıştır Çekmecesi</span>
           </button>
+          <!-- İçe aktar / İndir menüleri: sayfadaki mevcut düğmeleri tek yerden çalıştırır (düğmeler yerinde kalır) -->
+          <details class="acilir-menu" id="menu-banka-ice-aktar">
+            <summary class="btn btn-kucuk">⤒ İçe aktar ▾</summary>
+            <div class="acilir-menu-liste" role="menu">
+              <button type="button" role="menuitem" data-banka-dosya="input-soru-csv-yukle">CSV / Excel dosyasından soru yükle</button>
+              <button type="button" role="menuitem" data-banka-odak="toplu-soru-metin">Word / metinden toplu yapıştır</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-banka-bologna-ac">Bologna bilgi paketi içe aktar</button>
+            </div>
+          </details>
+          <details class="acilir-menu" id="menu-banka-indir">
+            <summary class="btn btn-kucuk">⤓ İndir ▾</summary>
+            <div class="acilir-menu-liste" role="menu">
+              <button type="button" role="menuitem" data-banka-vekil="btn-soru-bankasi-csv-disa-aktar">Aktif dersin soruları (CSV, ÖÇ sütunlu)</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-bos-soru-csv-indir">Boş şablon: tüm soru türleri</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-bos-test-csv-indir">Boş şablon: çoktan seçmeli</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-bos-dy-csv-indir">Boş şablon: doğru / yanlış</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-bos-klasik-csv-indir">Boş şablon: klasik</button>
+            </div>
+          </details>
         </div>
       </div>
+      <div id="banka-oc-uyari" class="uyari-kutu yazdir-gizle" hidden style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; margin-bottom:var(--b-4); border-radius:8px; background:rgba(234,179,8,0.12); border:1px solid rgba(234,179,8,0.45);"></div>
 
       <div class="iki-sutun-duzen">
 

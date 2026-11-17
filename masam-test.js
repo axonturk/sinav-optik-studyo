@@ -401,6 +401,27 @@ function kontrol(ad, kosul, detay = '') {
     const baglaSonra = await pc.evaluate(() => ({ panel: (document.querySelector('.sekme-panel.aktif') || {}).id, ders: document.getElementById('aktif-ders-sec').value, sinav: document.getElementById('sec-kayitli-sinav-ust').value }));
     kontrol('A1: eşleşmeyen telefon sınavı seçilen derse "Derse bağla" ile kaydedilir ve notları açılır', baglaOnce && baglaSonra.panel === 'sekme-analiz' && baglaSonra.ders === kablolamaId && /ZZQUIZ-1/.test(baglaSonra.sinav), JSON.stringify(baglaSonra));
 
+    // A4: Soru Bankası İçe aktar / İndir menüleri mevcut düğmeleri çalıştırır; ÖÇ uyarısı sayıyla uyumlu
+    await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-banka"]').click());
+    await bekle(300);
+    const a4 = await pc.evaluate(() => {
+      const ice = document.querySelectorAll('#menu-banka-ice-aktar [role="menuitem"]').length;
+      const ind = document.querySelectorAll('#menu-banka-indir [role="menuitem"]').length;
+      const hedeflerVar = [...document.querySelectorAll('[data-banka-vekil], [data-banka-dosya], [data-banka-odak]')].every((b) => document.getElementById(b.getAttribute('data-banka-vekil') || b.getAttribute('data-banka-dosya') || b.getAttribute('data-banka-odak')));
+      const m = document.getElementById('menu-banka-indir');
+      m.open = true;
+      let ad = '';
+      const eskiClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () { ad = this.download || ''; };
+      m.querySelector('[data-banka-vekil="btn-soru-bankasi-csv-disa-aktar"]').click();
+      HTMLAnchorElement.prototype.click = eskiClick;
+      const secici = /_Soru_Bankasi_Bologna_OC\.csv$/.test(ad);
+      const kapandi = !m.open;
+      const u = document.getElementById('banka-oc-uyari');
+      return { ice, ind, hedeflerVar, secici, kapandi, ocTutarli: u.hidden ? u.dataset.ocsuz === '0' : new RegExp(`${u.dataset.ocsuz} soruda öğrenim çıktısı`).test(u.textContent) };
+    });
+    kontrol('A4: Soru Bankası "İçe aktar ▾" (3) / "İndir ▾" (5); her seçenek mevcut düğmeye bağlı; İndir menüsü soru bankası CSV dosyasını indirir, menü kapanır; ÖÇ uyarısı tutarlı', a4.ice === 3 && a4.ind === 5 && a4.hedeflerVar && a4.secici && a4.kapandi && a4.ocTutarli, JSON.stringify(a4));
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;

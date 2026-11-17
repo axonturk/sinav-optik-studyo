@@ -5667,6 +5667,13 @@
     const ocFiltre = (document.getElementById('filtre-soru-oc') && document.getElementById('filtre-soru-oc').value) || 'TUMU';
     const aktifDersSorulari = durum.sorular.filter((s) => !s.arsivde && (s.dersId === aktifDersId || s.dersId === 'genel'));
     document.getElementById('rozet-banka-toplam').textContent = String(aktifDersSorulari.length);
+    const ocUyari = document.getElementById('banka-oc-uyari');
+    if (ocUyari) {
+      const ocsuz = aktifDersSorulari.filter((s) => !String(s.ocKodu || '').trim() && !/[ÖO][ÇC]\s*-?\s*\d/i.test(String(s.kazanim || ''))).length;
+      ocUyari.hidden = ocsuz === 0;
+      ocUyari.dataset.ocsuz = String(ocsuz);
+      ocUyari.innerHTML = ocsuz ? `<span>⚠️ <strong>${ocsuz} soruda öğrenim çıktısı eşleşmesi yok.</strong> Bu sorular ÖÇ raporlarına ve belirtke tablosuna girmez.</span><button type="button" class="btn btn-kucuk" data-banka-vekil="btn-banka-otomatik-oc-analiz">Otomatik eşleştir</button>` : '';
+    }
 
     // Aktif dersteki Bologna Öğrenim Çıktısı (ÖÇ) Dağılım Özeti Çubuğu
     const kutuBankaOcOzet = document.getElementById('kutu-banka-oc-ozet');
@@ -9832,6 +9839,25 @@
         }
       });
     }
+
+    // Soru Bankası: İçe aktar / İndir menüleri ve ÖÇ uyarısı mevcut düğmeleri çalıştırır
+    const bankaVekil = (e) => {
+      const b = e.target.closest('[data-banka-vekil], [data-banka-dosya], [data-banka-odak]');
+      if (!b) return;
+      const menu = b.closest('details.acilir-menu');
+      if (menu) menu.open = false;
+      const hedef = document.getElementById(b.getAttribute('data-banka-vekil') || b.getAttribute('data-banka-dosya') || b.getAttribute('data-banka-odak'));
+      if (!hedef) return;
+      if (b.hasAttribute('data-banka-odak')) { if (hedef.scrollIntoView) hedef.scrollIntoView({ block: 'center', behavior: 'smooth' }); hedef.focus(); return; }
+      hedef.click();
+    };
+    ['menu-banka-ice-aktar', 'menu-banka-indir', 'banka-oc-uyari'].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener('click', bankaVekil); });
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('details.acilir-menu[open]').forEach((m) => { if (!m.contains(e.target)) m.open = false; });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') document.querySelectorAll('details.acilir-menu[open]').forEach((m) => { m.open = false; });
+    });
 
     // Sayfa başlığı: menüdeki bölüm başlığından yol (Öğretmen › Hazırla › Soru Bankası) + ekran adı
     const guncelleSayfaBasligi = (btn) => {
