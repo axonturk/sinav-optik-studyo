@@ -480,8 +480,13 @@
     return k && k.kaynak === 'telefon' ? k : null;
   }
   /* ── Telefon sınavı cevap anahtarı: derse anahtarsız kaydedilen sınavın puanları sıfırlanmasın, anahtar sonradan gelirse tamamlansın ── */
+  function telefonSoruSayisiVarMi(x) {
+    return Boolean(x && (Number(x.dySayisi) || 0) + (Number(x.testSayisi) || 0) + (Number(x.klasikSayisi) || 0) > 0);
+  }
+  // Geçerli anahtar: soru sayısı var VE en az bir kitapçığın anahtarı dolu (soru sayısı olup anahtarı boş gelen sınav da puanları sıfırlıyordu)
   function telefonAnahtariGecerliMi(ta) {
-    return Boolean(ta && (Number(ta.dySayisi) || 0) + (Number(ta.testSayisi) || 0) + (Number(ta.klasikSayisi) || 0) > 0);
+    if (!telefonSoruSayisiVarMi(ta)) return false;
+    return Object.values((ta && ta.anahtarlar) || {}).some((g) => g && (String(g.dy || '').length || String(g.test || '').length));
   }
   function telefonYapisindanAnahtar(y) {
     const an = (y && y.cevapAnahtarlari && typeof y.cevapAnahtarlari === 'object') ? y.cevapAnahtarlari : {};
@@ -493,9 +498,8 @@
   }
   // Yapı geçerli sayılır: soru sayısı var VE en az bir kitapçığın anahtarı dolu
   function telefonYapisiKullanilirMi(y) {
-    if (!y || !telefonAnahtariGecerliMi(y)) return false;
-    const ta = telefonYapisindanAnahtar(y);
-    return Object.values(ta.anahtarlar).some((g) => (g.dy || '').length || (g.test || '').length);
+    if (!y || !telefonSoruSayisiVarMi(y)) return false;
+    return telefonAnahtariGecerliMi(telefonYapisindanAnahtar(y));
   }
   function telefonSinavKaynakYapisi(kod) {
     const kova = telefonSinavlariniYukle()[kod];
@@ -6247,8 +6251,52 @@
     if (btn) { btn.disabled = arsivde; btn.textContent = arsivde ? '🗄️ Arşivde' : '🗄️ Arşive kaydet'; }
   }
 
+  /* Değerlendirme > Notlar: öğrenci öğrenci not listesi (okunan kağıtlar + girmeyenler GR), aranabilir */
+  function aktifSinavGirmeyenleri(okumalar) {
+    const okunan = new Set((okumalar || []).map((o) => String(o.ogrNo || '').trim()));
+    const sonuc = new Map();
+    const dersId = durum.aktifDersId;
+    (durum.ogrenciKayitlari || []).forEach((o) => {
+      if (!o || !o.ogrNo || !dersId) return;
+      const listede = !Array.isArray(o.dersIdler) || o.dersIdler.length === 0 || o.dersIdler.includes(dersId);
+      const no = String(o.ogrNo).trim();
+      if (listede && !okunan.has(no)) sonuc.set(no, o.adSoyad || '');
+    });
+    const ks = durum.aktifKayitliSinavId ? (durum.kayitliSinavlar || []).find((x) => x && x.id === durum.aktifKayitliSinavId) : null;
+    const kod = ks && ks.sinavKodu;
+    (durum.yoklamalar || []).forEach((y) => {
+      const no = String((y && y.ogrNo) || '').trim();
+      if (y && y.gr && kod && y.sinavKodu === kod && !okunan.has(no) && !sonuc.has(no)) sonuc.set(no, '');
+    });
+    return [...sonuc.entries()].map(([ogrNo, ad]) => ({ ogrNo, adSoyad: ogrAdiBul(ogrNo, ad) }));
+  }
+  function cizOgrenciNotlari() {
+    const tablo = document.getElementById('tablo-ogrenci-notlari');
+    if (!tablo) return;
+    const govde = tablo.querySelector('tbody');
+    const k = C.kacisHTML;
+    const okumalar = (durum.okumaSonuclari || []).slice();
+    const say = (r) => {
+      let dg = 0; let yn = 0; let bs = 0;
+      [...(r.dyDetay || []), ...(r.testDetay || [])].forEach((x) => { if (x && x.sonuc === 'DOGRU') dg += 1; else if (x && x.sonuc === 'YANLIS') yn += 1; else bs += 1; });
+      return { dg, yn, bs };
+    };
+    const satirlar = okumalar.map((r) => ({ ogrNo: String(r.ogrNo || ''), ad: ogrAdiBul(r.ogrNo, r.adSoyad), grup: r.grup || '', ...say(r), puan: Number(r.toplamPuan) || 0, gr: false }))
+      .concat(aktifSinavGirmeyenleri(okumalar).map((g) => ({ ogrNo: g.ogrNo, ad: g.adSoyad, grup: '', dg: '', yn: '', bs: '', puan: '', gr: true })))
+      .sort((a, b) => String(a.ogrNo).localeCompare(String(b.ogrNo), 'tr'));
+    const ara = String((document.getElementById('ara-ogrenci-not') || {}).value || '').trim().toLocaleLowerCase('tr-TR');
+    const gorunen = ara ? satirlar.filter((x) => x.ogrNo.includes(ara) || String(x.ad || '').toLocaleLowerCase('tr-TR').includes(ara)) : satirlar;
+    const rozet = document.getElementById('rozet-ogrenci-not-sayisi');
+    if (rozet) rozet.textContent = ara ? `${gorunen.length} / ${satirlar.length}` : String(satirlar.length);
+    govde.innerHTML = gorunen.length ? gorunen.map((x) => {
+      const harf = x.gr ? 'GR' : C.hesaplaHarfNotu(x.puan);
+      const zayif = x.gr || /^(FF|FD|F)$/.test(harf);
+      return `<tr data-not-ogr="${k(x.ogrNo)}"><td class="mono">${k(x.ogrNo)}</td><td><button type="button" class="btn-baglanti" data-not-dosya="${k(x.ogrNo)}" title="Öğrenci Dosyası'nı aç">${k(x.ad || '—')}</button></td><td>${k(x.grup)}</td><td>${k(x.dg)}</td><td>${k(x.yn)}</td><td>${k(x.bs)}</td><td><strong>${x.gr ? 'GR' : k(x.puan)}</strong></td><td><span class="rozet ${zayif ? 'rozet-kirmizi' : 'rozet-mavi'}">${k(harf)}</span></td></tr>`;
+    }).join('') : `<tr><td colspan="8" style="text-align:center; color:var(--metin-soluk);">${satirlar.length ? 'Aramayla eşleşen öğrenci yok.' : 'Bu sınavda henüz okunan kağıt yok.'}</td></tr>`;
+  }
   function guncelleMaddeAnaliziSekmesi() {
     try { guncelleTelefonSinaviBandi(); } catch (_) {}
+    try { cizOgrenciNotlari(); } catch (_) {}
     const yapi = okuEtkinOmrSinavYapisi();
     const analiz = C.hesaplaSinifVeMaddeAnalizi(durum.okumaSonuclari, yapi);
 
@@ -9785,11 +9833,32 @@
       });
     }
 
+    // Sayfa başlığı: menüdeki bölüm başlığından yol (Öğretmen › Hazırla › Soru Bankası) + ekran adı
+    const guncelleSayfaBasligi = (btn) => {
+      const yolEl = document.getElementById('sayfa-yolu');
+      const baslikEl = document.getElementById('sayfa-baslik-metin');
+      if (!btn || !yolEl || !baslikEl) return;
+      const ad = ((btn.querySelector('.yan-menu-metin') || btn).textContent || '').replace(/\s+/g, ' ').trim();
+      let grup = '';
+      let el = btn.closest('.yan-menu-liste');
+      while (el && (el = el.previousElementSibling)) {
+        if (el.classList.contains('yan-menu-grup-baslik')) { grup = el.textContent.replace(/^\s*\d+\s*·\s*/, '').trim(); break; }
+        if (el.classList.contains('yan-menu-ayirici')) { grup = 'Kurum ve ayarlar'; break; }
+      }
+      if (!grup) grup = 'Günlük';
+      const k = C.kacisHTML;
+      yolEl.innerHTML = `<span>Öğretmen</span><span>${k(grup)}</span><span>${k(ad)}</span>`;
+      baslikEl.textContent = ad;
+      baslikEl.title = btn.getAttribute('title') || '';
+    };
+    guncelleSayfaBasligi(document.querySelector('.sekme-btn.aktif[data-sekme]'));
+
     // Sekme Geçişleri
     document.querySelectorAll('.sekme-btn[data-sekme]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const hedefId = btn.getAttribute('data-sekme');
         if (!hedefId) return;
+        guncelleSayfaBasligi(btn);
         document.querySelectorAll('.sekme-btn[data-sekme]').forEach((b) => b.classList.remove('aktif'));
         document.querySelectorAll('.sekme-panel').forEach((p) => p.classList.remove('aktif'));
         btn.classList.add('aktif');
@@ -9797,6 +9866,7 @@
         if (hedef) hedef.classList.add('aktif');
         if (typeof window.__guncelleDerslerVeBosDurumUI === 'function') window.__guncelleDerslerVeBosDurumUI();
         if (typeof window.__guncelleYasamDongusuRozetUI === 'function') window.__guncelleYasamDongusuRozetUI();
+        if (hedefId === 'sekme-analiz' && typeof window.__masamItirazYenile === 'function') window.__masamItirazYenile();
         if (hedefId === 'sekme-masam' && typeof window.__cizMasam === 'function') {
           window.__cizMasam();
           if (typeof window.__masamItirazYenile === 'function') window.__masamItirazYenile();
@@ -16263,6 +16333,13 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       if (y.kod.length) parca.push(cip(`kart:${y.kod[0]}`, y.kod.length, 'sınavın kodu düzeltilecek', 'cip-kirmizi'));
       if (y.supheliToplam) parca.push(cip(`kart:${y.supheli[0]}`, y.supheliToplam, 'şüpheli kağıt incelenecek'));
       if (masamItiraz.yeni) parca.push(cip('itiraz', masamItiraz.yeni, 'yeni itiraz', 'cip-mavi'));
+      const menuBtn = document.querySelector('.sekme-btn[data-itiraz-rozetli]');
+      if (menuBtn) {
+        let r = menuBtn.querySelector('.itiraz-rozet');
+        if (!r) { r = document.createElement('span'); r.className = 'sekme-rozet itiraz-rozet'; r.title = 'Yeni itiraz'; menuBtn.appendChild(r); }
+        r.textContent = String(masamItiraz.yeni || 0);
+        r.hidden = !masamItiraz.yeni;
+      }
       const isSayisi = y.eslesmeyen + y.kaydet.length + y.esitle.length + y.kod.length + y.supheliToplam + masamItiraz.yeni;
       kutuY.innerHTML = `<span class="yapilacak-baslik"><strong>Bugün yapılacaklar</strong><small>${isSayisi ? `${isSayisi} iş seni bekliyor` : 'Her şey yolunda'}</small></span>${parca.length ? parca.join('') : '<span class="yapilacak-tamam">✓ Bekleyen iş yok</span>'}`;
     };
@@ -16281,6 +16358,17 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       } catch (_) { /* çevrimdışı: itiraz sayısı gösterilmez */ }
     };
     window.__masamItirazYenile = () => masamItirazlariniYenile(true);
+    const araNot = document.getElementById('ara-ogrenci-not');
+    if (araNot) araNot.addEventListener('input', () => cizOgrenciNotlari());
+    const tabloNot = document.getElementById('tablo-ogrenci-notlari');
+    if (tabloNot) tabloNot.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-not-dosya]');
+      if (!b) return;
+      const g = document.getElementById('ogr-dosya-ara');
+      gecisSekmeYardimci('sekme-ogrenci-dosyasi');
+      if (g) { g.value = b.getAttribute('data-not-dosya'); g.dispatchEvent(new Event('input', { bubbles: true })); }
+      cizOgrenciDosyasi();
+    });
     const masamItirazlariAc = () => {
       gecisSekmeYardimci('sekme-analiz');
       const notlarBtn = document.querySelector('#analiz-alt-sekmeler [data-alt="ogrenciler"]');

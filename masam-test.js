@@ -86,6 +86,18 @@ function kontrol(ad, kosul, detay = '') {
     kontrol('Derse eşleşmeyen telefon sınavı Masam\'da uyarı olarak görünür; menüde rozet', uyari.gorunur && /1 telefon sınavı hiçbir derse eşleşmedi/.test(uyari.metin) && /Bilinmeyen Quiz/.test(uyari.metin) && rozet.gorunur && rozet.sayi === '1', `${JSON.stringify(uyari)} · ${JSON.stringify(rozet)}`);
     let k1 = await kart(kablolamaId);
     const yapilacak = await pc.evaluate(() => { const y = document.getElementById('masam-yapilacaklar'); return { metin: y.textContent.replace(/\s+/g, ' '), cip: y.querySelectorAll('[data-masam-git]').length, adimGizli: document.getElementById('adim-cubugu').hidden }; });
+    const a2 = await pc.evaluate(() => {
+      const oku = () => ({ yol: document.getElementById('sayfa-yolu').textContent.replace(/\s+/g, ' '), baslik: document.getElementById('sayfa-baslik-metin').textContent });
+      const masam = oku();
+      document.querySelector('.sekme-btn[data-sekme="sekme-banka"]').click();
+      const banka = oku();
+      document.querySelector('.sekme-btn[data-sekme="sekme-ayarlar"]').click();
+      const ayar = oku();
+      document.querySelector('.sekme-btn[data-sekme="sekme-masam"]').click();
+      return { masam, banka, ayar };
+    });
+    kontrol('A2: her ekranda yol + başlık (Öğretmen › Günlük › Masam · Hazırla › Soru Bankası · Kurum ve ayarlar › Ayarlar)', /Öğretmen\s*Günlük\s*Masam/.test(a2.masam.yol) && a2.masam.baslik === 'Masam' && /Hazırla\s*Soru Bankası/.test(a2.banka.yol) && a2.banka.baslik === 'Soru Bankası' && /Kurum ve ayarlar\s*Ayarlar/.test(a2.ayar.yol), JSON.stringify(a2));
+    await bekle(250);
     const a1 = await pc.evaluate(() => {
       const kart = document.querySelector('#masam-kartlar .masam-kart');
       const ser = kart && kart.querySelector('[data-masam-durum]');
@@ -110,6 +122,22 @@ function kontrol(ad, kosul, detay = '') {
     }));
     kontrol('"Derse kaydet" tek dokunuşla Değerlendirme > Notlar\'ı o sınavla açar', acik.panel === 'sekme-analiz' && /aktif/.test(acik.notlar) && acik.sinav === `TEL-${KOD}` && acik.okunan === '1', JSON.stringify(acik));
     kontrol('Değerlendirme açıkken "Notları gör" düğmesi gizli', acik.ctaGizli === true, JSON.stringify(acik));
+    const a3 = await pc.evaluate(() => {
+      const satirlar = [...document.querySelectorAll('#tablo-ogrenci-notlari tbody tr[data-not-ogr]')];
+      const ayse = satirlar.find((t) => t.getAttribute('data-not-ogr') === '247419001');
+      const ara = document.getElementById('ara-ogrenci-not');
+      ara.value = 'ayşe'; ara.dispatchEvent(new Event('input', { bubbles: true }));
+      const aramaSonra = document.querySelectorAll('#tablo-ogrenci-notlari tbody tr[data-not-ogr]').length;
+      ara.value = ''; ara.dispatchEvent(new Event('input', { bubbles: true }));
+      return { sayi: satirlar.length, ayse: ayse ? [...ayse.children].map((td) => td.textContent.trim()).join(' ') : '', aramaSonra, gorunur: !document.getElementById('kutu-ogrenci-notlari').hidden && getComputedStyle(document.getElementById('kutu-ogrenci-notlari')).display !== 'none' };
+    });
+    kontrol('A3: Notlar\'da öğrenci not listesi: okunan öğrenci puan ve harfle (80 · BB); arama süzer', a3.gorunur && a3.sayi >= 1 && /247419001 AYŞE YILMAZ A 10 0 0 80 BB/.test(a3.ayse) && a3.aramaSonra === 1, JSON.stringify(a3));
+    await pc.evaluate(() => document.querySelector('#tablo-ogrenci-notlari [data-not-dosya="247419001"]').click());
+    await bekle(250);
+    const a3dosya = await pc.evaluate(() => ({ panel: (document.querySelector('.sekme-panel.aktif') || {}).id, ara: document.getElementById('ogr-dosya-ara').value }));
+    kontrol('A3: isme tıklayınca Öğrenci Dosyası o öğrenciyle açılır', a3dosya.panel === 'sekme-ogrenci-dosyasi' && a3dosya.ara === '247419001', JSON.stringify(a3dosya));
+    await pc.evaluate(() => { document.querySelector('.sekme-btn[data-sekme="sekme-analiz"]').click(); document.querySelector('#analiz-alt-sekmeler [data-alt="ogrenciler"]').click(); });
+    await bekle(200);
     const adim = await pc.evaluate(() => {
       const n = document.getElementById('adim-cubugu');
       return { gorunur: !n.hidden, sinav: document.getElementById('adim-cubugu-sinav').textContent, tamam: [...n.querySelectorAll('.adim-tamam')].map((b) => b.dataset.adim).join(','), simdi: (n.querySelector('[aria-current="step"]') || {}).dataset ? n.querySelector('[aria-current="step"]').dataset.adim : '' };
@@ -282,6 +310,8 @@ function kontrol(ad, kosul, detay = '') {
     let yeniIt = '';
     for (let i = 0; i < 15; i++) { await bekle(200); yeniIt = await pc.evaluate(() => document.getElementById('masam-yapilacaklar').textContent.replace(/\s+/g, ' ')); if (/yeni itiraz/.test(yeniIt)) break; }
     kontrol('Öğrenci itiraz edince Masam\'da "1 yeni itiraz" görünür', itzM.kod === 200 && /1 yeni itiraz/.test(yeniIt), `${itzM.kod} ${yeniIt}`);
+    const menuRozet = await pc.evaluate(() => { const r = document.querySelector('.sekme-btn[data-sekme="sekme-analiz"] .itiraz-rozet'); return r ? { gizli: r.hidden, sayi: r.textContent } : null; });
+    kontrol('A3: Değerlendirme menüsünde yeni itiraz rozeti (1)', menuRozet && !menuRozet.gizli && menuRozet.sayi === '1', JSON.stringify(menuRozet));
     await pc.evaluate(() => document.querySelector('#masam-yapilacaklar [data-masam-git="itiraz"]').click());
     let itzListe = '';
     for (let i = 0; i < 15; i++) { await bekle(200); itzListe = await pc.evaluate(() => document.getElementById('liste-itirazlar').textContent); if (/kontrol eder misiniz/.test(itzListe)) break; }

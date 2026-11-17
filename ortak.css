@@ -2670,3 +2670,20 @@ html { scroll-padding-top: 104px; }
 [data-tema="koyu"] .sonuc-cipler .cip-d { color:#4ade80; }
 [data-tema="koyu"] .sonuc-cipler .cip-y { color:#f87171; }
 .sonuc-not { font-size:var(--yazi-xs); color:var(--metin-ikincil); margin-bottom:6px; }
+
+
+/* ── Sayfa başlığı: yol + başlık ── */
+.sayfa-basligi { margin:0 0 12px; }
+.sayfa-yolu { font-size:var(--yazi-xs); color:var(--metin-ikincil); display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.sayfa-yolu span + span::before { content:'›'; margin-right:6px; color:var(--metin-soluk, #94a3b8); }
+.sayfa-yolu span:last-child { color:var(--metin); font-weight:600; }
+.sayfa-baslik-metin { font-size:1.45rem; font-weight:700; margin:2px 0 0; line-height:1.25; color:var(--metin); }
+@media (max-width: 640px) { .sayfa-baslik-metin { font-size:1.2rem; } }
+
+
+/* ── Öğrenci notları tablosu ── */
+.btn-baglanti { background:none; border:0; padding:0; font:inherit; color:var(--birincil); cursor:pointer; text-align:left; }
+.btn-baglanti:hover { text-decoration:underline; }
+.btn-baglanti:focus-visible { outline:2px solid var(--birincil); outline-offset:2px; }
+#tablo-ogrenci-notlari td:nth-child(n+4) { font-variant-numeric:tabular-nums; }
+.sekme-rozet.itiraz-rozet { background:#f59e0b; color:#111827; }
