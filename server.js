@@ -1335,7 +1335,9 @@ function istekIsleyici(req, res) {
         const satirlar = [];
         sunucuDurumu.ogrenciSonuclari.forEach((v, k) => { if (k.endsWith(`|${ogrNo}`)) satirlar.push(Object.assign({ yayinId: k.split('|')[0], yayinMs: v.yayinMs, sinavAdi: v.baslik.sinavAdi, dersAdi: v.baslik.dersAdi, kurallarNotu: v.baslik.kurallarNotu, _hoca: v.hoca }, v.veri)); });
         satirlar.sort((a, b) => b.yayinMs - a.yayinMs);
-        if (yol === '/api/ogrenci/sonuclarim') return gonderJson(res, 200, { basarili: true, sonuclar: satirlar.slice(0, 50).map((x) => { const y = Object.assign({}, x); delete y._hoca; return y; }) });
+        // Kalan günlük itiraz hakkı (son 24 saatte gönderilenler; sınır 10)
+        const itirazSayisi = () => sunucuDurumu.ogrenciItirazlari.filter((x) => x.ogrNo === ogrNo && Number(x.zamanMs) > Date.now() - 24 * 60 * 60 * 1000).length;
+        if (yol === '/api/ogrenci/sonuclarim') return gonderJson(res, 200, { basarili: true, kalanItiraz: Math.max(0, 10 - itirazSayisi()), sonuclar: satirlar.slice(0, 50).map((x) => { const y = Object.assign({}, x); delete y._hoca; return y; }) });
         const hedef = satirlar.find((x) => x.yayinId === String(govde.yayinId || ''));
         if (!hedef) return gonderJson(res, 404, { hata: 'Bu sınavın sonucu sana açık değil.' });
         const soruNo = String(govde.soruNo || '').trim().slice(0, 12);
@@ -1344,7 +1346,7 @@ function istekIsleyici(req, res) {
         const sinir = kontrolHizSiniri(`itiraz:${ogrNo}`, 10, 24 * 60 * 60 * 1000);
         if (!sinir.izinli) return gonderJson(res, 429, { hata: 'Bugün çok fazla itiraz gönderdin. Yarın tekrar dene.' });
         sunucuDurumu.ogrenciItirazlari.push({ hoca: hedef._hoca, yayinId: hedef.yayinId, sinavAdi: hedef.sinavAdi, ogrNo, soruNo, aciklama, zamanMs: Date.now() });
-        return gonderJson(res, 200, { basarili: true });
+        return gonderJson(res, 200, { basarili: true, kalanItiraz: Math.max(0, 10 - itirazSayisi()) });
       })
       .catch((err) => gonderJson(res, 400, { hata: err.message }));
     return;

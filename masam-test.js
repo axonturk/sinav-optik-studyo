@@ -85,6 +85,11 @@ function kontrol(ad, kosul, detay = '') {
     const rozet = await pc.evaluate(() => { const r = document.getElementById('rozet-masam-uyari'); return { gorunur: !r.hidden, sayi: r.textContent }; });
     kontrol('Derse eşleşmeyen telefon sınavı Masam\'da uyarı olarak görünür; menüde rozet', uyari.gorunur && /1 telefon sınavı hiçbir derse eşleşmedi/.test(uyari.metin) && /Bilinmeyen Quiz/.test(uyari.metin) && rozet.gorunur && rozet.sayi === '1', `${JSON.stringify(uyari)} · ${JSON.stringify(rozet)}`);
     let k1 = await kart(kablolamaId);
+    const yapilacak = await pc.evaluate(() => { const y = document.getElementById('masam-yapilacaklar'); return { metin: y.textContent.replace(/\s+/g, ' '), cip: y.querySelectorAll('[data-masam-git]').length, adimGizli: document.getElementById('adim-cubugu').hidden }; });
+    kontrol('Masam\'da "Bugün yapılacaklar": derse bağlanacak ve kaydedilecek telefon sınavı; Masam\'da adım çubuğu yok', /Bugün yapılacaklar/.test(yapilacak.metin) && /1 telefon sınavı derse bağlanacak/.test(yapilacak.metin) && /1 telefon sınavı derse kaydedilecek/.test(yapilacak.metin) && yapilacak.cip === 2 && yapilacak.adimGizli, JSON.stringify(yapilacak));
+    await pc.evaluate(() => document.querySelector('#masam-yapilacaklar [data-masam-git^="kart:"]').click());
+    const vurgu = await pc.evaluate(() => Boolean(document.querySelector('#masam-kartlar .kart.masam-vurgu')));
+    kontrol('Yapılacak çipine basınca ilgili ders kartı vurgulanır', vurgu);
     kontrol('Kablolama kartı telefondan gelen sınavı "Derse kaydet" ile gösterir', k1 && k1.telKaydet && /telefondan geldi/.test(k1.metin), JSON.stringify(k1));
 
     // Tek dokunuş: Derse kaydet → Notlar
@@ -99,6 +104,18 @@ function kontrol(ad, kosul, detay = '') {
     }));
     kontrol('"Derse kaydet" tek dokunuşla Değerlendirme > Notlar\'ı o sınavla açar', acik.panel === 'sekme-analiz' && /aktif/.test(acik.notlar) && acik.sinav === `TEL-${KOD}` && acik.okunan === '1', JSON.stringify(acik));
     kontrol('Değerlendirme açıkken "Notları gör" düğmesi gizli', acik.ctaGizli === true, JSON.stringify(acik));
+    const adim = await pc.evaluate(() => {
+      const n = document.getElementById('adim-cubugu');
+      return { gorunur: !n.hidden, sinav: document.getElementById('adim-cubugu-sinav').textContent, tamam: [...n.querySelectorAll('.adim-tamam')].map((b) => b.dataset.adim).join(','), simdi: (n.querySelector('[aria-current="step"]') || {}).dataset ? n.querySelector('[aria-current="step"]').dataset.adim : '' };
+    });
+    kontrol('Adım çubuğu: Hazırla/Bas/Oku ✓, şimdi "Değerlendir"; açık ders ve sınav türü yazar', adim.gorunur && adim.tamam === 'hazirla,bas,oku' && adim.simdi === 'degerlendir' && /74112317 Kablolama · Vize/.test(adim.sinav), JSON.stringify(adim));
+    await pc.evaluate(() => document.querySelector('#adim-cubugu [data-adim="oku"]').click());
+    await bekle(150);
+    const okuPanel = await pc.evaluate(() => (document.querySelector('.sekme-panel.aktif') || {}).id);
+    await pc.evaluate(() => document.querySelector('#adim-cubugu [data-adim="degerlendir"]').click());
+    await bekle(150);
+    const dgrPanel = await pc.evaluate(() => (document.querySelector('.sekme-panel.aktif') || {}).id);
+    kontrol('Adıma basınca ilgili ekran açılır (Oku → Optik Okuma, Değerlendir → Değerlendirme)', okuPanel === 'sekme-omr' && dgrPanel === 'sekme-analiz', `${okuPanel} / ${dgrPanel}`);
     await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-omr"]').click());
     await bekle(200);
     const cta = await pc.evaluate(() => { const b = document.getElementById('btn-yasam-dongusu-cta'); return { gizli: b.hidden, metin: b.textContent.trim() }; });
@@ -115,6 +132,8 @@ function kontrol(ad, kosul, detay = '') {
     await senkron();
     await masamAc();
     k1 = await kart(kablolamaId);
+    const yapE = await pc.evaluate(() => document.getElementById('masam-yapilacaklar').textContent.replace(/\s+/g, ' '));
+    kontrol('Yapılacaklarda "1 ders telefonla eşitlenecek" görünür', /1 ders telefonla eşitlenecek/.test(yapE), yapE);
     kontrol('Telefondan yeni kağıt gelince kart sayı farkını gösterir ve "Eşitle" sunar', k1 && k1.esit === '0' && k1.esitle && /Telefondan 2 · Derste 1/.test(k1.metin), JSON.stringify(k1));
     await pc.evaluate(() => document.querySelector('#masam-kartlar [data-masam-esitle]').click());
     await bekle(300);
@@ -238,6 +257,28 @@ function kontrol(ad, kosul, detay = '') {
     await bekle(600);
     const itirazMetin = await pc.evaluate(() => document.getElementById('liste-itirazlar').textContent);
     kontrol('İtirazlar listesi açılır (henüz itiraz yok)', /İtiraz yok/.test(itirazMetin), itirazMetin);
+    const adimY = await pc.evaluate(() => [...document.querySelectorAll('#adim-cubugu .adim-tamam')].map((b) => b.dataset.adim).join(','));
+    kontrol('Sonuçlar açılınca adım çubuğunda "Yayınla ✓"', /yayinla/.test(adimY), adimY);
+    // Yeni itiraz Masam'da "Bugün yapılacaklar"a düşer; listeye bakınca kalkar
+    const sonKodM = async (ogrNo) => { const r = await fetch(`${taban}/api/ogrenci-hesap/hoca-liste`, { headers: HB }).then((x) => x.json()).catch(() => ({})); const kk = (r.bekleyenKodlar || []).find((x) => x.ogrNo === ogrNo); return kk ? kk.kod : ''; };
+    await api('/api/sonuc-yayinla', { sinavId: 'KS-MASAM-IT', sinavAdi: 'Deneme', sonuclar: [{ ogrNo: '2023104015', puan: 50, sorular: [{ no: '1', verilen: 'A', dogru: 'B', durum: 'yanlis' }] }] }, HB);
+    const SIFRE_M = 'Ilk.Sifre2026';
+    await api('/api/ogrenci-hesap/kayit-baslat', { ogrNo: '2023104015', eposta: 'm@ogrenci.edu.tr', telefon: '05321112233', sifre: SIFRE_M, sifreTekrar: SIFRE_M });
+    await api('/api/ogrenci-hesap/kayit-onayla', { ogrNo: '2023104015', kod: await sonKodM('2023104015') });
+    const girisM = await api('/api/ogrenci-hesap/giris', { ogrNo: '2023104015', sifre: SIFRE_M });
+    const sonM = await api('/api/ogrenci/sonuclarim', { ogrNo: '2023104015', girisToken: girisM.v.girisToken });
+    const itzM = await api('/api/ogrenci/itiraz', { ogrNo: '2023104015', girisToken: girisM.v.girisToken, yayinId: ((sonM.v.sonuclar || [])[0] || {}).yayinId, soruNo: '1', aciklama: 'kontrol eder misiniz' });
+    await masamAc();
+    let yeniIt = '';
+    for (let i = 0; i < 15; i++) { await bekle(200); yeniIt = await pc.evaluate(() => document.getElementById('masam-yapilacaklar').textContent.replace(/\s+/g, ' ')); if (/yeni itiraz/.test(yeniIt)) break; }
+    kontrol('Öğrenci itiraz edince Masam\'da "1 yeni itiraz" görünür', itzM.kod === 200 && /1 yeni itiraz/.test(yeniIt), `${itzM.kod} ${yeniIt}`);
+    await pc.evaluate(() => document.querySelector('#masam-yapilacaklar [data-masam-git="itiraz"]').click());
+    let itzListe = '';
+    for (let i = 0; i < 15; i++) { await bekle(200); itzListe = await pc.evaluate(() => document.getElementById('liste-itirazlar').textContent); if (/kontrol eder misiniz/.test(itzListe)) break; }
+    await masamAc();
+    await bekle(400);
+    const sonraIt = await pc.evaluate(() => document.getElementById('masam-yapilacaklar').textContent);
+    kontrol('"Yeni itiraz"a basınca itiraz listesi açılır; bakıldıktan sonra Masam\'dan kalkar', /kontrol eder misiniz/.test(itzListe) && !/yeni itiraz/.test(sonraIt), `${itzListe.slice(0, 120)} · ${sonraIt}`);
     await pc.evaluate(() => { try { localStorage.removeItem('SINAV_RAPOR_BICIM_V1'); } catch (_) {} document.querySelector('#analiz-alt-sekmeler [data-alt="raporlar"]').click(); });
     const rapor = await pc.evaluate(async () => {
       let ad = ''; let blob = null;

@@ -7987,13 +7987,19 @@
           return `<span style="display:inline-block; width:20px; height:20px; line-height:18px; text-align:center; border-radius:50%; margin:0 1px; font-size:11px; border:2px solid ${dogruMu ? '#15803d' : '#94a3b8'}; background:${isaretli ? '#111827' : 'transparent'}; color:${isaretli ? '#fff' : 'inherit'};">${h}</span>`;
         }).join('');
       };
-      kutu.innerHTML = liste.map((r) => `<div class="kart" data-sonuc-yayin="${k(r.yayinId)}" style="margin:0 0 10px; padding:12px;">
-          <div style="font-weight:700;">${k(r.sinavAdi || 'Sınav')} <span style="font-weight:400; color:var(--metin-ikincil);">${k(r.dersAdi || '')}</span></div>
-          <div style="margin:6px 0; font-size:1.1rem;"><strong>${k(r.puan)}</strong> puan · ${k(r.dogru)} doğru · ${k(r.yanlis)} yanlış · ${k(r.bos)} boş</div>
-          ${r.kurallarNotu ? `<div style="font-size:var(--yazi-xs); color:var(--metin-ikincil); margin-bottom:6px;">Uygulanan kurallar: ${k(r.kurallarNotu)}</div>` : ''}
-          <div style="font-size:var(--yazi-xs); color:var(--metin-ikincil); margin-bottom:4px;">Siyah daire senin işaretin, yeşil çerçeve doğru cevap.</div>
+      const kalan = Number.isFinite(Number(v.kalanItiraz)) ? Number(v.kalanItiraz) : null;
+      const hakSatir = kalan === null ? '' : `<div class="sonuc-hak" data-kalan-itiraz="${kalan}"><span>Bir cevabın yanlış değerlendirildiğini düşünüyorsan sorunun yanındaki <strong style="font-size:inherit;">İtiraz</strong> düğmesine bas.</span><span>İtiraz hakkın (bugün): <strong>${kalan} / 10</strong></span></div>`;
+      const hakYok = kalan === 0;
+      kutu.innerHTML = hakSatir + liste.map((r) => `<div class="kart sonuc-kart" data-sonuc-yayin="${k(r.yayinId)}">
+          <div class="sonuc-ust">
+            <div><div class="sonuc-sinav">${k(r.sinavAdi || 'Sınav')}</div><div class="sonuc-ders">${k(r.dersAdi || '')}${r.yayinMs ? ` · açıklandı ${k(new Date(r.yayinMs).toLocaleDateString('tr-TR'))}` : ''}</div></div>
+            <div class="sonuc-puan" aria-label="${k(r.puan)} puan"><span data-sonuc-puan>${k(r.puan)}</span><small>puan</small></div>
+          </div>
+          <div class="sonuc-cipler" data-sonuc-dyb><span class="cip-d">${k(r.dogru)} doğru</span><span class="cip-y">${k(r.yanlis)} yanlış</span><span class="cip-b">${k(r.bos)} boş</span></div>
+          ${r.kurallarNotu ? `<div class="sonuc-not">Uygulanan kurallar: ${k(r.kurallarNotu)}</div>` : ''}
+          <div class="sonuc-not">Siyah daire senin işaretin, yeşil çerçeve doğru cevap.</div>
           <div class="tablo-sarmal" style="overflow:auto;"><table class="veri-tablo"><thead><tr><th>Soru</th><th>Kağıdındaki işaret</th><th>Sonuç</th><th></th></tr></thead><tbody>
-          ${(r.sorular || []).map((q) => `<tr><td>${k(q.no)}</td><td style="white-space:nowrap;">${balon(q)}</td><td>${k(sonucEtiket[q.durum] || q.durum)}</td><td><button type="button" class="btn btn-kucuk btn-hayalet" data-itiraz-yayin="${k(r.yayinId)}" data-itiraz-soru="${k(q.no)}">İtiraz</button></td></tr>`).join('')}
+          ${(r.sorular || []).map((q) => `<tr><td>${k(q.no)}</td><td style="white-space:nowrap;">${balon(q)}</td><td>${k(sonucEtiket[q.durum] || q.durum)}</td><td><button type="button" class="btn btn-kucuk btn-hayalet" data-itiraz-yayin="${k(r.yayinId)}" data-itiraz-soru="${k(q.no)}"${hakYok ? ' disabled title="Bugünkü itiraz hakkın bitti"' : ''}>İtiraz</button></td></tr>`).join('')}
           </tbody></table></div></div>`).join('');
     } catch (_) {
       kutu.innerHTML = '<div style="color:var(--tehlike);">Sunucuya ulaşılamadı.</div>';
@@ -8007,7 +8013,8 @@
     try {
       const y = await fetch('/api/ogrenci/itiraz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ogrNo: kayit.ogrNo || '', girisToken: durum.kioskGirisToken || kayit.girisToken || '', yayinId, soruNo, aciklama: aciklama.trim().slice(0, 300) }) });
       const v = await y.json().catch(() => ({}));
-      window.alert(y.ok ? 'İtirazın öğretmenine iletildi.' : (v.hata || 'İtiraz gönderilemedi.'));
+      window.alert(y.ok ? `İtirazın öğretmenine iletildi.${Number.isFinite(Number(v.kalanItiraz)) ? ` Bugün ${v.kalanItiraz} itiraz hakkın kaldı.` : ''}` : (v.hata || 'İtiraz gönderilemedi.'));
+      if (y.ok || y.status === 429) cizKioskSonuclarim();
     } catch (_) { window.alert('Sunucuya ulaşılamadı.'); }
   }
 
@@ -9635,7 +9642,10 @@
         if (hedef) hedef.classList.add('aktif');
         if (typeof window.__guncelleDerslerVeBosDurumUI === 'function') window.__guncelleDerslerVeBosDurumUI();
         if (typeof window.__guncelleYasamDongusuRozetUI === 'function') window.__guncelleYasamDongusuRozetUI();
-        if (hedefId === 'sekme-masam' && typeof window.__cizMasam === 'function') window.__cizMasam();
+        if (hedefId === 'sekme-masam' && typeof window.__cizMasam === 'function') {
+          window.__cizMasam();
+          if (typeof window.__masamItirazYenile === 'function') window.__masamItirazYenile();
+        }
       });
     });
 
@@ -15960,6 +15970,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         const aktifPanel = document.querySelector('.sekme-panel.aktif');
         btnCta.hidden = asama.kod === 'okunuyor' && Boolean(aktifPanel && aktifPanel.id === 'sekme-analiz');
       }
+      if (typeof window.__cizAdimCubugu === 'function') window.__cizAdimCubugu(asama);
     };
 
     /* ── MASAM: her dersin son sınavı tek kartta (okunan / girmeyen / şüpheli / telefon-ders sayısı), tek dokunuşla Notlar ── */
@@ -16081,6 +16092,48 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       });
       setTimeout(() => { const ilk = kutu.querySelector('#masam-kod-ders'); if (ilk) ilk.focus(); }, 0);
     };
+    const ITIRAZ_GORULDU_DEPO = 'SINAV_ITIRAZ_GORULDU_V1';
+    const itirazGorulduMs = () => { try { return Number(localStorage.getItem(ITIRAZ_GORULDU_DEPO)) || 0; } catch (_) { return 0; } };
+    const masamItiraz = { alindiMs: 0, yeni: 0, sonYap: null };
+    const cizMasamYapilacaklar = (yap) => {
+      if (yap) masamItiraz.sonYap = yap;
+      const y = masamItiraz.sonYap;
+      const kutuY = document.getElementById('masam-yapilacaklar');
+      if (!kutuY || !y) return;
+      const cip = (hedef, sayi, metin, renk = '') => `<button type="button" class="yapilacak-cip ${renk}" data-masam-git="${C.kacisHTML(hedef)}"><strong>${sayi}</strong> ${C.kacisHTML(metin)}</button>`;
+      const parca = [];
+      if (y.eslesmeyen) parca.push(cip('uyari', y.eslesmeyen, 'telefon sınavı derse bağlanacak', 'cip-kirmizi'));
+      if (y.kaydet.length) parca.push(cip(`kart:${y.kaydet[0]}`, y.kaydet.length, 'telefon sınavı derse kaydedilecek', 'cip-mavi'));
+      if (y.esitle.length) parca.push(cip(`kart:${y.esitle[0]}`, y.esitle.length, 'ders telefonla eşitlenecek'));
+      if (y.kod.length) parca.push(cip(`kart:${y.kod[0]}`, y.kod.length, 'sınavın kodu düzeltilecek', 'cip-kirmizi'));
+      if (y.supheliToplam) parca.push(cip(`kart:${y.supheli[0]}`, y.supheliToplam, 'şüpheli kağıt incelenecek'));
+      if (masamItiraz.yeni) parca.push(cip('itiraz', masamItiraz.yeni, 'yeni itiraz', 'cip-mavi'));
+      kutuY.innerHTML = `<span class="yapilacak-baslik">Bugün yapılacaklar</span>${parca.length ? parca.join('') : '<span class="yapilacak-tamam">✓ Bekleyen iş yok</span>'}`;
+    };
+    const masamItirazlariniYenile = async (zorla = false) => {
+      const token = sessionStorage.getItem('hoca_token') || '';
+      if (!token || !(location.protocol === 'http:' || location.protocol === 'https:')) return;
+      if (!zorla && Date.now() - masamItiraz.alindiMs < 60000) return;
+      masamItiraz.alindiMs = Date.now();
+      try {
+        const y = await fetch('/api/itirazlar', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: '{}' });
+        if (!y.ok) return;
+        const v = await y.json().catch(() => ({}));
+        const gorulme = itirazGorulduMs();
+        masamItiraz.yeni = (Array.isArray(v.itirazlar) ? v.itirazlar : []).filter((x) => Number(x.zamanMs) > gorulme).length;
+        cizMasamYapilacaklar();
+      } catch (_) { /* çevrimdışı: itiraz sayısı gösterilmez */ }
+    };
+    window.__masamItirazYenile = () => masamItirazlariniYenile(true);
+    const masamItirazlariAc = () => {
+      gecisSekmeYardimci('sekme-analiz');
+      const notlarBtn = document.querySelector('#analiz-alt-sekmeler [data-alt="ogrenciler"]');
+      if (notlarBtn) notlarBtn.click();
+      const btnI = document.getElementById('btn-itirazlar-yenile');
+      if (btnI) btnI.click();
+      const kutuI = document.getElementById('kutu-ogrenci-sonuc-yayin');
+      if (kutuI && kutuI.scrollIntoView) kutuI.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    };
     window.__cizMasam = () => {
       const kutu = document.getElementById('masam-kartlar');
       const uyari = document.getElementById('masam-uyari');
@@ -16105,14 +16158,17 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         </div>` : '';
       }
       const dersler = aktifDonemDersleri();
+      const yap = { eslesmeyen: eslesmeyen.length, kaydet: [], esitle: [], kod: [], supheli: [], supheliToplam: 0 };
       if (!dersler.length) {
         kutu.innerHTML = '<div style="color:var(--metin-soluk); font-size:var(--yazi-sm);">Henüz ders yok. Dersler sayfasından ilk dersinizi oluşturun.</div>';
+        cizMasamYapilacaklar(yap);
         return;
       }
       kutu.innerHTML = dersler.map((dd) => {
         const ks = dersinAcilacakSinavi(dd.id);
         const bekleyen = dersBekleyenTel[dd.id] || [];
         const baslik = `<div style="font-weight:700;">${k(dd.kod || '')} — ${k(dd.ad || '')}</div>`;
+        if (bekleyen.length) yap.kaydet.push(dd.id);
         const telSatir = bekleyen.map((x) => `<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; font-size:var(--yazi-sm);"><span>📱 ${k(x.ad)} · ${x.adet} kağıt telefondan geldi</span><button type="button" class="btn btn-kucuk btn-birincil" data-masam-telkaydet="${k(x.kod)}">Derse kaydet</button></div>`).join('');
         if (!ks) {
           return `<div class="kart" data-masam-ders="${k(dd.id)}" style="margin:0; padding:12px;">${baslik}
@@ -16123,6 +16179,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         const gr = dersSinaviGirmeyenSayisi(dd.id, ks, okumalar);
         const supheli = okumalar.filter((r) => r && (/^BEKLEYEN/i.test(String(r.ogrNo || '')) || r.supheliMi || r.durum === 'BEKLEYEN' || r.numaraEslesmediMi)).length;
         const kesin = Boolean((durum.kesinlesmisSinavHaritasi || {})[`${dd.id}::${ks.id}`]);
+        if (supheli) { yap.supheli.push(dd.id); yap.supheliToplam += supheli; }
         let telBilgi = '';
         let telFark = '';
         if (ks.kaynak === 'telefon') {
@@ -16134,10 +16191,12 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
           telBilgi = eksik === 0
             ? `<span data-masam-esit="1" title="Telefondan ${telToplam} kağıt · Derste ${okumalar.length} kağıt" style="color:var(--basari, #15803d);">📱 telefonla eşit ✓</span>`
             : '';
+          if (eksik) yap.esitle.push(dd.id);
           telFark = eksik === 0 ? ''
             : `<div data-masam-esit="0" style="margin-top:6px; font-size:var(--yazi-sm); color:var(--tehlike, #b91c1c); display:flex; gap:8px; align-items:center; flex-wrap:wrap;"><span>📱 Telefondan ${telToplam} · Derste ${okumalar.length}</span><button type="button" class="btn btn-kucuk btn-tehlike" data-masam-esitle="${k(ks.id)}">Eşitle</button></div>`;
         }
         const et = masamSinavEtiketi(ks, dd);
+        if (et.farkli) yap.kod.push(dd.id);
         return `<div class="kart" data-masam-ders="${k(dd.id)}" style="margin:0; padding:10px 12px;">${baslik}
           <div style="font-size:var(--yazi-sm); color:var(--metin-ikincil); margin:2px 0 6px;" data-masam-sinav>${k(et.metin)}${kesin ? ' · <strong>Kesinleşti ✓</strong>' : ''}${et.farkli ? ` · <span style="color:var(--tehlike, #b91c1c);" title="Sınav adındaki ders kodu bu dersin koduyla aynı değil; yazım hatası ya da yanlış derse kayıt olabilir">⚠ sınavda kod ${k(et.farkli)}</span> <button type="button" class="btn btn-kucuk" data-masam-koddz="${k(dd.id)}|${k(ks.id)}" style="padding:1px 8px; min-height:0;">Düzelt</button>` : ''}</div>
           <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:var(--yazi-sm); font-variant-numeric:tabular-nums;" data-masam-sayilar>
@@ -16145,8 +16204,22 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
             <button type="button" class="btn btn-birincil btn-kucuk" data-masam-notlar="${k(dd.id)}|${k(ks.id)}" style="margin-left:auto;">Notları aç</button>
           </div>${telFark}${telSatir}</div>`;
       }).join('');
+      cizMasamYapilacaklar(yap);
+      masamItirazlariniYenile();
     };
     const masamTikla = (e) => {
+      const git = e.target.closest('[data-masam-git]');
+      if (git) {
+        const hedef = git.getAttribute('data-masam-git');
+        if (hedef === 'itiraz') { masamItirazlariAc(); return; }
+        const el = hedef === 'uyari' ? document.getElementById('masam-uyari') : document.querySelector(`#masam-kartlar [data-masam-ders="${CSS.escape(hedef.slice(5))}"]`);
+        if (el) {
+          if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          el.classList.add('masam-vurgu');
+          setTimeout(() => el.classList.remove('masam-vurgu'), 1600);
+        }
+        return;
+      }
       const notlar = e.target.closest('[data-masam-notlar]');
       if (notlar) { const [dId, sId] = notlar.getAttribute('data-masam-notlar').split('|'); masamNotlariAc(dId, sId); return; }
       if (arsivDonemiAcikMi() && e.target.closest('[data-masam-esitle], [data-masam-telkaydet], [data-masam-hazirla], [data-masam-koddz]')) {
@@ -16180,7 +16253,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         gecisSekmeYardimci('sekme-stüdyo');
       }
     };
-    ['masam-kartlar', 'masam-uyari'].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener('click', masamTikla); });
+    ['masam-kartlar', 'masam-uyari', 'masam-yapilacaklar'].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener('click', masamTikla); });
     const btnMasamYeni = document.getElementById('btn-masam-yeni-sinav');
     if (btnMasamYeni) btnMasamYeni.addEventListener('click', () => {
       yukleKayitliSinavSnapshot('');
@@ -16227,6 +16300,9 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         const v = await y.json().catch(() => ({}));
         if (!y.ok) { sonucYayinMesaj(`⚠️ Açılamadı: ${v.hata || y.status}`, false); return; }
         sonucYayinMesaj(`✅ ${v.yayinlanan} öğrencinin sonucu açıldı. Öğrenciler "Sonuçlarım"dan görebilir.`);
+        ks.sonucYayinMs = Date.now();
+        verileriKaydet();
+        if (typeof window.__guncelleYasamDongusuRozetUI === 'function') window.__guncelleYasamDongusuRozetUI();
         guncelleKayitDurumCubuguUI('kaydedildi', `📤 ${ks.ad}: ${v.yayinlanan} öğrenci sonucu açıldı`);
       } catch (_) { sonucYayinMesaj('⚠️ Sunucuya ulaşılamadı; internet bağlantısını kontrol edin.', false); }
     });
@@ -16238,6 +16314,11 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       try {
         const y = await fetch('/api/sonuc-yayinla', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('hoca_token') || ''}` }, body: JSON.stringify({ sinavId: ks.id, geriAl: true }) });
         sonucYayinMesaj(y.ok ? '✅ Sonuçlar öğrencilerden kaldırıldı.' : '⚠️ Kaldırılamadı.', y.ok);
+        if (y.ok) {
+          delete ks.sonucYayinMs;
+          verileriKaydet();
+          if (typeof window.__guncelleYasamDongusuRozetUI === 'function') window.__guncelleYasamDongusuRozetUI();
+        }
       } catch (_) { sonucYayinMesaj('⚠️ Sunucuya ulaşılamadı.', false); }
     });
     const btnItirazlar = document.getElementById('btn-itirazlar-yenile');
@@ -16247,6 +16328,11 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         const y = await fetch('/api/itirazlar', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('hoca_token') || ''}` }, body: '{}' });
         const v = await y.json().catch(() => ({}));
         const liste = Array.isArray(v.itirazlar) ? v.itirazlar : [];
+        if (y.ok) {
+          try { localStorage.setItem(ITIRAZ_GORULDU_DEPO, String(Date.now())); } catch (_) {}
+          masamItiraz.yeni = 0;
+          cizMasamYapilacaklar();
+        }
         if (kutuI) kutuI.innerHTML = liste.length
           ? `<table class="veri-tablo"><thead><tr><th>Zaman</th><th>Sınav</th><th>Öğrenci</th><th>Soru</th><th>Açıklama</th></tr></thead><tbody>${liste.map((x) => `<tr><td>${C.kacisHTML(new Date(x.zamanMs).toLocaleString('tr-TR').slice(0, 16))}</td><td>${C.kacisHTML(x.sinavAdi)}</td><td class="mono">${C.kacisHTML(x.ogrNo)} ${C.kacisHTML(ogrAdiBul(x.ogrNo))}</td><td>${C.kacisHTML(x.soruNo)}</td><td>${C.kacisHTML(x.aciklama)}</td></tr>`).join('')}</tbody></table>`
           : '<div style="color:var(--metin-ikincil); font-size:var(--yazi-sm);">İtiraz yok.</div>';
@@ -17070,6 +17156,60 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         if (btnSinavGunuPaketiIndir) btnSinavGunuPaketiIndir.click();
       });
     }
+
+    /* ── ADIM ÇUBUĞU: Hazırla → Bas → Oku → Değerlendir → Yayınla (açık sınavın aşaması; tıklayınca ilgili ekran) ── */
+    const ADIMLAR = [
+      { kod: 'hazirla', ad: 'Hazırla', ipucu: 'Soruları ve kağıdı hazırla (Kağıt Stüdyosu)' },
+      { kod: 'bas', ad: 'Bas', ipucu: 'Baskı öncesi kontrol ve baskı' },
+      { kod: 'oku', ad: 'Oku', ipucu: 'Kağıtları telefonla ya da tarayıcıyla oku' },
+      { kod: 'degerlendir', ad: 'Değerlendir', ipucu: 'Notlar, kurallar ve kesinleştirme' },
+      { kod: 'yayinla', ad: 'Yayınla', ipucu: 'Sonuçları öğrencilere aç' }
+    ];
+    const ADIM_PANELLERI = ['sekme-stüdyo', 'sekme-banka', 'sekme-omr', 'sekme-online', 'sekme-analiz'];
+    window.__cizAdimCubugu = (asamaHazir) => {
+      const nav = document.getElementById('adim-cubugu');
+      const liste = document.getElementById('adim-cubugu-liste');
+      if (!nav || !liste) return;
+      const aktifPanel = document.querySelector('.sekme-panel.aktif');
+      nav.hidden = !(aktifPanel && ADIM_PANELLERI.includes(aktifPanel.id));
+      if (nav.hidden) return;
+      const asama = asamaHazir || hesaplaAktifYasamDongusuAsamasi();
+      const sira = { taslak: 0, hazir: 1, basildi: 2, okunuyor: 3, kesinlesti: 4 }[asama.kod] || 0;
+      const ks = durum.aktifKayitliSinavId ? (durum.kayitliSinavlar || []).find((x) => x && x.id === durum.aktifKayitliSinavId) : null;
+      const yayinlandi = Boolean(ks && ks.sonucYayinMs);
+      const dd = (durum.dersler || []).find((x) => x && x.id === durum.aktifDersId);
+      const sinavEl = document.getElementById('adim-cubugu-sinav');
+      if (sinavEl) {
+        const metin = `${dd ? `${dd.kod || ''} ${dd.ad || ''}`.trim() : 'Ders seçilmedi'} · ${ks ? (masamSinavEtiketi(ks, dd || {}).metin) : 'Yeni sınav (taslak)'}`;
+        sinavEl.textContent = metin;
+        sinavEl.title = metin;
+      }
+      liste.innerHTML = ADIMLAR.map((a, i) => {
+        const tamam = i < sira || (a.kod === 'yayinla' && yayinlandi);
+        const simdi = !tamam && i === sira;
+        const sinif = tamam ? 'adim-tamam' : (simdi ? 'adim-simdi' : 'adim-sonra');
+        return `<li class="${tamam ? 'adim-gecildi' : ''}"><button type="button" class="adim-dugme ${sinif}" data-adim="${a.kod}" title="${C.kacisHTML(a.ipucu)}"${simdi ? ' aria-current="step"' : ''}><span class="adim-no">${tamam ? '✓' : i + 1}</span>${a.ad}</button></li>`;
+      }).join('');
+    };
+    const adimListe = document.getElementById('adim-cubugu-liste');
+    if (adimListe) adimListe.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-adim]');
+      if (!b) return;
+      const adim = b.getAttribute('data-adim');
+      if (adim === 'hazirla') gecisSekmeYardimci('sekme-stüdyo');
+      else if (adim === 'bas') { gecisSekmeYardimci('sekme-stüdyo'); acUcusKontrolCekmecesi(); }
+      else if (adim === 'oku') gecisSekmeYardimci('sekme-omr');
+      else {
+        gecisSekmeYardimci('sekme-analiz');
+        const notlarBtn = document.querySelector('#analiz-alt-sekmeler [data-alt="ogrenciler"]');
+        if (notlarBtn) notlarBtn.click();
+        if (adim === 'yayinla') {
+          const kutuY = document.getElementById('kutu-ogrenci-sonuc-yayin');
+          if (kutuY && kutuY.scrollIntoView) kutuY.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
+      }
+      window.__cizAdimCubugu();
+    });
 
     const btnYasamDongusuCta = document.getElementById('btn-yasam-dongusu-cta');
     if (btnYasamDongusuCta) {

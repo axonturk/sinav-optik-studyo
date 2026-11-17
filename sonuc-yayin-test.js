@@ -66,12 +66,14 @@ const SIFRE = 'Ilk.Sifre2026';
     const s1 = (benim.v.sonuclar || [])[0] || {};
     kontrol('Öğrenci yalnız KENDİ sonucunu görür (1 kayıt, kendi numarası, puan 85, 3D/1Y/0B)', benim.kod === 200 && benim.v.sonuclar.length === 1 && s1.ogrNo === '2023104015' && s1.puan === 85 && s1.dogru === 3 && s1.yanlis === 1, JSON.stringify(benim.v).slice(0, 200));
     kontrol('Soru soru kendi işareti, doğru cevap ve iptal bilgisi gelir; sınav adı ve kural notu var', s1.sorular.length === 4 && s1.sorular[1].verilen === 'C' && s1.sorular[1].dogru === 'B' && s1.sorular[3].durum === 'iptal' && s1.sinavAdi === 'Ağ Vize' && s1.kurallarNotu === 'İptal: TEST-4', JSON.stringify(s1.sorular));
+    kontrol('Öğrenciye kalan itiraz hakkı gelir (henüz itiraz yok: 10)', benim.v.kalanItiraz === 10, String(benim.v.kalanItiraz));
     kontrol('Kopya şüphesi (öğretmenin gönderdiği fazladan alan dahil) öğrenciye hiç gitmez', !/kopya|benzerlik|supheli/i.test(JSON.stringify(benim.v)), JSON.stringify(benim.v).slice(0, 160));
 
     const itirazYok = await api('/api/ogrenci/itiraz', { ogrNo: '2023104015', girisToken: TOK, yayinId: 'yok', soruNo: '2', aciklama: 'B de doğru' });
     const itiraz = await api('/api/ogrenci/itiraz', { ogrNo: '2023104015', girisToken: TOK, yayinId: s1.yayinId, soruNo: '2', aciklama: 'B şıkkı da doğru bence' });
     const liste = await api('/api/itirazlar', {}, HB);
     const listeIzinsiz = await api('/api/itirazlar', {});
+    kontrol('İtiraz sonrası kalan hak 9 olarak döner', itiraz.v.kalanItiraz === 9, String(itiraz.v.kalanItiraz));
     kontrol('İtiraz yalnız açık sonuca yapılır; öğretmenin itiraz listesine düşer; liste öğretmene özel', itirazYok.kod === 404 && itiraz.kod === 200 && (liste.v.itirazlar || []).some((x) => x.ogrNo === '2023104015' && x.soruNo === '2' && /B şıkkı/.test(x.aciklama)) && listeIzinsiz.kod === 401, `${itirazYok.kod}/${itiraz.kod}/${JSON.stringify(liste.v).slice(0, 120)}/${listeIzinsiz.kod}`);
     let sinir = 0;
     for (let i = 0; i < 12; i++) { const r = await api('/api/ogrenci/itiraz', { ogrNo: '2023104015', girisToken: TOK, yayinId: s1.yayinId, soruNo: '1', aciklama: `deneme ${i}` }); if (r.kod === 429) sinir++; }
@@ -91,9 +93,13 @@ const SIFRE = 'Ilk.Sifre2026';
     await bekle(800);
     const ekran = await s.evaluate(() => {
       const k = document.getElementById('kiosk-sonuclarim');
-      return { gorunur: k && !k.hidden, metin: k ? k.textContent.replace(/\s+/g, ' ') : '', balon: k ? k.querySelectorAll('tbody tr').length : 0, itiraz: k ? k.querySelectorAll('[data-itiraz-yayin]').length : 0 };
+      const q = (sel) => (k && k.querySelector(sel)) || null;
+      return { gorunur: k && !k.hidden, metin: k ? k.textContent.replace(/\s+/g, ' ') : '', balon: k ? k.querySelectorAll('tbody tr').length : 0, itiraz: k ? k.querySelectorAll('[data-itiraz-yayin]').length : 0,
+        puan: q('[data-sonuc-puan]') ? q('[data-sonuc-puan]').textContent : '', dyb: q('[data-sonuc-dyb]') ? q('[data-sonuc-dyb]').textContent.replace(/\s+/g, ' ') : '',
+        kalan: q('[data-kalan-itiraz]') ? q('[data-kalan-itiraz]').getAttribute('data-kalan-itiraz') : '', kapali: k ? k.querySelectorAll('[data-itiraz-yayin][disabled]').length : 0 };
     });
-    kontrol('Öğrenci ekranında "Sonuçlarım": puan, D/Y/B, kural notu, soru satırları ve itiraz düğmeleri', ekran.gorunur && /85 puan · 3 doğru · 1 yanlış · 0 boş/.test(ekran.metin) && /İptal: TEST-4/.test(ekran.metin) && ekran.balon === 4 && ekran.itiraz === 4, JSON.stringify(ekran).slice(0, 240));
+    kontrol('Öğrenci ekranında "Sonuçlarım": büyük puan, renkli D/Y/B, kural notu, soru satırları ve itiraz düğmeleri', ekran.gorunur && ekran.puan === '85' && /3 doğru/.test(ekran.dyb) && /1 yanlış/.test(ekran.dyb) && /0 boş/.test(ekran.dyb) && /İptal: TEST-4/.test(ekran.metin) && ekran.balon === 4 && ekran.itiraz === 4, JSON.stringify(ekran).slice(0, 240));
+    kontrol('Günlük itiraz hakkı bitince "0 / 10" yazar ve İtiraz düğmeleri kapanır', ekran.kalan === '0' && /İtiraz hakkın \(bugün\): 0 \/ 10/.test(ekran.metin) && ekran.kapali === 4, JSON.stringify({ kalan: ekran.kalan, kapali: ekran.kapali }));
 
     // Geri al
     const geri = await api('/api/sonuc-yayinla', { sinavId: 'KS-T1', geriAl: true }, HB);

@@ -2594,3 +2594,55 @@ html { scroll-padding-top: 104px; }
 #aktif-donem-sec { max-width: 132px !important; min-width: 96px !important; }
 #aktif-ders-sec { max-width: min(200px, 100%) !important; }
 #sec-kayitli-sinav-ust { max-width: min(180px, 100%) !important; }
+
+
+/* ── Adım çubuğu (açık sınavın aşaması) ── */
+.adim-cubugu { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:0 0 12px; padding:8px 12px; background:var(--bg-kart); border:1px solid var(--kenar); border-radius:12px; }
+.adim-cubugu[hidden] { display:none; }
+.adim-sinav { font-size:var(--yazi-sm); font-weight:600; color:var(--metin-ikincil); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.adim-liste { display:flex; align-items:center; gap:4px; list-style:none; margin:0; padding:0; flex:1 1 auto; overflow-x:auto; scrollbar-width:none; }
+.adim-liste::-webkit-scrollbar { display:none; }
+.adim-liste li { display:flex; align-items:center; gap:4px; flex:0 0 auto; }
+.adim-liste li + li::before { content:''; width:18px; height:2px; background:var(--kenar); border-radius:2px; }
+.adim-liste li.adim-gecildi + li::before { background:var(--basari, #15803d); }
+.adim-dugme { display:inline-flex; align-items:center; gap:6px; border:1px solid transparent; background:transparent; color:var(--metin-ikincil); font:inherit; font-size:var(--yazi-sm); padding:4px 10px 4px 4px; border-radius:999px; cursor:pointer; }
+.adim-dugme:hover { background:var(--bg-ikincil); }
+.adim-dugme:focus-visible { outline:2px solid var(--birincil); outline-offset:2px; }
+.adim-no { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; font-size:12px; font-weight:700; border:2px solid var(--kenar); background:var(--bg-kart); }
+.adim-dugme.adim-tamam { color:var(--metin); }
+.adim-dugme.adim-tamam .adim-no { background:var(--basari, #15803d); border-color:var(--basari, #15803d); color:#fff; }
+.adim-dugme.adim-simdi { color:var(--birincil); font-weight:700; background:rgba(47,91,234,0.08); border-color:rgba(47,91,234,0.35); }
+.adim-dugme.adim-simdi .adim-no { background:var(--birincil); border-color:var(--birincil); color:#fff; }
+@media (max-width: 640px) { .adim-cubugu { padding:6px 8px; gap:6px; } .adim-dugme { padding:3px 8px 3px 3px; } .adim-liste li + li::before { width:10px; } }
+
+/* ── Masam: Bugün yapılacaklar ── */
+.masam-yapilacaklar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 12px; }
+.masam-yapilacaklar:empty { display:none; }
+.yapilacak-baslik { font-size:var(--yazi-sm); font-weight:700; margin-right:2px; }
+.yapilacak-cip { display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:var(--yazi-sm); padding:5px 12px; border-radius:999px; cursor:pointer; border:1px solid rgba(234,179,8,0.55); background:rgba(234,179,8,0.12); color:var(--metin); }
+.yapilacak-cip strong { font-variant-numeric:tabular-nums; }
+.yapilacak-cip.cip-kirmizi { border-color:rgba(220,38,38,0.45); background:rgba(220,38,38,0.08); }
+.yapilacak-cip.cip-mavi { border-color:rgba(47,91,234,0.4); background:rgba(47,91,234,0.08); }
+.yapilacak-cip:hover { filter:brightness(0.97); }
+.yapilacak-cip:focus-visible { outline:2px solid var(--birincil); outline-offset:2px; }
+.yapilacak-tamam { font-size:var(--yazi-sm); color:var(--basari, #15803d); padding:5px 12px; border-radius:999px; background:rgba(21,128,61,0.08); border:1px solid rgba(21,128,61,0.3); }
+#masam-kartlar .kart.masam-vurgu { box-shadow:0 0 0 3px rgba(47,91,234,0.45); transition:box-shadow .2s; }
+
+/* ── Öğrenci: Sonuçlarım ── */
+.sonuc-hak { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 10px; padding:10px 12px; border-radius:10px; background:rgba(13,148,136,0.08); border:1px solid rgba(13,148,136,0.3); font-size:var(--yazi-sm); }
+.sonuc-hak strong { font-size:1.05rem; font-variant-numeric:tabular-nums; }
+.sonuc-kart { margin:0 0 12px; padding:14px; border-radius:14px; }
+.sonuc-ust { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.sonuc-sinav { font-weight:700; font-size:1.02rem; }
+.sonuc-ders { font-size:var(--yazi-xs); color:var(--metin-ikincil); margin-top:2px; }
+.sonuc-puan { flex:0 0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; width:74px; height:74px; border-radius:50%; background:linear-gradient(135deg, #0d9488, #2563eb); color:#fff; box-shadow:0 4px 14px rgba(37,99,235,0.25); }
+.sonuc-puan span { font-size:1.6rem; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+.sonuc-puan small { font-size:11px; opacity:.9; margin-top:2px; }
+.sonuc-cipler { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 8px; }
+.sonuc-cipler span { font-size:var(--yazi-sm); padding:3px 10px; border-radius:999px; font-variant-numeric:tabular-nums; }
+.sonuc-cipler .cip-d { background:rgba(21,128,61,0.12); color:#15803d; }
+.sonuc-cipler .cip-y { background:rgba(220,38,38,0.1); color:#b91c1c; }
+.sonuc-cipler .cip-b { background:rgba(100,116,139,0.14); color:var(--metin-ikincil); }
+[data-tema="koyu"] .sonuc-cipler .cip-d { color:#4ade80; }
+[data-tema="koyu"] .sonuc-cipler .cip-y { color:#f87171; }
+.sonuc-not { font-size:var(--yazi-xs); color:var(--metin-ikincil); margin-bottom:6px; }

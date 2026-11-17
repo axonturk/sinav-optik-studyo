@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261117c" />
+  <link rel="stylesheet" href="ortak.css?v=20261117d" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -267,6 +267,12 @@
       <!-- ANA İÇERİK KAPSAYICISI (Doğru Giriş Yapılana Kadar Kilitli) -->
       <main class="ana-kapsayici" id="ana-icerik-alani" style="pointer-events:none; user-select:none;">
 
+        <!-- ADIM ÇUBUĞU: açık sınav hangi aşamada (Hazırla → Bas → Oku → Değerlendir → Yayınla); her adım tıklanınca ilgili ekrana gider -->
+        <nav id="adim-cubugu" class="adim-cubugu yazdir-gizle" hidden aria-label="Sınav adımları">
+          <span class="adim-sinav" id="adim-cubugu-sinav"></span>
+          <ol class="adim-liste" id="adim-cubugu-liste"></ol>
+        </nav>
+
         <!-- İLK KURULUM BOŞ DURUM KARTI (Hiç ders eklenmemişken görünür) -->
         <div id="bos-durum-ilk-kurulum" class="bos-durum-kart yazdir-gizle" hidden>
           <h2 style="font-size:var(--yazi-xl); font-weight:600; margin-bottom:4px;">İlk sınavınızı 3 dakikada hazırlayın</h2>
@@ -318,6 +324,7 @@
               <span>Masam</span>
               <button type="button" class="btn btn-birincil btn-kucuk" id="btn-masam-yeni-sinav">＋ Yeni sınav</button>
             </div>
+            <div id="masam-yapilacaklar" class="masam-yapilacaklar" aria-live="polite"></div>
             <div id="masam-uyari" hidden style="margin-bottom:10px;"></div>
             <div id="masam-kartlar" style="display:grid; gap:10px; grid-template-columns:repeat(auto-fill, minmax(min(100%, 300px), 1fr));"></div>
           </div>
@@ -3676,7 +3683,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261117c"></script>
-  <script src="studyo-uygulama.js?v=20261117c"></script>
+  <script src="guvenlik-ve-veri.js?v=20261117d"></script>
+  <script src="studyo-uygulama.js?v=20261117d"></script>
 </body>
 </html>
