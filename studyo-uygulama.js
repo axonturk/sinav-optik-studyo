@@ -755,7 +755,9 @@
       if (durum.sonGeriAlYedegi && durum.sonGeriAlYedegi.etiket) {
         btnGeriAl.hidden = false;
         btnGeriAl.style.display = 'inline-flex';
-        btnGeriAl.textContent = `Geri Al (${durum.sonGeriAlYedegi.etiket})`;
+        btnGeriAl.textContent = '↶ Geri Al';
+        btnGeriAl.title = `Geri al: ${durum.sonGeriAlYedegi.etiket}`;
+        btnGeriAl.setAttribute('aria-label', `Geri al: ${durum.sonGeriAlYedegi.etiket}`);
       } else {
         btnGeriAl.hidden = true;
         btnGeriAl.style.display = 'none';

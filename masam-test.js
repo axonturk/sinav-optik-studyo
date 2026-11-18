@@ -458,6 +458,12 @@ function kontrol(ad, kosul, detay = '') {
       return { var: Boolean(t), metin: t ? [...t.children].map((td) => td.textContent.trim()).join(' | ') : '', ac: Boolean(t && t.querySelector('[data-arsiv-ac]')), dersteAc: Boolean(t && t.querySelector('[data-derse-kaydet]')), aktifSatir: satirlar.some((x) => /açık sınavın okumaları|Açık taslak/.test(x.textContent)) };
     }, KOD_A);
     kontrol('Arşiv: telefon kaydı silinmiş derse kayıtlı sınav "Derste kayıtlı" + 2 kağıt + Aç / Derste aç ile görünür; açık sınav için ayrı yinelenen satır yok', arsivSatir.var && /Derste kayıtlı/.test(arsivSatir.metin) && !/Stüdyo/.test(arsivSatir.metin) && /\| 2 \|/.test(arsivSatir.metin) && arsivSatir.ac && arsivSatir.dersteAc && !arsivSatir.aktifSatir, JSON.stringify(arsivSatir));
+    const ust = await pc.evaluate(() => {
+      const g = document.querySelector('.baglam-grup');
+      const geri = document.getElementById('btn-son-silineni-geri-al');
+      return { grupta: Boolean(g && g.contains(document.getElementById('aktif-donem-sec')) && g.contains(document.getElementById('aktif-ders-sec')) && g.contains(document.getElementById('sec-kayitli-sinav-ust'))), geriMetin: geri ? geri.textContent.trim() : '', geriIpucu: geri ? geri.title : '', silVar: Boolean(document.getElementById('btn-aktif-dersi-sil')), dersVar: Boolean(document.getElementById('btn-yeni-ders-modal')), tekSatir: document.querySelector('.sabit-kayit-ic').getBoundingClientRect().height < 70 };
+    });
+    kontrol('Üst çubuk: dönem › ders › sınav tek "Seçili sınav" grubunda; Geri Al kısa ("↶ Geri Al", ayrıntı ipucunda); + Ders ve Sil yerinde; 1366 genişlikte tek satır', ust.grupta && ust.geriMetin === '↶ Geri Al' && /Geri al: /.test(ust.geriIpucu) && ust.silVar && ust.dersVar && ust.tekSatir, JSON.stringify(ust));
     kontrol('Veri güvenliği: stüdyo sınavı açıkken başka sınavın telefon kağıdı açık sınava karışmaz', stOnce.okunan === stSonra.okunan && !/247419088/.test(stSonra.satirlar), `${JSON.stringify(stOnce)} → ${JSON.stringify(stSonra)}`);
 
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));

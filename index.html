@@ -209,18 +209,22 @@
             <button type="button" class="btn btn-hayalet btn-kucuk mobil-yan-menu-btn" id="btn-mobil-yan-menu-ac" title="Menüyü aç" aria-label="Menüyü aç">
               <svg class="ui-ikon"><use href="#i-panel-left"></use></svg>
             </button>
-            <select id="aktif-donem-sec" class="baglam-secici" aria-label="Eğitim-öğretim dönemi" title="Eğitim-öğretim yılı ve dönemi: yalnız bu dönemin dersleri görünür"></select>
-            <select id="aktif-ders-sec" class="baglam-secici" aria-label="Aktif Ders"></select>
-            <button type="button" class="btn btn-hayalet btn-kucuk" id="btn-yeni-ders-modal" title="Yeni Ders Ekle veya Düzenle">
+            <div class="baglam-grup" role="group" aria-label="Seçili sınav">
+              <span class="baglam-grup-etiket">Seçili sınav</span>
+              <select id="aktif-donem-sec" class="baglam-secici" aria-label="Eğitim-öğretim dönemi" title="Eğitim-öğretim yılı ve dönemi: yalnız bu dönemin dersleri görünür"></select>
+              <span class="baglam-ayrac" aria-hidden="true">›</span>
+              <select id="aktif-ders-sec" class="baglam-secici" aria-label="Aktif Ders" title="Ders"></select>
+              <span class="baglam-ayrac" aria-hidden="true">›</span>
+              <select id="sec-kayitli-sinav-ust" class="baglam-secici" aria-label="Aktif Sınav" title="Sınav">
+                <option value="">＋ Yeni sınav (taslak)</option>
+              </select>
+              <span class="rozet rozet-mavi" id="rozet-yasam-dongusu" title="Sınav Yaşam Döngüsü Durumu">Taslak</span>
+            </div>
+            <button type="button" class="btn btn-hayalet btn-kucuk baglam-simge" id="btn-yeni-ders-modal" title="Yeni ders ekle veya seçili dersi düzenle" aria-label="Yeni ders ekle veya düzenle">
               <svg class="ui-ikon"><use href="#i-plus"></use></svg>
               <span>Ders</span>
             </button>
-            <button type="button" class="btn btn-tehlike btn-kucuk" id="btn-aktif-dersi-sil" title="Seçili dersi sil (Sorular arşive aktarılır; geri alınabilir)">Sil</button>
-            <span class="baglam-ayrac" aria-hidden="true">›</span>
-            <select id="sec-kayitli-sinav-ust" class="baglam-secici" aria-label="Aktif Sınav">
-              <option value="">＋ Yeni sınav (taslak)</option>
-            </select>
-            <span class="rozet rozet-mavi" id="rozet-yasam-dongusu" title="Sınav Yaşam Döngüsü Durumu">Taslak</span>
+            <button type="button" class="btn btn-hayalet btn-kucuk baglam-simge baglam-sil" id="btn-aktif-dersi-sil" title="Seçili dersi sil (sorular arşive aktarılır; geri alınabilir)" aria-label="Seçili dersi sil">🗑</button>
           </div>
 
           <div class="baglam-sag">

@@ -2698,3 +2698,19 @@ html { scroll-padding-top: 104px; }
 .acilir-menu-liste button:hover, .acilir-menu-liste button:focus-visible { background:var(--bg-ikincil); outline:none; }
 #banka-oc-uyari[hidden] { display:none !important; }
 @media (max-width: 640px) { .acilir-menu-liste { right:auto; left:0; min-width:220px; } }
+
+
+/* ── Üst çubuk: seçili sınav tek grupta, sade ── */
+.baglam-grup { display:flex; align-items:center; gap:4px; flex-wrap:wrap; padding:3px 6px 3px 10px; border:1px solid var(--kenar); border-radius:10px; background:var(--bg-ikincil); min-width:0; max-width:100%; }
+.baglam-grup-etiket { font-size:11px; font-weight:600; color:var(--metin-ikincil); text-transform:uppercase; letter-spacing:.04em; margin-right:4px; white-space:nowrap; }
+.baglam-grup .baglam-secici { border-color:transparent; background:transparent; min-width:90px; max-width:min(240px, 100%); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.baglam-grup .baglam-secici:hover, .baglam-grup .baglam-secici:focus { border-color:var(--kenar); background:var(--bg-kart); }
+.baglam-grup .baglam-ayrac { color:var(--metin-soluk, #94a3b8); }
+.baglam-simge { padding-left:8px; padding-right:8px; }
+.baglam-sil { color:var(--tehlike, #b91c1c); }
+@media (max-width: 900px) { .baglam-grup-etiket { display:none; } }
+.baglam-sol > .baglam-grup { flex: 1 1 0; min-width: 0; flex-wrap: nowrap; }
+.baglam-grup .baglam-secici { flex: 1 1 0; min-width: 64px; }
+.baglam-grup #aktif-donem-sec { flex: 0 1 110px; }
+.baglam-grup .rozet { flex-shrink: 0; }
+@media (max-width: 1600px) { .baglam-grup-etiket { display: none; } }
