@@ -227,11 +227,11 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
   // ---------------------------------------------------------------------------
   // 1. STATİK PWA, GÜVENLİK BAŞLIKLARI VE PAROLA HASHİNG BİRİM KONTROLLERİ
   // ---------------------------------------------------------------------------
-  console.log('1) Statik PWA (sinav-optik-v46), Güvenlik Başlıkları ve PBKDF2 Hashing');
+  console.log('1) Statik PWA (sinav-optik-v47), Güvenlik Başlıkları ve PBKDF2 Hashing');
   const swIcerik = fs.readFileSync(path.join(KOK, 'sw.js'), 'utf8');
   kontrol(
-    'sw.js sürümü sinav-optik-v46, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
-    /SURUM\s*=\s*'sinav-optik-v46'/.test(swIcerik) &&
+    'sw.js sürümü sinav-optik-v47, manifest-studyo.webmanifest önbellekte ve /api/ hariç',
+    /SURUM\s*=\s*'sinav-optik-v47'/.test(swIcerik) &&
       swIcerik.includes('./manifest-studyo.webmanifest') &&
       swIcerik.includes('./icons.svg') &&
       /includes\('\/api\/'\)\) return/.test(swIcerik)
@@ -1011,6 +1011,28 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
         mobilHatalar.length === 0,
       JSON.stringify({ mobilUx, mobilHatalar })
     );
+    // Taslak A düzeni: alt çubuk Liste · Oku · Diğer; kamera üstünde Anahtar + Otomatik; Diğer çekmecesi açılır/kapanır
+    const mobilA = await mobilSayfa.evaluate(() => {
+      const gor = (el) => Boolean(el && el.offsetParent && el.getBoundingClientRect().width > 0);
+      const bar = [...document.querySelectorAll('.mobil-alt-bar > *')].filter(gor).map((b) => b.id || b.getAttribute('data-msekme'));
+      const cip = ['[data-msekme="m-panel-anahtar"]', '#btn-mobil-seri-tara'].every((q) => gor(document.querySelector(`.mobil-cip-sirasi ${q}`)));
+      const cek = document.getElementById('mobil-diger-cekmece');
+      const kapaliIlk = cek.hidden;
+      document.getElementById('btn-mobil-diger').click();
+      const acik = !cek.hidden && cek.querySelectorAll('.mobil-diger-oge').length === 3;
+      cek.querySelector('[data-msekme="m-panel-tara"]').click();
+      const secinceKapandi = cek.hidden;
+      document.getElementById('btn-mobil-diger').click();
+      document.body.click();
+      const disariKapandi = cek.hidden;
+      document.getElementById('btn-mobil-diger').click();
+      cek.querySelector('[data-mdiger-vekil="m-panel-anahtar"]').click();
+      const anahtarAcildi = document.body.getAttribute('data-aktif-msekme') === 'm-panel-anahtar' && cek.hidden;
+      return { bar, cip, kapaliIlk, acik, secinceKapandi, disariKapandi, anahtarAcildi, tasmaYok: document.documentElement.scrollWidth <= window.innerWidth };
+    });
+    kontrol('[40b] Telefon düzeni (taslak A): alt çubuk Liste · Oku · Diğer; kamera üstünde Anahtar + Otomatik; Diğer açılır, seçince/dışarı tıklayınca kapanır, Anahtar\'a götürür; taşma yok',
+      JSON.stringify(mobilA.bar) === JSON.stringify(['m-panel-liste', 'btn-mobil-kare-oku', 'btn-mobil-diger']) && mobilA.cip && mobilA.kapaliIlk && mobilA.acik && mobilA.secinceKapandi && mobilA.disariKapandi && mobilA.anahtarAcildi && mobilA.tasmaYok,
+      JSON.stringify(mobilA));
     await mobilSayfa.close();
 
     // -------------------------------------------------------------------------
@@ -1168,7 +1190,9 @@ async function indirmeBekle(klasor, oncekiAdet, uzanti, ms = 15000) {
     );
 
     // Test C (Mobil): Kağıttan Anahtar Oku -> 10 D/Y=Y + 10 Test=C kağıdını okuyup anahtarı günceller, öğrenci puanı eklemez
-    await pwaTestSayfa.click('[data-msekme="m-panel-anahtar"]');
+    await pwaTestSayfa.click('#btn-mobil-diger');
+    await bekle(100);
+    await pwaTestSayfa.click('#mobil-diger-cekmece [data-mdiger-vekil="m-panel-anahtar"]');
     await bekle(200);
     await pwaTestSayfa.evaluate(() => {
       const C = window.SinavOptikCekirdek;
