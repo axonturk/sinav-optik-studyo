@@ -1425,7 +1425,36 @@
     }, 650);
   }
 
+  /* Bulut kaydı tek sırada: bir kayıt sürerken gelen istekler beklemeye alınır ve ilki bitince EN GÜNCEL veriyle
+     tek seferde gönderilir. Aynı sayfadan iki kaydın eski sürüm numarasıyla çakışıp (409) gereksiz birleştirme turu
+     yapması önlenir. Bayraklar (zorla / anlık yedek / silme onayı) birleştirilir, hiçbiri kaybolmaz. */
+  let __bulutKayitSurecte = null;
+  let __bulutKayitBekleyen = null;
   async function bulutKasayaSenkronla(zorlaEz = false, anlikYedekAl = false, silmeOnayi = false, yenidenDenemeSayaci = 0) {
+    if (yenidenDenemeSayaci > 0) return bulutKasayaSenkronlaIc(zorlaEz, anlikYedekAl, silmeOnayi, yenidenDenemeSayaci);
+    if (__bulutKayitSurecte) {
+      if (!__bulutKayitBekleyen) __bulutKayitBekleyen = { zorlaEz: false, anlikYedekAl: false, silmeOnayi: false, sozler: [] };
+      const b = __bulutKayitBekleyen;
+      b.zorlaEz = b.zorlaEz || Boolean(zorlaEz);
+      b.anlikYedekAl = b.anlikYedekAl || Boolean(anlikYedekAl);
+      b.silmeOnayi = b.silmeOnayi || Boolean(silmeOnayi);
+      return new Promise((coz) => b.sozler.push(coz));
+    }
+    __bulutKayitSurecte = bulutKasayaSenkronlaIc(zorlaEz, anlikYedekAl, silmeOnayi, 0);
+    try {
+      return await __bulutKayitSurecte;
+    } finally {
+      __bulutKayitSurecte = null;
+      if (__bulutKayitBekleyen) {
+        const b = __bulutKayitBekleyen;
+        __bulutKayitBekleyen = null;
+        bulutKasayaSenkronla(b.zorlaEz, b.anlikYedekAl, b.silmeOnayi)
+          .then((r) => b.sozler.forEach((coz) => coz(r)))
+          .catch(() => b.sozler.forEach((coz) => coz({ basarili: false })));
+      }
+    }
+  }
+  async function bulutKasayaSenkronlaIc(zorlaEz = false, anlikYedekAl = false, silmeOnayi = false, yenidenDenemeSayaci = 0) {
     if (location.protocol !== 'http:' && location.protocol !== 'https:') return { basarili: false };
     const token = sessionStorage.getItem('hoca_token') || '';
     if (!token) return { basarili: false };
@@ -1638,7 +1667,7 @@
       }
       if (yanit.status === 409 && Array.isArray(veri.eksikHashler) && veri.eksikHashler.length > 0 && yenidenDenemeSayaci < 2) {
         veri.eksikHashler.forEach((h) => __sunucudaBilinenParcaHashleri.delete(String(h || '').trim()));
-        return await bulutKasayaSenkronla(zorlaEz, anlikYedekAl, silmeOnayi, yenidenDenemeSayaci + 1);
+        return await bulutKasayaSenkronlaIc(zorlaEz, anlikYedekAl, silmeOnayi, yenidenDenemeSayaci + 1);
       }
       const karsiPaketVar = Boolean(
         veri && (veri.bulutVeri || veri.veri || veri.veriPaketi || veri.kodlama === 'parcali-v2' || veri.kodlama === 'gzip-b64')
@@ -1656,7 +1685,7 @@
             try { localStorage.setItem('SINAV_SON_BULUT_REV_V1', String(karsiRev)); } catch (_) {}
             durum.revizyonNo = Math.max(karsiRev, durum.revizyonNo || 0) + 1;
             verileriKaydet({ bulutAtla: true, zorlaEz: true, silmeOnayi: true });
-            return await bulutKasayaSenkronla(zorlaEz, anlikYedekAl, true, yenidenDenemeSayaci + 1);
+            return await bulutKasayaSenkronlaIc(zorlaEz, anlikYedekAl, true, yenidenDenemeSayaci + 1);
           }
 
           const birlesik = birlestirIkiDurumKayipsiz(karsiPaket, tamPaket);
@@ -1667,7 +1696,7 @@
           durum.revizyonNo = Math.max(karsiRev, durum.revizyonNo || 0) + 1;
           verileriKaydet({ bulutAtla: true });
           yenileTumSekmePanelleriUI();
-          return await bulutKasayaSenkronla(false, false, false, yenidenDenemeSayaci + 1);
+          return await bulutKasayaSenkronlaIc(false, false, false, yenidenDenemeSayaci + 1);
         }
       }
       if (yanit.ok && veri && veri.basarili) {
@@ -16405,6 +16434,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       } catch (_) { /* çevrimdışı: itiraz sayısı gösterilmez */ }
     };
     window.__masamItirazYenile = () => masamItirazlariniYenile(true);
+    window.__bulutKaydetSimdi = () => bulutKasayaSenkronla(false);
     const btnTumunuOnayla = document.getElementById('btn-inceleme-tumunu-onayla');
     if (btnTumunuOnayla) btnTumunuOnayla.addEventListener('click', () => {
       const liste = (durum.okumaSonuclari || []).filter(okumaIncelenecekMi);
