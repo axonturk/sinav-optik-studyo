@@ -2731,3 +2731,11 @@ html { scroll-padding-top: 104px; }
 #masam-kartlar.masam-satir .masam-sayilar strong { font-size:1rem; }
 #masam-kartlar.masam-satir .masam-alt { margin:0; flex:0 0 auto; gap:12px; }
 #masam-kartlar.masam-satir [data-masam-esit="0"], #masam-kartlar.masam-satir .masam-kart > div[style*="margin-top:6px"] { flex-basis:100%; }
+
+
+/* ── Şüpheli inceleme ── */
+.masam-sayilar .masam-sayi-dugme { display:flex; flex-direction:column; align-items:center; padding:8px 4px; background:rgba(220,38,38,0.06); border:0; border-left:1px solid var(--kenar); font:inherit; cursor:pointer; color:inherit; }
+.masam-sayilar .masam-sayi-dugme:hover { background:rgba(220,38,38,0.12); }
+.masam-sayilar .masam-sayi-dugme:focus-visible { outline:2px solid var(--birincil); outline-offset:-2px; }
+.kart.masam-vurgu-kart { box-shadow:0 0 0 3px rgba(47,91,234,0.45); transition:box-shadow .2s; }
+#masam-kartlar.masam-satir .masam-sayilar .masam-sayi-dugme { flex-direction:row; gap:4px; padding:2px 8px; border:0; border-radius:6px; align-items:baseline; }
