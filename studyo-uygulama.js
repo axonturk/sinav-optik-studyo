@@ -16555,6 +16555,21 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         gecisSekmeYardimci('sekme-stüdyo');
       }
     };
+    // Masam görünümü: Döşeme (kart) / Satır (sıkı liste); son seçim hatırlanır
+    const MASAM_GORUNUM_DEPO = 'SINAV_MASAM_GORUNUM_V1';
+    const uygulaMasamGorunum = (g) => {
+      const kutuK = document.getElementById('masam-kartlar');
+      if (kutuK) kutuK.classList.toggle('masam-satir', g === 'satir');
+      document.querySelectorAll('[data-masam-gorunum]').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute('data-masam-gorunum') === g)));
+    };
+    let masamGorunum = 'doseme';
+    try { masamGorunum = localStorage.getItem(MASAM_GORUNUM_DEPO) === 'satir' ? 'satir' : 'doseme'; } catch (_) {}
+    uygulaMasamGorunum(masamGorunum);
+    document.querySelectorAll('[data-masam-gorunum]').forEach((b) => b.addEventListener('click', () => {
+      const g = b.getAttribute('data-masam-gorunum');
+      try { localStorage.setItem(MASAM_GORUNUM_DEPO, g); } catch (_) {}
+      uygulaMasamGorunum(g);
+    }));
     ['masam-kartlar', 'masam-uyari', 'masam-yapilacaklar'].forEach((id) => { const el = document.getElementById(id); if (el) el.addEventListener('click', masamTikla); });
     const btnMasamYeni = document.getElementById('btn-masam-yeni-sinav');
     if (btnMasamYeni) btnMasamYeni.addEventListener('click', () => {

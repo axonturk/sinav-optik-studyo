@@ -464,6 +464,20 @@ function kontrol(ad, kosul, detay = '') {
       return { grupta: Boolean(g && g.contains(document.getElementById('aktif-donem-sec')) && g.contains(document.getElementById('aktif-ders-sec')) && g.contains(document.getElementById('sec-kayitli-sinav-ust'))), geriMetin: geri ? geri.textContent.trim() : '', geriIpucu: geri ? geri.title : '', silVar: Boolean(document.getElementById('btn-aktif-dersi-sil')), dersVar: Boolean(document.getElementById('btn-yeni-ders-modal')), tekSatir: document.querySelector('.sabit-kayit-ic').getBoundingClientRect().height < 70 };
     });
     kontrol('Üst çubuk: dönem › ders › sınav tek "Seçili sınav" grubunda; Geri Al kısa ("↶ Geri Al", ayrıntı ipucunda); + Ders ve Sil yerinde; 1366 genişlikte tek satır', ust.grupta && ust.geriMetin === '↶ Geri Al' && /Geri al: /.test(ust.geriIpucu) && ust.silVar && ust.dersVar && ust.tekSatir, JSON.stringify(ust));
+    await masamAc();
+    const gor = await pc.evaluate(() => {
+      const kutuK = document.getElementById('masam-kartlar');
+      const once = { satir: kutuK.classList.contains('masam-satir'), sutun: getComputedStyle(kutuK).gridTemplateColumns.split(' ').length };
+      document.querySelector('[data-masam-gorunum="satir"]').click();
+      const sonra = { satir: kutuK.classList.contains('masam-satir'), sutun: getComputedStyle(kutuK).gridTemplateColumns.split(' ').length, basili: document.querySelector('[data-masam-gorunum="satir"]').getAttribute('aria-pressed'), kayit: localStorage.getItem('SINAV_MASAM_GORUNUM_V1') };
+      return { once, sonra };
+    });
+    await pc.reload({ waitUntil: 'networkidle0' });
+    await bekle(600);
+    await masamAc();
+    const gorKalici = await pc.evaluate(() => document.getElementById('masam-kartlar').classList.contains('masam-satir'));
+    await pc.evaluate(() => document.querySelector('[data-masam-gorunum="doseme"]').click());
+    kontrol('Masam Döşeme / Satır: Satır seçilince tek sütun liste; seçim sayfa yenilense de kalır; Döşeme ile geri döner', !gor.once.satir && gor.sonra.satir && gor.sonra.sutun === 1 && gor.sonra.basili === 'true' && gor.sonra.kayit === 'satir' && gorKalici && !(await pc.evaluate(() => document.getElementById('masam-kartlar').classList.contains('masam-satir'))), JSON.stringify({ gor, gorKalici }));
     kontrol('Veri güvenliği: stüdyo sınavı açıkken başka sınavın telefon kağıdı açık sınava karışmaz', stOnce.okunan === stSonra.okunan && !/247419088/.test(stSonra.satirlar), `${JSON.stringify(stOnce)} → ${JSON.stringify(stSonra)}`);
 
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));

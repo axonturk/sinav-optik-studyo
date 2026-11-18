@@ -2714,3 +2714,20 @@ html { scroll-padding-top: 104px; }
 .baglam-grup #aktif-donem-sec { flex: 0 1 110px; }
 .baglam-grup .rozet { flex-shrink: 0; }
 @media (max-width: 1600px) { .baglam-grup-etiket { display: none; } }
+
+
+/* ── Masam: Döşeme / Satır görünümü ── */
+.masam-gorunum-satiri { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:0 0 10px; flex-wrap:wrap; }
+.masam-gorunum button[aria-pressed="true"] { background:var(--metin, #111827); color:var(--bg-kart, #fff); }
+#masam-kartlar.masam-satir { grid-template-columns:1fr !important; gap:8px; }
+#masam-kartlar.masam-satir .kart.masam-kart { flex-direction:row; flex-wrap:wrap; align-items:center; gap:6px 14px; padding:8px 14px; }
+#masam-kartlar.masam-satir .masam-kart > div:first-child { padding-top:0; flex:1 1 220px; }
+#masam-kartlar.masam-satir .masam-durum { order:0; margin:0; border:0; border-radius:999px; padding:3px 10px; flex:0 0 auto; }
+#masam-kartlar.masam-satir .masam-durum-sag { display:none; }
+#masam-kartlar.masam-satir [data-masam-sinav] { margin:0 !important; flex:0 1 auto; }
+#masam-kartlar.masam-satir .masam-sayilar { display:flex; border:0; gap:12px; }
+#masam-kartlar.masam-satir .masam-sayilar > div { flex-direction:row; gap:4px; padding:0; align-items:baseline; }
+#masam-kartlar.masam-satir .masam-sayilar > div + div { border:0; }
+#masam-kartlar.masam-satir .masam-sayilar strong { font-size:1rem; }
+#masam-kartlar.masam-satir .masam-alt { margin:0; flex:0 0 auto; gap:12px; }
+#masam-kartlar.masam-satir [data-masam-esit="0"], #masam-kartlar.masam-satir .masam-kart > div[style*="margin-top:6px"] { flex-basis:100%; }
