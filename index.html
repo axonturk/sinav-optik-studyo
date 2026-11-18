@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261117f" />
+  <link rel="stylesheet" href="ortak.css?v=20261118a" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -146,7 +146,7 @@
 
       <div class="yan-menu-grup-baslik" title="Notlar, analizler, arşiv ve kayıtlar">3 · Sonuçlar</div>
       <div class="yan-menu-liste">
-        <button type="button" class="sekme-btn" data-sekme="sekme-analiz" title="Değerlendirme, Madde Analizi ve Akreditasyon">
+        <button type="button" class="sekme-btn" data-sekme="sekme-analiz" title="Değerlendirme, Madde Analizi ve Akreditasyon" data-itiraz-rozetli="1">
           <svg class="ui-ikon"><use href="#i-chart"></use></svg>
           <span class="yan-menu-metin">Değerlendirme</span>
         </button>
@@ -266,6 +266,12 @@
 
       <!-- ANA İÇERİK KAPSAYICISI (Doğru Giriş Yapılana Kadar Kilitli) -->
       <main class="ana-kapsayici" id="ana-icerik-alani" style="pointer-events:none; user-select:none;">
+
+        <!-- SAYFA BAŞLIĞI: Öğretmen › Bölüm › Ekran (neredeyim) -->
+        <div id="sayfa-basligi" class="sayfa-basligi yazdir-gizle">
+          <nav class="sayfa-yolu" id="sayfa-yolu" aria-label="Bulunduğunuz yer"></nav>
+          <h1 class="sayfa-baslik-metin" id="sayfa-baslik-metin"></h1>
+        </div>
 
         <!-- ADIM ÇUBUĞU: açık sınav hangi aşamada (Hazırla → Bas → Oku → Değerlendir → Yayınla); her adım tıklanınca ilgili ekrana gider -->
         <nav id="adim-cubugu" class="adim-cubugu yazdir-gizle" hidden aria-label="Sınav adımları">
@@ -1156,8 +1162,28 @@
             <svg class="ui-ikon"><use href="#i-plus"></use></svg>
             <span>Akıllı Yapıştır Çekmecesi</span>
           </button>
+          <!-- İçe aktar / İndir menüleri: sayfadaki mevcut düğmeleri tek yerden çalıştırır (düğmeler yerinde kalır) -->
+          <details class="acilir-menu" id="menu-banka-ice-aktar">
+            <summary class="btn btn-kucuk">⤒ İçe aktar ▾</summary>
+            <div class="acilir-menu-liste" role="menu">
+              <button type="button" role="menuitem" data-banka-dosya="input-soru-csv-yukle">CSV / Excel dosyasından soru yükle</button>
+              <button type="button" role="menuitem" data-banka-odak="toplu-soru-metin">Word / metinden toplu yapıştır</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-banka-bologna-ac">Bologna bilgi paketi içe aktar</button>
+            </div>
+          </details>
+          <details class="acilir-menu" id="menu-banka-indir">
+            <summary class="btn btn-kucuk">⤓ İndir ▾</summary>
+            <div class="acilir-menu-liste" role="menu">
+              <button type="button" role="menuitem" data-banka-vekil="btn-soru-bankasi-csv-disa-aktar">Aktif dersin soruları (CSV, ÖÇ sütunlu)</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-bos-soru-csv-indir">Boş şablon: tüm soru türleri</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-bos-test-csv-indir">Boş şablon: çoktan seçmeli</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-bos-dy-csv-indir">Boş şablon: doğru / yanlış</button>
+              <button type="button" role="menuitem" data-banka-vekil="btn-bos-klasik-csv-indir">Boş şablon: klasik</button>
+            </div>
+          </details>
         </div>
       </div>
+      <div id="banka-oc-uyari" class="uyari-kutu yazdir-gizle" hidden style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; margin-bottom:var(--b-4); border-radius:8px; background:rgba(234,179,8,0.12); border:1px solid rgba(234,179,8,0.45);"></div>
 
       <div class="iki-sutun-duzen">
 
@@ -1893,6 +1919,21 @@
       </div>
 
       <!-- Sınava Girmeyen (GR) Mutabakat ve Kesinleştirme Kartı -->
+      <!-- Öğrenci öğrenci not listesi (okunanlar + sınava girmeyenler GR) -->
+      <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="ogrenciler" id="kutu-ogrenci-notlari">
+        <div class="kart-baslik">
+          <span>Öğrenci notları <span class="rozet rozet-mavi" id="rozet-ogrenci-not-sayisi">0</span></span>
+          <input type="search" id="ara-ogrenci-not" placeholder="İsim veya numara ara" aria-label="Öğrenci notlarında ara" style="max-width:260px;" />
+        </div>
+        <div class="tablo-sarmal" style="max-height:460px; overflow:auto;">
+          <table class="veri-tablo" id="tablo-ogrenci-notlari">
+            <thead><tr><th>No</th><th>Öğrenci</th><th>Kitapçık</th><th>D</th><th>Y</th><th>B</th><th>Puan</th><th>Harf</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div style="font-size:var(--yazi-xs); color:var(--metin-ikincil); margin-top:6px;">İsme tıklayınca Öğrenci Dosyası açılır. GR: sınava girmedi (sınıf listesinde olup kağıdı okunmayan ya da telefonda "girmedi" işaretlenen).</div>
+      </div>
+
       <div class="kart yazdir-gizle analiz-bolum" data-analiz-bolum="ogrenciler" id="kutu-ogrenci-sonuc-yayin">
         <div class="kart-baslik">
           <span>Öğrencilere sonuç</span>
@@ -3683,7 +3724,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261117f"></script>
-  <script src="studyo-uygulama.js?v=20261117f"></script>
+  <script src="guvenlik-ve-veri.js?v=20261118a"></script>
+  <script src="studyo-uygulama.js?v=20261118a"></script>
 </body>
 </html>
