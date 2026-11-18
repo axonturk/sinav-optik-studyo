@@ -422,6 +422,64 @@ function kontrol(ad, kosul, detay = '') {
     });
     kontrol('A4: Soru Bankası "İçe aktar ▾" (3) / "İndir ▾" (5); her seçenek mevcut düğmeye bağlı; İndir menüsü soru bankası CSV dosyasını indirir, menü kapanır; ÖÇ uyarısı tutarlı', a4.ice === 3 && a4.ind === 5 && a4.hedeflerVar && a4.secici && a4.kapandi && a4.ocTutarli, JSON.stringify(a4));
 
+    // Veri karışması yok: açık sınavdan başka bir sınavın telefon kağıdı açık sınava karışmaz (aynı öğrenci numarası olsa bile)
+    const notListesi = () => pc.evaluate(() => {
+      document.querySelector('.sekme-btn[data-sekme="sekme-analiz"]').click();
+      document.querySelector('#analiz-alt-sekmeler [data-alt="ogrenciler"]').click();
+      return { okunan: document.getElementById('ist-ogrenci-sayisi').textContent.trim(), satirlar: [...document.querySelectorAll('#tablo-ogrenci-notlari tbody tr[data-not-ogr]')].map((t) => [...t.children].map((td) => td.textContent.trim()).join(' ')).join(' | '), sinav: document.getElementById('sec-kayitli-sinav-ust').value };
+    });
+    const telAcikOnce = await notListesi();
+    const okY = (id, ogrNo, ad, kodN, puan) => Object.assign(ok(id, ogrNo, ad, kodN), { toplamPuan: puan, testDetay: 'EEEEE'.split('').map((v) => ({ verilen: v, sonuc: 'YANLIS' })) });
+    await gonder('YABANCI-SINAV-1', 'SINAV_TANIMI', { ad: '99999999 — Başka Ders', dySayisi: 5, testSayisi: 5 });
+    await gonder('YABANCI-SINAV-1', 'OKUDU_GUNCELLE', okY('Y1', '247419050', 'ALİ VELİ', '50', 11));
+    await gonder('YABANCI-SINAV-1', 'OKUDU_GUNCELLE', okY('Y2', '247419099', 'YABANCI ÖĞRENCİ', '99', 22));
+    await senkron();
+    const telAcikSonra = await notListesi();
+    await masamAc();
+    const yabanciKovada = await pc.evaluate(() => /Başka Ders/.test(document.getElementById('masam-uyari').textContent));
+    kontrol('Veri güvenliği: telefon sınavı açıkken başka sınavın kağıtları açık sınava karışmaz (aynı numaralı öğrencinin notu ezilmez), "eşleşmeyen" olarak bekler', telAcikOnce.okunan === telAcikSonra.okunan && telAcikOnce.satirlar === telAcikSonra.satirlar && !/247419099/.test(telAcikSonra.satirlar) && yabanciKovada, `${JSON.stringify(telAcikOnce)} → ${JSON.stringify(telAcikSonra)} · kova:${yabanciKovada}`);
+    await pc.evaluate(() => document.getElementById('btn-masam-yeni-sinav').click());
+    await bekle(300);
+    await pc.evaluate(() => { const a = document.getElementById('antet-sinav-ad'); a.value = 'STUDYO KARISMA DENEME'; a.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('btn-sinavi-kaydet-snapshot').click(); });
+    await bekle(400);
+    const stOnce = await notListesi();
+    await gonder('YABANCI-SINAV-2', 'OKUDU_GUNCELLE', okY('Y3', '247419088', 'BAŞKA ÖĞRENCİ', '88', 33));
+    await senkron();
+    const stSonra = await notListesi();
+    // Telefondaki asıl kayıt silinse de (telefonda sıfırlama) derse kayıtlı sınav arşivde "Derste kayıtlı", kağıt sayısı ve düğmelerle görünür
+    await gonder(KOD_A, 'OKUDU_SIL', { id: 'A1' });
+    await gonder(KOD_A, 'OKUDU_SIL', { id: 'A2' });
+    await senkron();
+    await pc.evaluate(() => document.querySelector('.sekme-btn[data-sekme="sekme-arsiv"]').click());
+    await bekle(400);
+    const arsivSatir = await pc.evaluate((kod) => {
+      const satirlar = [...document.querySelectorAll('#arsiv-liste tbody tr')];
+      const t = satirlar.find((x) => x.textContent.includes(kod));
+      return { var: Boolean(t), metin: t ? [...t.children].map((td) => td.textContent.trim()).join(' | ') : '', ac: Boolean(t && t.querySelector('[data-arsiv-ac]')), dersteAc: Boolean(t && t.querySelector('[data-derse-kaydet]')), aktifSatir: satirlar.some((x) => /açık sınavın okumaları|Açık taslak/.test(x.textContent)) };
+    }, KOD_A);
+    kontrol('Arşiv: telefon kaydı silinmiş derse kayıtlı sınav "Derste kayıtlı" + 2 kağıt + Aç / Derste aç ile görünür; açık sınav için ayrı yinelenen satır yok', arsivSatir.var && /Derste kayıtlı/.test(arsivSatir.metin) && !/Stüdyo/.test(arsivSatir.metin) && /\| 2 \|/.test(arsivSatir.metin) && arsivSatir.ac && arsivSatir.dersteAc && !arsivSatir.aktifSatir, JSON.stringify(arsivSatir));
+    const ust = await pc.evaluate(() => {
+      const g = document.querySelector('.baglam-grup');
+      const geri = document.getElementById('btn-son-silineni-geri-al');
+      return { grupta: Boolean(g && g.contains(document.getElementById('aktif-donem-sec')) && g.contains(document.getElementById('aktif-ders-sec')) && g.contains(document.getElementById('sec-kayitli-sinav-ust'))), geriMetin: geri ? geri.textContent.trim() : '', geriIpucu: geri ? geri.title : '', silVar: Boolean(document.getElementById('btn-aktif-dersi-sil')), dersVar: Boolean(document.getElementById('btn-yeni-ders-modal')), tekSatir: document.querySelector('.sabit-kayit-ic').getBoundingClientRect().height < 70 };
+    });
+    kontrol('Üst çubuk: dönem › ders › sınav tek "Seçili sınav" grubunda; Geri Al kısa ("↶ Geri Al", ayrıntı ipucunda); + Ders ve Sil yerinde; 1366 genişlikte tek satır', ust.grupta && ust.geriMetin === '↶ Geri Al' && /Geri al: /.test(ust.geriIpucu) && ust.silVar && ust.dersVar && ust.tekSatir, JSON.stringify(ust));
+    await masamAc();
+    const gor = await pc.evaluate(() => {
+      const kutuK = document.getElementById('masam-kartlar');
+      const once = { satir: kutuK.classList.contains('masam-satir'), sutun: getComputedStyle(kutuK).gridTemplateColumns.split(' ').length };
+      document.querySelector('[data-masam-gorunum="satir"]').click();
+      const sonra = { satir: kutuK.classList.contains('masam-satir'), sutun: getComputedStyle(kutuK).gridTemplateColumns.split(' ').length, basili: document.querySelector('[data-masam-gorunum="satir"]').getAttribute('aria-pressed'), kayit: localStorage.getItem('SINAV_MASAM_GORUNUM_V1') };
+      return { once, sonra };
+    });
+    await pc.reload({ waitUntil: 'networkidle0' });
+    await bekle(600);
+    await masamAc();
+    const gorKalici = await pc.evaluate(() => document.getElementById('masam-kartlar').classList.contains('masam-satir'));
+    await pc.evaluate(() => document.querySelector('[data-masam-gorunum="doseme"]').click());
+    kontrol('Masam Döşeme / Satır: Satır seçilince tek sütun liste; seçim sayfa yenilense de kalır; Döşeme ile geri döner', !gor.once.satir && gor.sonra.satir && gor.sonra.sutun === 1 && gor.sonra.basili === 'true' && gor.sonra.kayit === 'satir' && gorKalici && !(await pc.evaluate(() => document.getElementById('masam-kartlar').classList.contains('masam-satir'))), JSON.stringify({ gor, gorKalici }));
+    kontrol('Veri güvenliği: stüdyo sınavı açıkken başka sınavın telefon kağıdı açık sınava karışmaz', stOnce.okunan === stSonra.okunan && !/247419088/.test(stSonra.satirlar), `${JSON.stringify(stOnce)} → ${JSON.stringify(stSonra)}`);
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;

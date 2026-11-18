@@ -956,14 +956,19 @@ function uretYogunSoruBankasi(hedefToplamKokKarakter, dersId = 'genel') {
       await bekle(350);
 
       for (const mSekme of ['m-panel-tara', 'm-panel-anahtar', 'm-panel-liste']) {
-        await mobilSayfa.click(`[data-msekme="${mSekme}"]`);
+        // Taslak A: Kamera ekranı ve Anahtar "Diğer ▾" çekmecesinde; görünür yoldan açılır
+        if (mSekme !== 'm-panel-liste') {
+          await mobilSayfa.click('#btn-mobil-diger');
+          await bekle(100);
+          await mobilSayfa.click(mSekme === 'm-panel-tara' ? '#mobil-diger-cekmece [data-msekme="m-panel-tara"]' : '#mobil-diger-cekmece [data-mdiger-vekil="m-panel-anahtar"]');
+        } else await mobilSayfa.click(`[data-msekme="${mSekme}"]`);
         await bekle(150);
         const mBoyut = await mobilSayfa.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
         kontrol(`Mobil OMR (${mSekme}) 390×844 yatay taşma yok`, mBoyut.sw <= mBoyut.iw, `${mBoyut.sw}/${mBoyut.iw}`);
       }
 
-      await mobilSayfa.click('[data-msekme="m-panel-tara"]');
-      await bekle(150);
+      await mobilSayfa.click('#btn-mobil-kare-oku'); // Liste ekranındayken Oku önce kamera ekranını açar
+      await bekle(500);
       await mobilSayfa.click('#btn-mobil-kare-oku');
       await bekle(450);
       await mobilSayfa.click('[data-msekme="m-panel-liste"]');

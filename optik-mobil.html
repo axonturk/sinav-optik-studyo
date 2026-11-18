@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Cep Optik Okuyucu (Mobil OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261118a" />
+  <link rel="stylesheet" href="ortak.css?v=20261118b" />
   <style>
     html, body {
       margin: 0;
@@ -34,6 +34,19 @@
     .mobil-durum-serit .mds-baglanti[data-durum="cevrimdisi"] { color: #fde68a; }
     .mobil-durum-serit .mds-baglanti[data-durum="sorun"] { color: #fca5a5; }
     .mobil-durum-serit .mds-baglanti[data-durum="yok"] { color: #cbd5e1; }
+    /* Taslak A: alt çubuk Liste · geniş Oku · Diğer; kamera üstünde düğme sırası */
+    .mobil-alt-bar .mobil-deklansor-btn { flex: 1 1 auto; max-width: 230px; width: auto !important; height: 64px !important; min-height: 64px; border-radius: 999px !important; flex-direction: row !important; gap: 8px; font-size: 18px; font-weight: 800; padding: 0 22px; margin-top: 0 !important; }
+    .mobil-alt-bar .mobil-deklansor-btn .ui-ikon { width: 24px !important; height: 24px !important; }
+    .mobil-diger-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 64px; min-height: 56px; background: transparent; border: 0; color: #cbd5e1; font: inherit; font-size: 12px; cursor: pointer; border-radius: 12px; }
+    .mobil-diger-btn[aria-expanded="true"] { background: rgba(255,255,255,0.08); color: #fff; }
+    .mobil-diger-cekmece { position: fixed; left: 8px; right: 8px; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); z-index: 260; display: flex; flex-direction: column; gap: 4px; padding: 8px; background: #1f2937; border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; box-shadow: 0 12px 36px rgba(0,0,0,0.45); }
+    .mobil-diger-cekmece[hidden] { display: none; }
+    .mobil-diger-oge { display: flex !important; flex-direction: row !important; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 14px !important; background: transparent; border: 0; border-radius: 10px; color: #e5e7eb; font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+    .mobil-diger-oge:hover, .mobil-diger-oge:focus-visible { background: rgba(255,255,255,0.08); outline: none; }
+    .mobil-diger-oge.aktif { color: #93c5fd; }
+    .mobil-cip-sirasi { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 10px 4px; }
+    .mobil-cip { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 6px; min-height: 48px; padding: 0 14px !important; border-radius: 999px !important; background: rgba(255,255,255,0.08) !important; border: 1px solid rgba(255,255,255,0.16) !important; color: #e5e7eb !important; font-size: 14px !important; width: auto !important; flex: 0 0 auto; }
+    .mobil-cip.aktif { background: #2563eb !important; border-color: #2563eb !important; color: #fff !important; }
     .mobil-ust {
       height: 44px;
       min-height: 44px;
@@ -526,6 +539,16 @@
          MOD 1: TAM EKRAN KAMERA OPTİK TARAYICI (%75+ VİZÖR)
          ==================================================================== -->
     <section class="sekme-panel aktif" id="m-panel-tara">
+      <div class="mobil-cip-sirasi" aria-label="Okuma ayarları">
+    <button type="button" class="mobil-sekme-btn mobil-cip" data-msekme="m-panel-anahtar" title="Cevap Anahtarı ve Sınav Yapısı">
+      <svg class="ui-ikon"><use href="#i-key"></use></svg>
+      <span>Anahtar</span>
+    </button>
+        <button type="button" class="mobil-oto-btn mobil-cip" id="btn-mobil-seri-tara" title="Açıkken kağıt görünür görünmez kendisi okur">
+          <svg class="ui-ikon"><use href="#i-refresh"></use></svg>
+          <span>Otomatik: Kapalı</span>
+        </button>
+      </div>
       <!-- HESAP KARTI: telefon bilgisayara bağlı mı? Bağlıysa tek düğme: Senkronize Et -->
       <div class="kart" id="mobil-hesap-kart" style="margin-bottom:0.6rem; padding:0.65rem;">
         <div id="mobil-hesap-bagli-degil">
@@ -1025,26 +1048,34 @@
       <span>Liste (<span id="mobil-alt-sayac">0</span>)</span>
       <span id="mobil-bekleyen-rozet" hidden title="Öğrenci seçimi veya karar bekleyen kağıt" style="position:absolute; top:4px; right:10px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#d97706; color:#fff; font-size:11px; font-weight:700; line-height:18px; text-align:center;">0</span>
     </button>
-    <button type="button" class="mobil-sekme-btn" data-msekme="m-panel-anahtar" title="Cevap Anahtarı ve Sınav Yapısı">
-      <svg class="ui-ikon"><use href="#i-key"></use></svg>
-      <span>Anahtar</span>
-    </button>
     <button type="button" class="mobil-deklansor-btn" id="btn-mobil-kare-oku" title="Kağıdı Oku" aria-label="Kağıdı Oku">
       <svg class="ui-ikon" style="width:22px; height:22px;"><use href="#i-camera"></use></svg>
       <span>Oku</span>
     </button>
-    <button type="button" class="mobil-oto-btn" id="btn-mobil-seri-tara" title="Açıkken kağıt görünür görünmez kendisi okur">
-      <svg class="ui-ikon"><use href="#i-refresh"></use></svg>
-      <span>Otomatik: Kapalı</span>
-    </button>
-    <button type="button" class="mobil-sekme-btn aktif" data-msekme="m-panel-tara" title="Tam Ekran Vizör">
-      <svg class="ui-ikon"><use href="#i-camera"></use></svg>
-      <span>Tam ekran</span>
+    <button type="button" class="mobil-diger-btn" id="btn-mobil-diger" aria-haspopup="true" aria-expanded="false" aria-controls="mobil-diger-cekmece" title="Kamera ekranı, cevap anahtarı ve araçlar">
+      <svg class="ui-ikon"><use href="#i-more"></use></svg>
+      <span>Diğer ▾</span>
     </button>
   </nav>
 
+  <!-- DİĞER ÇEKMECESİ: alt çubuktan taşınan düğmeler (kimlikleri ve işlevleri aynı) -->
+  <div id="mobil-diger-cekmece" class="mobil-diger-cekmece" hidden role="menu" aria-label="Diğer">
+    <button type="button" class="mobil-sekme-btn mobil-diger-oge aktif" data-msekme="m-panel-tara" title="Tam Ekran Vizör">
+      <svg class="ui-ikon"><use href="#i-camera"></use></svg>
+      <span>Kamera ekranı</span>
+    </button>
+    <button type="button" class="mobil-diger-oge" data-mdiger-vekil="m-panel-anahtar">
+      <svg class="ui-ikon"><use href="#i-key"></use></svg>
+      <span>Cevap anahtarı ve sınav yapısı</span>
+    </button>
+    <button type="button" class="mobil-diger-oge" data-mdiger-vekil="btn-mobil-araclar-ac">
+      <svg class="ui-ikon"><use href="#i-more"></use></svg>
+      <span>Araçlar (QR kurulum, form türü, son okuma)</span>
+    </button>
+  </div>
+
   <script src="qrcode-generator.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261118a"></script>
+  <script src="guvenlik-ve-veri.js?v=20261118b"></script>
   <script>
     (function () {
       'use strict';
@@ -5214,6 +5245,27 @@
             if (hedef) hedef.classList.add('aktif');
           });
         });
+
+        // Diğer ▾ çekmecesi: aç/kapat; vekil öğeler mevcut düğmeleri çalıştırır; seçim sonrası kapanır
+        const btnDiger = document.getElementById('btn-mobil-diger');
+        const cekDiger = document.getElementById('mobil-diger-cekmece');
+        const digerKapat = () => { if (cekDiger) cekDiger.hidden = true; if (btnDiger) btnDiger.setAttribute('aria-expanded', 'false'); };
+        if (btnDiger && cekDiger) {
+          btnDiger.addEventListener('click', (e) => { e.stopPropagation(); const ac = cekDiger.hidden; cekDiger.hidden = !ac; btnDiger.setAttribute('aria-expanded', String(ac)); });
+          cekDiger.addEventListener('click', (e) => {
+            const v = e.target.closest('[data-mdiger-vekil]');
+            if (v) {
+              const hedefId = v.getAttribute('data-mdiger-vekil');
+              const hedef = hedefId.startsWith('m-panel-') ? document.querySelector(`.mobil-sekme-btn[data-msekme="${hedefId}"]`) : document.getElementById(hedefId);
+              digerKapat();
+              if (hedef) hedef.click();
+              return;
+            }
+            if (e.target.closest('.mobil-sekme-btn')) digerKapat();
+          });
+          document.addEventListener('click', (e) => { if (!cekDiger.hidden && !cekDiger.contains(e.target) && e.target !== btnDiger) digerKapat(); });
+          document.addEventListener('keydown', (e) => { if (e.key === 'Escape') digerKapat(); });
+        }
 
         const btnAraclarAc = document.getElementById('btn-mobil-araclar-ac');
         const btnAraclarKapat = document.getElementById('btn-mobil-araclar-kapat');
