@@ -479,6 +479,14 @@
     const k = (durum.kayitliSinavlar || []).find((x) => x && x.id === durum.aktifKayitliSinavId);
     return k && k.kaynak === 'telefon' ? k : null;
   }
+  /* Tek şüpheli tanımı (Masam sayacı ve İnceleme kuyruğu aynı kuralı kullanır) */
+  function okumaIncelenecekMi(r) {
+    if (!r) return false;
+    return /^BEKLEYEN/i.test(String(r.ogrNo || '')) || r.durum === 'BEKLEYEN' || Boolean(r.kimlikEslesmeBekliyor) || Boolean(r.numaraEslesmediMi) || Boolean(r.supheliMi);
+  }
+  function okumaOgrencisiBelirsizMi(r) {
+    return Boolean(r && (/^BEKLEYEN/i.test(String(r.ogrNo || '')) || r.durum === 'BEKLEYEN' || String(r.ogrNo || '').includes('?')));
+  }
   /* ── Telefon sınavı cevap anahtarı: derse anahtarsız kaydedilen sınavın puanları sıfırlanmasın, anahtar sonradan gelirse tamamlansın ── */
   function telefonSoruSayisiVarMi(x) {
     return Boolean(x && (Number(x.dySayisi) || 0) + (Number(x.testSayisi) || 0) + (Number(x.klasikSayisi) || 0) > 0);
@@ -6181,10 +6189,10 @@
     }
 
     // Öğretmen İnceleme Kuyruğu (Şüpheli Balon Hızlı Düzeltme + Eşleşmeyen Kimlik Atama)
-    const supheliler = durum.okumaSonuclari.filter(
-      (s) => Boolean(s.kimlikEslesmeBekliyor || s.numaraEslesmediMi) || (s.supheliMi && Array.isArray(s.incelemeKuyrugu) && s.incelemeKuyrugu.length > 0)
-    );
+    const supheliler = durum.okumaSonuclari.filter(okumaIncelenecekMi);
     document.getElementById('rozet-inceleme-sayisi').textContent = `${supheliler.length} Bekleyen`;
+    const btnTumOnay = document.getElementById('btn-inceleme-tumunu-onayla');
+    if (btnTumOnay) btnTumOnay.hidden = !supheliler.some((x) => !okumaOgrencisiBelirsizMi(x));
     const kuyrukAlan = document.getElementById('liste-inceleme-kuyrugu');
     if (kuyrukAlan) {
       if (supheliler.length === 0) {
@@ -6195,7 +6203,7 @@
           .join('');
         kuyrukAlan.innerHTML = supheliler
           .map((s) => {
-            const kimlikAtamaHTML = (s.kimlikEslesmeBekliyor || s.numaraEslesmediMi)
+            const kimlikAtamaHTML = (s.kimlikEslesmeBekliyor || s.numaraEslesmediMi || okumaOgrencisiBelirsizMi(s))
               ? `
                 <div style="margin-top:4px; display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;">
                   <span class="rozet rozet-kirmizi">⚠️ Sınıf Listesinde Eşleşmedi</span>
@@ -6237,10 +6245,10 @@
               <div style="padding:0.55rem; background:var(--uyari-acik); color:var(--uyari); border-radius:6px; margin-bottom:0.45rem; display:flex; justify-content:space-between; align-items:center; gap:0.5rem; flex-wrap:wrap;">
                 <div style="flex:1; min-width:220px;">
                   <strong>${C.kacisHTML(s.adSoyad)} (${C.kacisHTML(s.ogrNo)})</strong>:
-                  <div>${hizliBalonHTML || 'Kimlik doğrulaması bekleniyor.'}</div>
+                  <div>${hizliBalonHTML || ((s.kimlikEslesmeBekliyor || s.numaraEslesmediMi || okumaOgrencisiBelirsizMi(s)) ? 'Öğrencisi doğrulanmadı: kağıttaki numarayı kontrol edip öğrenciyi seçin ya da doğruysa onaylayın.' : 'Okuma güveni düşük: kağıdı kontrol edip doğruysa onaylayın.')}</div>
                   ${kimlikAtamaHTML}
                 </div>
-                <button type="button" class="btn btn-kucuk" data-onayla-inceleme="${C.kacisHTML(s.id)}">✓ Onayla</button>
+                <button type="button" class="btn btn-kucuk" data-onayla-inceleme="${C.kacisHTML(s.id)}"${okumaOgrencisiBelirsizMi(s) ? ' disabled title="Önce öğrenciyi seçin"' : ' title="Kağıdı kontrol ettim, doğru"'}>✓ Onayla (incelendi)</button>
               </div>
             `;
           })
@@ -12971,11 +12979,13 @@ Yine de çıktı alınsın mı?`)) {
         const id = btn.getAttribute('data-onayla-inceleme');
         const kayit = durum.okumaSonuclari.find((s) => s.id === id);
         if (kayit) {
+          if (okumaOgrencisiBelirsizMi(kayit)) { guncelleKayitDurumCubuguUI('hata', '⚠️ Önce bu kağıdın öğrencisini seçin.'); return; }
           kayit.supheliMi = false;
           kayit.kimlikEslesmeBekliyor = false;
           kayit.numaraEslesmediMi = false;
           kayit.incelemeKuyrugu = [];
           kayit.ortalamaGuven = 0.99;
+          kayit.incelendiMs = Date.now();
           verileriKaydet();
           guncelleOmrTabloVeKuyruk();
           guncelleMaddeAnaliziSekmesi();
@@ -16368,7 +16378,7 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       if (y.kaydet.length) parca.push(cip(`kart:${y.kaydet[0]}`, y.kaydet.length, 'telefon sınavı derse kaydedilecek', 'cip-mavi'));
       if (y.esitle.length) parca.push(cip(`kart:${y.esitle[0]}`, y.esitle.length, 'ders telefonla eşitlenecek'));
       if (y.kod.length) parca.push(cip(`kart:${y.kod[0]}`, y.kod.length, 'sınavın kodu düzeltilecek', 'cip-kirmizi'));
-      if (y.supheliToplam) parca.push(cip(`kart:${y.supheli[0]}`, y.supheliToplam, 'şüpheli kağıt incelenecek'));
+      if (y.supheliToplam) parca.push(cip(`inceleme:${y.supheli[0]}`, y.supheliToplam, 'şüpheli kağıt incelenecek'));
       if (masamItiraz.yeni) parca.push(cip('itiraz', masamItiraz.yeni, 'yeni itiraz', 'cip-mavi'));
       const menuBtn = document.querySelector('.sekme-btn[data-itiraz-rozetli]');
       if (menuBtn) {
@@ -16395,6 +16405,20 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
       } catch (_) { /* çevrimdışı: itiraz sayısı gösterilmez */ }
     };
     window.__masamItirazYenile = () => masamItirazlariniYenile(true);
+    const btnTumunuOnayla = document.getElementById('btn-inceleme-tumunu-onayla');
+    if (btnTumunuOnayla) btnTumunuOnayla.addEventListener('click', () => {
+      const liste = (durum.okumaSonuclari || []).filter(okumaIncelenecekMi);
+      const onaylanacak = liste.filter((x) => !okumaOgrencisiBelirsizMi(x));
+      const belirsiz = liste.length - onaylanacak.length;
+      if (!onaylanacak.length) return;
+      if (!window.confirm(`${onaylanacak.length} kağıt "incelendi" sayılsın mı?\n\nNotlar değişmez; yalnızca şüpheli işareti kalkar.${belirsiz ? `\n${belirsiz} kağıdın öğrencisi belli değil; onlara önce öğrenci atayın (onaylanmaz).` : ''}`)) return;
+      const zaman = Date.now();
+      onaylanacak.forEach((x) => { x.supheliMi = false; x.kimlikEslesmeBekliyor = false; x.numaraEslesmediMi = false; x.incelemeKuyrugu = []; x.ortalamaGuven = 0.99; x.incelendiMs = zaman; });
+      verileriKaydet();
+      guncelleOmrTabloVeKuyruk();
+      guncelleMaddeAnaliziSekmesi();
+      guncelleKayitDurumCubuguUI('kaydedildi', `✅ ${onaylanacak.length} kağıt incelendi olarak işaretlendi${belirsiz ? ` · ${belirsiz} kağıt öğrenci ataması bekliyor` : ''}`);
+    });
     const araNot = document.getElementById('ara-ogrenci-not');
     if (araNot) araNot.addEventListener('input', () => cizOgrenciNotlari());
     const tabloNot = document.getElementById('tablo-ogrenci-notlari');
@@ -16460,9 +16484,9 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         }
         const okumalar = kayitliSinavOkumalari(ks);
         const gr = dersSinaviGirmeyenSayisi(dd.id, ks, okumalar);
-        const supheli = okumalar.filter((r) => r && (/^BEKLEYEN/i.test(String(r.ogrNo || '')) || r.supheliMi || r.durum === 'BEKLEYEN' || r.numaraEslesmediMi)).length;
+        const supheli = okumalar.filter(okumaIncelenecekMi).length;
         const kesin = Boolean((durum.kesinlesmisSinavHaritasi || {})[`${dd.id}::${ks.id}`]);
-        if (supheli) { yap.supheli.push(dd.id); yap.supheliToplam += supheli; }
+        if (supheli) { yap.supheli.push(`${dd.id}|${ks.id}`); yap.supheliToplam += supheli; }
         let telBilgi = '';
         let telFark = '';
         if (ks.kaynak === 'telefon') {
@@ -16493,18 +16517,28 @@ Soruları Soru Arşivi'ne taşınır; hemen ardından "Geri Al" ile geri getireb
         return `<div class="kart masam-kart" data-masam-ders="${k(dd.id)}">${baslik}${serit}
           <div style="font-size:var(--yazi-sm); color:var(--metin-ikincil); margin:2px 0 6px;" data-masam-sinav>${k(et.metin)}${kesin ? ' · <strong>Kesinleşti ✓</strong>' : ''}${et.farkli ? ` · <span style="color:var(--tehlike, #b91c1c);" title="Sınav adındaki ders kodu bu dersin koduyla aynı değil; yazım hatası ya da yanlış derse kayıt olabilir">⚠ sınavda kod ${k(et.farkli)}</span> <button type="button" class="btn btn-kucuk" data-masam-koddz="${k(dd.id)}|${k(ks.id)}" style="padding:1px 8px; min-height:0;">Düzelt</button>` : ''}</div>
           <div class="masam-sayilar" data-masam-sayilar>
-            <div><strong>${okumalar.length}</strong> <span>okundu</span></div><div><strong>${gr}</strong> <span>girmedi</span></div><div class="${supheli ? 'sayi-kirmizi' : ''}"><strong>${supheli}</strong> <span>şüpheli</span></div>
+            <div><strong>${okumalar.length}</strong> <span>okundu</span></div><div><strong>${gr}</strong> <span>girmedi</span></div>${supheli ? `<button type="button" class="sayi-kirmizi masam-sayi-dugme" data-masam-inceleme="${k(dd.id)}|${k(ks.id)}" title="Şüpheli kağıtları incele"><strong>${supheli}</strong> <span>şüpheli</span></button>` : `<div><strong>0</strong> <span>şüpheli</span></div>`}
           </div>${telFark}${telSatir}
           <div class="masam-alt">${telBilgi || '<span></span>'}<button type="button" class="btn btn-kucuk" data-masam-notlar="${k(dd.id)}|${k(ks.id)}">Notları aç</button></div></div>`;
       }).join('');
       cizMasamYapilacaklar(yap);
       masamItirazlariniYenile();
     };
+    const masamIncelemeAc = (dersId, ksId) => {
+      masamNotlariAc(dersId, ksId);
+      gecisSekmeYardimci('sekme-omr');
+      const kuyruk = document.getElementById('liste-inceleme-kuyrugu');
+      const kart = kuyruk && kuyruk.closest('.kart');
+      if (kart) { if (kart.scrollIntoView) kart.scrollIntoView({ block: 'start', behavior: 'smooth' }); kart.classList.add('masam-vurgu-kart'); setTimeout(() => kart.classList.remove('masam-vurgu-kart'), 1800); }
+    };
     const masamTikla = (e) => {
+      const inc = e.target.closest('[data-masam-inceleme]');
+      if (inc) { const [dId, sId] = inc.getAttribute('data-masam-inceleme').split('|'); masamIncelemeAc(dId, sId); return; }
       const git = e.target.closest('[data-masam-git]');
       if (git) {
         const hedef = git.getAttribute('data-masam-git');
         if (hedef === 'itiraz') { masamItirazlariAc(); return; }
+        if (hedef.startsWith('inceleme:')) { const [dId, sId] = hedef.slice(9).split('|'); masamIncelemeAc(dId, sId); return; }
         const el = hedef === 'uyari' ? document.getElementById('masam-uyari') : document.querySelector(`#masam-kartlar [data-masam-ders="${CSS.escape(hedef.slice(5))}"]`);
         if (el) {
           if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });

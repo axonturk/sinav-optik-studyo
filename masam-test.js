@@ -480,6 +480,35 @@ function kontrol(ad, kosul, detay = '') {
     kontrol('Masam Döşeme / Satır: Satır seçilince tek sütun liste; seçim sayfa yenilense de kalır; Döşeme ile geri döner', !gor.once.satir && gor.sonra.satir && gor.sonra.sutun === 1 && gor.sonra.basili === 'true' && gor.sonra.kayit === 'satir' && gorKalici && !(await pc.evaluate(() => document.getElementById('masam-kartlar').classList.contains('masam-satir'))), JSON.stringify({ gor, gorKalici }));
     kontrol('Veri güvenliği: stüdyo sınavı açıkken başka sınavın telefon kağıdı açık sınava karışmaz', stOnce.okunan === stSonra.okunan && !/247419088/.test(stSonra.satirlar), `${JSON.stringify(stOnce)} → ${JSON.stringify(stSonra)}`);
 
+    // Şüpheli kağıt: Masam'dan doğrudan inceleme kuyruğuna; öğrencisi belli olmayan onaylanamaz; "Tümünü incelendi say" sayıyı düşürür
+    const KOD_S = '74118888-SUP-2026';
+    await gonder(KOD_S, 'SINAV_TANIMI', { ad: '74118888 — Kablolama', dySayisi: 5, testSayisi: 5, cevapAnahtarlari: { A: { dy: ['D', 'D', 'D', 'Y', 'D'], test: ['A', 'B', 'C', 'D', 'E'] } } });
+    await gonder(KOD_S, 'OKUDU_GUNCELLE', ok('S1', '247419001', 'AYŞE YILMAZ', '01'));
+    await gonder(KOD_S, 'OKUDU_GUNCELLE', Object.assign(ok('S2', '247419002', 'MEHMET KAYA', '0?'), { numaraEslesmediMi: true }));
+    await gonder(KOD_S, 'OKUDU_GUNCELLE', Object.assign(ok('S3', 'BEKLEYEN-01', 'Kodlanan No 7?', '7?'), { numaraEslesmediMi: true }));
+    await senkron();
+    await masamAc();
+    await pc.evaluate((k) => { const b = document.querySelector(`#masam-kartlar [data-masam-telkaydet="${k}"]`); if (b) b.click(); }, KOD_S);
+    await bekle(500);
+    await masamAc();
+    const supOnce = await pc.evaluate((id) => {
+      const t = document.querySelector(`#masam-kartlar [data-masam-ders="${id}"] [data-masam-inceleme]`);
+      return { tus: Boolean(t), sayi: t ? t.querySelector('strong').textContent : '', cip: /2 şüpheli kağıt incelenecek/.test(document.getElementById('masam-yapilacaklar').textContent) };
+    }, kablolamaId);
+    await pc.evaluate((id) => document.querySelector(`#masam-kartlar [data-masam-ders="${id}"] [data-masam-inceleme]`).click(), kablolamaId);
+    await bekle(400);
+    const kuyruk = await pc.evaluate(() => {
+      const k = document.getElementById('liste-inceleme-kuyrugu');
+      const onay = [...k.querySelectorAll('[data-onayla-inceleme]')];
+      return { panel: (document.querySelector('.sekme-panel.aktif') || {}).id, adet: onay.length, kapali: onay.filter((b) => b.disabled).length, tumu: !document.getElementById('btn-inceleme-tumunu-onayla').hidden };
+    });
+    await pc.evaluate(() => document.getElementById('btn-inceleme-tumunu-onayla').click());
+    await bekle(300);
+    const kuyrukSonra = await pc.evaluate(() => ({ rozet: document.getElementById('rozet-inceleme-sayisi').textContent, makbuz: document.getElementById('rozet-kayit-durumu').textContent }));
+    await masamAc();
+    const supSonra = await pc.evaluate((id) => { const t = document.querySelector(`#masam-kartlar [data-masam-ders="${id}"] [data-masam-inceleme] strong`); return t ? t.textContent : '0'; }, kablolamaId);
+    kontrol('Şüpheli: Masam\'da şüpheli kutusu tıklanır (2) ve inceleme kuyruğunu açar; kuyrukta 2 kağıt, öğrencisi belli olmayanın onayı kapalı; "Tümünü incelendi say" sonrası 1 kalır', supOnce.tus && supOnce.sayi === '2' && supOnce.cip && kuyruk.panel === 'sekme-omr' && kuyruk.adet === 2 && kuyruk.kapali === 1 && kuyruk.tumu && /1 Bekleyen/.test(kuyrukSonra.rozet) && /1 kağıt incelendi/.test(kuyrukSonra.makbuz) && supSonra === '1', JSON.stringify({ supOnce, kuyruk, kuyrukSonra, supSonra }));
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;

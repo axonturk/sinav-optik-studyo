@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evrensel Sınav Kağıdı Stüdyosu &amp; Mobil Optik Okuyucu (OMR)</title>
-  <link rel="stylesheet" href="ortak.css?v=20261118b" />
+  <link rel="stylesheet" href="ortak.css?v=20261118c" />
   <link rel="manifest" href="manifest-studyo.webmanifest" />
   <meta name="theme-color" content="#2F5BEA" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -1670,8 +1670,11 @@
           <!-- Öğretmen İnceleme Kuyruğu (Düşük Güvenilirlik / Silinti) -->
           <div class="kart">
             <div class="kart-baslik">
-              <span>3. Kontrol bekleyen kağıtlar (silinti / çift işaret)</span>
-              <span class="rozet rozet-sari" id="rozet-inceleme-sayisi">0 Bekleyen</span>
+              <span id="baslik-inceleme-kuyrugu">3. Kontrol bekleyen kağıtlar (silinti / çift işaret / düşük güven / öğrencisi belli değil)</span>
+              <span style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                <span class="rozet rozet-sari" id="rozet-inceleme-sayisi">0 Bekleyen</span>
+                <button type="button" class="btn btn-kucuk" id="btn-inceleme-tumunu-onayla" hidden title="Öğrencisi belli olan tüm kağıtları incelendi say">✓ Tümünü incelendi say</button>
+              </span>
             </div>
             <div id="liste-inceleme-kuyrugu" style="font-size:0.84rem; color:var(--metin-ikincil);">
               Şu anda düşük güvenilirlikli veya silintili okuma bulunmuyor.
@@ -3735,7 +3738,7 @@
 
   <script src="qrcode-generator.js"></script>
   <script src="xlsx.full.min.js"></script>
-  <script src="guvenlik-ve-veri.js?v=20261118b"></script>
-  <script src="studyo-uygulama.js?v=20261118b"></script>
+  <script src="guvenlik-ve-veri.js?v=20261118c"></script>
+  <script src="studyo-uygulama.js?v=20261118c"></script>
 </body>
 </html>
