@@ -509,6 +509,20 @@ function kontrol(ad, kosul, detay = '') {
     const supSonra = await pc.evaluate((id) => { const t = document.querySelector(`#masam-kartlar [data-masam-ders="${id}"] [data-masam-inceleme] strong`); return t ? t.textContent : '0'; }, kablolamaId);
     kontrol('Şüpheli: Masam\'da şüpheli kutusu tıklanır (2) ve inceleme kuyruğunu açar; kuyrukta 2 kağıt, öğrencisi belli olmayanın onayı kapalı; "Tümünü incelendi say" sonrası 1 kalır', supOnce.tus && supOnce.sayi === '2' && supOnce.cip && kuyruk.panel === 'sekme-omr' && kuyruk.adet === 2 && kuyruk.kapali === 1 && kuyruk.tumu && /1 Bekleyen/.test(kuyrukSonra.rozet) && /1 kağıt incelendi/.test(kuyrukSonra.makbuz) && supSonra === '1', JSON.stringify({ supOnce, kuyruk, kuyrukSonra, supSonra }));
 
+    // Bulut kaydı tek sırada: art arda 3 kayıt isteği çakışmaz (409 yok), hepsi başarılı biter, gereksiz istek gitmez
+    const bulutIstek = { put: 0, c409: 0 };
+    const bulutDinle = (r) => { if (/\/api\/bulut-kasa/.test(r.url()) && r.request().method() === 'PUT') { bulutIstek.put += 1; if (r.status() === 409) bulutIstek.c409 += 1; } };
+    pc.on('response', bulutDinle);
+    await bekle(1200); // bekleyen otomatik kayıt bitsin
+    bulutIstek.put = 0; bulutIstek.c409 = 0;
+    const bulutSonuclar = await pc.evaluate(async () => {
+      const s = await Promise.all([window.__bulutKaydetSimdi(), window.__bulutKaydetSimdi(), window.__bulutKaydetSimdi()]);
+      return s.map((x) => Boolean(x && x.basarili));
+    });
+    await bekle(400);
+    pc.off('response', bulutDinle);
+    kontrol('Bulut kaydı tek sırada: art arda 3 kayıt → 409 çakışma yok, üçü de başarılı, en fazla 2 istek', bulutSonuclar.every(Boolean) && bulutIstek.c409 === 0 && bulutIstek.put >= 1 && bulutIstek.put <= 2, JSON.stringify({ bulutSonuclar, bulutIstek }));
+
     kontrol('Sayfa hatası yok', hatalar.length === 0, hatalar.join(' | '));
   } catch (err) {
     hata++;
